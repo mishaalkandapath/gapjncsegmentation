@@ -7,8 +7,8 @@ from tqdm import tqdm
 import glob
 from collections import defaultdict
 
-NUM_SECTIONS=972
-IMG_FILE="E:\\Mishaal\\GapJunction\\seg_export_full_volume\\"
+NUM_SECTIONS=50
+IMG_FILE="/home/mishaalk/scratch/gapjunc/seg_export/"
 
 def shift_img(im_classes, im_path, X, Y, mode="left"):
     max_cover_path, max_cover, new_classes = im_path, None, None
@@ -75,24 +75,27 @@ if __name__ == "__main__":
     # how many different structures:
     file = IMG_FILE+"20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_s001_Y7_X6.png"
     files = glob.glob(IMG_FILE+"20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_s001*")
-    deviations = defaultdict(lambda: 0)
-    for j, file in enumerate(files):
-        try:
-            chain = gen_from_image(file)
-        except Exception as e:
-            print("exception ", e)
-            deviations[-1]+=1
-            continue
-        deviation_index = 0
-        X, Y = int(re.findall(r'X\d*.', file)[0][1:-1]), int(re.findall(r'Y\d*_', file)[0][1:-1])
-        assert len(chain[1:]) == NUM_SECTIONS, len(chain)
-        chain = chain[1:]
-        for i in range(NUM_SECTIONS):
-            file = chain[i]
-            new_X, new_Y = int(re.findall(r'X\d*.', file)[0][1:-1]), int(re.findall(r'Y\d*_', file)[0][1:-1])
-            if new_X != X or new_Y != Y: deviation_index+=1
-            X, Y = new_X, new_Y
+
+    for file in files:
+        
+    # deviations = defaultdict(lambda: 0)
+    # for j, file in enumerate(files):
+    #     try:
+    #         chain = gen_from_image(file)
+    #     except Exception as e:
+    #         print("exception ", e)
+    #         deviations[-1]+=1
+    #         continue
+    #     deviation_index = 0
+    #     X, Y = int(re.findall(r'X\d*.', file)[0][1:-1]), int(re.findall(r'Y\d*_', file)[0][1:-1])
+    #     assert len(chain[1:]) == NUM_SECTIONS, len(chain)
+    #     chain = chain[1:]
+    #     for i in range(NUM_SECTIONS):
+    #         file = chain[i]
+    #         new_X, new_Y = int(re.findall(r'X\d*.', file)[0][1:-1]), int(re.findall(r'Y\d*_', file)[0][1:-1])
+    #         if new_X != X or new_Y != Y: deviation_index+=1
+    #         X, Y = new_X, new_Y
             
-        print("for file index ", j, " deviation is ", deviation_index)
-        deviations[deviation_index] +=1
-    print(deviations)
+    #     print("for file index ", j, " deviation is ", deviation_index)
+    #     deviations[deviation_index] +=1
+    # print(deviations)
