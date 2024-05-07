@@ -29,13 +29,13 @@ from tqdm import tqdm
 import signal
 import sys
 
-model_folder = r"/home/mishaalk/scratch/gapjunc/models"
-sample_preds_folder = r"/home/mishaalk/scratch/gapjunc/results"
+model_folder = r"E:\\Mishaal\\GapJunction\\models"
+sample_preds_folder = r"E:\\Mishaal\\GapJunction\\results"
 table, class_labels = None, None #wandb stuff
                 
 def make_dataset_new(aug=False):
-    x_new_dir = r"/home/mishaalk/scratch/gapjunc/seg_50_data/images"
-    y_new_dir = r"/home/mishaalk/scratch/gapjunc/seg_50_data/labels"
+    x_new_dir = r"E:\\Mishaal\\GapJunction\\seg_50_data\\images"
+    y_new_dir = r"E:\\Mishaal\\GapJunction\\seg_50_data\\labels"
 
     # Get train and val dataset instances
     augmentation = v2.Compose([
@@ -55,14 +55,14 @@ def make_dataset_new(aug=False):
 
 def make_dataset_old(aug=False):
 
-    x_train_dir=r"/home/mishaalk/scratch/gapjunc/small_data/original/train"
-    y_train_dir=r"/home/mishaalk/scratch/gapjunc/small_data/ground_truth/train"
+    x_train_dir=r"E:\\Mishaal\\GapJunction\\small_data\\original\\train"
+    y_train_dir=r"E:\\Mishaal\\GapJunction\\small_data\\ground_truth\\train"
 
-    x_valid_dir=r"/home/mishaalk/scratch/gapjunc/small_data/original/valid"
-    y_valid_dir=r"/home/mishaalk/scratch/gapjunc/small_data/ground_truth/valid"
+    x_valid_dir=r"E:\\Mishaal\\GapJunction\\small_data\\original\\valid"
+    y_valid_dir=r"E:\\Mishaal\\GapJunction\\small_data\\ground_truth\\valid"
 
-    x_test_dir=r"/home/mishaalk/scratch/gapjunc/small_data/original/test"
-    y_test_dir=r"/home/mishaalk/scratch/gapjunc/small_data/ground_truth/test"
+    x_test_dir=r"E:\\Mishaal\\GapJunction\\small_data\\original\\test"
+    y_test_dir=r"E:\\Mishaal\\GapJunction\\small_data\\ground_truth\\test"
 
     # Get train and val dataset instances
     augmentation = v2.Compose([
@@ -70,6 +70,9 @@ def make_dataset_old(aug=False):
         v2.RandomVerticalFlip(p=0.5),
         v2.RandomApply([v2.RandomRotation(degrees=(0, 180))], p=0.4)
     ])
+
+    height, width = cv2.imread(os.path.join(x_train_dir, os.listdir(x_train_dir)[0])).shape[:2]
+
 
     train_dataset = CaImagesDataset(
         x_train_dir, y_train_dir, 
@@ -86,7 +89,7 @@ def make_dataset_old(aug=False):
 
     return train_dataset, valid_dataset
 
-def train_loop(model, train_data_loader, optimizer, val_dataloader=None, epochs=30, decay=None):
+def train_loop(model, train_loader, optimizer, valid_loader=None, epochs=30, decay=None):
     global table, class_labels, model_folder, DEVICE
     
     print(f"Using device: {DEVICE}")
@@ -159,7 +162,7 @@ def train_loop(model, train_data_loader, optimizer, val_dataloader=None, epochs=
 def inference_save(model, train_dataset, valid_dataset):
     global DEVICE, model_folder, sample_preds_folder
 
-    sample_train_folder = sample_preds_folder+"//train_res"
+    sample_train_folder = sample_preds_folder+"\\\\train_res"
     model = joblib.load(os.path.join(model_folder, "model5_epoch17.pk1"))
     model = model.to(DEVICE)
     model.eval()
@@ -183,7 +186,7 @@ def inference_save(model, train_dataset, valid_dataset):
         plt.savefig(os.path.join(sample_train_folder, f"sample_pred_binary_{suffix}.png"))
         # plt.show()
 
-    sample_val_folder = sample_preds_folder+"//valid_res"
+    sample_val_folder = sample_preds_folder+"\\\\valid_res"
     for i in tqdm(range(len(valid_dataset))):
         image, gt_mask = valid_dataset[i] # image and ground truth from test dataset
         # print(image.shape, gt_mask.shape) # [1, 512, 512] and [2, 512, 512]
@@ -223,21 +226,22 @@ def setup_wandb(epochs, lr):
         }
     )
     class_labels = {
-        1: "background",
-        0: "gapjunction",
+        0: "background",
+        1: "gapjunction",
     }
 
     table = wandb.Table(columns=['ID', 'Image'])
 
 
 if __name__ == "__main__":
-    import argparser
+    import argparse
 
-    parser = argparser.ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--aug", action="store_true")
-    parser.add_arguments("--new", action="store_true")
-    parser.add_arguments("--model_name", default=None, type=str)
+    parser.add_argument("--new", action="store_true")
+    parser.add_argument("--seed", action="store_true")
+    parser.add_argument("--model_name", default=None, type=str)
 
 
     args = parser.parse_args()
