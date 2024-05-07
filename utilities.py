@@ -85,10 +85,13 @@ class CaImagesDataset(torch.utils.data.Dataset):
         _transform.append(transforms.Resize(interpolation=transforms.InterpolationMode.NEAREST_EXACT,size=(img_size, img_size)))  
 
         mask = transforms.Compose(_transform)(mask)
-        mask_labels = np.unique(mask)
-        num_one = mask_labels[0] # this is 0 which happens to be the positive color
-        mask[mask != num_one] = 1
-        mask[mask == num_one] = 0
+        mask_labels, counts = np.unique(mask, return_counts=True)
+        num_one = mask_labels[np.argmin(counts)] # this is 0 which happens to be the positive color
+        if len(mask_labels) == 1:
+            mask[:] = 0
+        else:
+            mask[mask != num_one] = 0
+            mask[mask == num_one] = 1
         ont_hot_mask = mask
         # ont_hot_mask = F.one_hot(mask.long(), num_classes=2).squeeze().permute(2, 0, 1).float()
 
