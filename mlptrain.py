@@ -28,6 +28,7 @@ import time
 from tqdm import tqdm
 import signal
 import sys
+import math
 
 model_folder = r"/home/mishaalk/scratch/gapjunc/models"
 sample_preds_folder = r"/home/mishaalk/scratch/gapjunc/results"
@@ -90,7 +91,7 @@ def make_dataset_old(aug=False):
 
     return train_dataset, valid_dataset
 
-def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epochs=30, decay=None):
+def train_loop(model, train_data_loader, classifier_criterion, criterion, optimizer, val_dataloader=None, epochs=30, decay=None):
     global table, class_labels, model_folder, DEVICE
     
     print(f"Using device: {DEVICE}")
@@ -110,8 +111,15 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
             print("Progress: {:.2%}".format(i/len(train_loader)))
             inputs, labels = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-            pred = model(inputs)
-            loss = criterion(pred, labels)
+            class_labels = labels.view(labels.shape[0], -1).sum(axis=-1) >= 1 # loss mask
+
+            pred, classifier = model(inputs)
+            classifier_loss = classifier_criterion(classifier, class_labels).mean()
+
+            #might have to scale the criteria, decide from experiments
+
+            loss = criterion(pred, labels, class_labels)
+            loss += classifier_loss
             loss.backward() # calculate gradients (backpropagation)
             optimizer.step() # update model weights (values for kernels)
             print(f"Step: {i}, Loss: {loss}")
@@ -238,7 +246,7 @@ if __name__ == "__main__":
     import argparser
 
     parser = argparser.ArgumentParser()
-    parser.add_argument("--batch_size", default=16, type=int)
+    parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--aug", action="store_true")
     parser.add_arguments("--new", action="store_true")
     parser.add_arguments("--model_name", default=None, type=str)
@@ -264,7 +272,7 @@ if __name__ == "__main__":
 
     DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    if args.model_name is None: model = UNet().to(DEVICE)
+    if args.model_name is None: model = SplitUNet().to(DEVICE)
     else: model = joblib.load(os.path.join(model_folder, args.model_name)) # load model
 
 
@@ -280,7 +288,8 @@ if __name__ == "__main__":
     print(cls_weights)
 
     #init oprtimizers
-    criterion = FocalLoss(alpha=cls_weights, device=DEVICE)#torch.nn.BCEWithLogitsLoss()
+    criterion = FocalLoss(alpha=cls_weights, device=DEVICE)
+    classifier_criterion = torch.nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
     decayed_lr = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
     loss_list = [] 
@@ -291,5 +300,5 @@ if __name__ == "__main__":
     print("Starting training...")
     start = time.time()
 
-    train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=30)
+    train_loop(model, train_loader, criterion, classifier_criterion optimizer, valid_loader, epochs=30)
 

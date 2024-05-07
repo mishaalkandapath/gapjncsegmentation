@@ -183,6 +183,48 @@ class UNet(nn.Module):
         x = self.up_conv1(x, skip1_out) # x: (16, 64, 512, 512)
         x = self.conv_last(x) # x: (16, 1, 512, 512)
         return x
+
+class SplitUNet(nn.Module):
+    """UNet Architecture"""
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose'):
+        """Initialize the UNet model"""
+        super(SplitUNet, self).__init__()
+        self.up_sample_mode = up_sample_mode
+        # Downsampling Path
+        self.down_conv1 = DownBlock(1, 64) # 3 input channels --> 64 output channels
+        self.down_conv2 = DownBlock(64, 128) # 64 input channels --> 128 output channels
+        self.down_conv3 = DownBlock(128, 256) # 128 input channels --> 256 output channels
+        self.down_conv4 = DownBlock(256, 512) # 256 input channels --> 512 output channels
+        # Bottleneck
+        self.double_conv = DoubleConv(512, 1024)
+        # Upsampling Path
+        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode) # 512 + 1024 input channels --> 512 output channels
+        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode)
+        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode)
+        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
+        # Final Convolution
+        self.conv_last = nn.Conv2d(64, 1, kernel_size=1) 
+
+    def forward(self, x):
+        """Forward pass of the UNet model
+        x: (16, 1, 512, 512)
+        """
+        x, skip1_out = self.down_conv1(x) # x: (16, 64, 256, 256), skip1_out: (16, 64, 512, 512) (batch_size, channels, height, width)
+        x, skip2_out = self.down_conv2(x) # x: (16, 128, 128, 128), skip2_out: (16, 128, 256, 256)
+        x, skip3_out = self.down_conv3(x) # x: (16, 256, 64, 64), skip3_out: (16, 256, 128, 128)
+        x, skip4_out = self.down_conv4(x) # x: (16, 512, 32, 32), skip4_out: (16, 512, 64, 64)
+        x = self.double_conv(x) # x: (16, 1024, 32, 32)
+
+        x_ = self.flat1(x.view(x.shape[0], -1)) # flattent and pass into 
+        x_ = self.flat2(x_)
+        x_ = self.flat3(x_)
+
+        x = self.up_conv4(x, skip4_out) # x: (16, 512, 64, 64)
+        x = self.up_conv3(x, skip3_out) # x: (16, 256, 128, 128)
+        x = self.up_conv2(x, skip2_out) # x: (16, 128, 256, 256)
+        x = self.up_conv1(x, skip1_out) # x: (16, 64, 512, 512)
+        x = self.conv_last(x) # x: (16, 1, 512, 512)
+        return x, x_
     
 class FocalLoss(nn.Module):
     def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
@@ -192,11 +234,12 @@ class FocalLoss(nn.Module):
         self.device = device
         self.alpha = alpha.to(device)
     
-    def forward(self, inputs, targets):
+    def forward(self, inputs, targets, loss_mask=None):
         bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
         pt = torch.exp(-bce_loss)
         targets = targets.to(torch.int64)
         loss = self.alpha[targets.view(-1, 512*512)].view(-1, 512, 512) * pt ** self.gamma * bce_loss
+        if loss_mask: loss = loss * loss_mask
         return loss.mean() 
 
 def get_training_augmentation():
