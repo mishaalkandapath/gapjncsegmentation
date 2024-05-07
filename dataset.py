@@ -15,15 +15,14 @@ class SectionsDataset(Dataset):
             images_dir, 
             masks_dir, 
             augmentation=None, 
-            preprocessing=None,
             image_dim = (512, 512),
-            threshold=3
     ):    
         
         self.image_path_triples = []
         self.mask_path_triples = []
         s_repl = lambda s: "s00" + str(s)+"_" if s <= 9 else "s0"+str(s)+"_"
 
+        # get all the image ids
         for img_id in sorted(os.listdir(images_dir)):
             dept_str = re.findall(r's\d*_',img_id)[0]
             cur_depth = int(dept_str[1:-1])
@@ -35,7 +34,6 @@ class SectionsDataset(Dataset):
         self.image_paths = ([os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))])
         self.mask_paths = ([os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))])
         self.augmentation = augmentation 
-        self.preprocessing = preprocessing
         self.image_dim = image_dim
 
         self.transform1 = v2.Compose([
@@ -73,7 +71,6 @@ class SectionsDataset(Dataset):
         image, mask = np.stack(img, axis=0), np.stack(m, axis=0)
 
         # make sure each pixel is 0 or 255
-        
         mask_labels = np.unique(mask)
         if (len(mask_labels)>2):
             print("More than 2 labels found for mask")
