@@ -193,7 +193,7 @@ if __name__ == '__main__':
                         print("UNIQUE OUTPUTS!")
                 else:
                     epoch_non_empty = False
-            decayed_lr.step(valid_loss)
+            # decayed_lr.step(valid_loss)
 
             print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
             print(f"Time elapsed: {time.time() - start} seconds")
