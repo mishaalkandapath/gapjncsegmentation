@@ -76,7 +76,7 @@ if __name__ == '__main__':
     batch_size = 16
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
-    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
+    valid_loader = DataLoader(valid_dataset, batch_size=16, shuffle=False, num_workers=4)
     print("Data loaders created.")
 
     WANDB_API_KEY = "42a2147c44b602654473783bde1ecd15579cc313"
@@ -91,7 +91,7 @@ if __name__ == '__main__':
     VALIDATE= False
     def sigint_handler(sig, frame):
         global table
-        if table is not None:
+        if table is not None and TRAINING:
             print("logging to WANDB")
             wandb.log({"Table" : table})
             joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
@@ -102,7 +102,7 @@ if __name__ == '__main__':
 
     if TRAINING:
         lr = 0.001
-        epochs = 100
+        epochs = 30
         # start a new wandb run to track this script
         wandb.init(
             # set the wandb project where this run will be logged
@@ -122,8 +122,8 @@ if __name__ == '__main__':
             model = joblib.load(os.path.join(model_folder, "model4.pk1")) # load model
 
         class_labels = {
-        0: "background",
-        1: "gapjunction",
+        1: "background",
+        0: "gapjunction",
         }
         
         smushed_labels = None
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         class_counts = torch.bincount(smushed_labels.flatten())
         total_samples = len(train_dataset) * 512 * 512
         w1, w2 = 1/(class_counts[0]/total_samples), 1/(class_counts[1]/total_samples)
-        cls_weights = torch.Tensor([w1, w2])
+        cls_weights = torch.Tensor([w1, w2/9])
 
         print(cls_weights)
 
@@ -143,6 +143,7 @@ if __name__ == '__main__':
         gamma = 3
         criterion = FocalLoss(alpha=cls_weights, device=DEVICE)#torch.nn.BCEWithLogitsLoss()
         optimizer = torch.optim.Adam(model.parameters(),lr=lr)
+        decayed_lr = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
         loss_list = [] 
         table = wandb.Table(columns=['ID', 'Image'])
 
@@ -192,7 +193,7 @@ if __name__ == '__main__':
                         print("UNIQUE OUTPUTS!")
                 else:
                     epoch_non_empty = False
-                
+            decayed_lr.step(valid_loss)
 
             print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
             print(f"Time elapsed: {time.time() - start} seconds")
@@ -209,7 +210,7 @@ if __name__ == '__main__':
 
     if TESTING:
         sample_train_folder = sample_preds_folder+"\\train_res"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch60.pk1"))
+        model = joblib.load(os.path.join(model_folder, "model5_epoch17.pk1"))
         model = model.to(DEVICE)
         model.eval()
         for i in tqdm(range(len(train_dataset))):
@@ -228,12 +229,6 @@ if __name__ == '__main__':
             # print(pred_mask.shape)
             # pred_mask_binary = pred_mask.squeeze(0).detach()
             pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
-            if len(np.unique(pred_mask_binary.detach().cpu().numpy())) == 2:
-                plt.imshow(pred_mask_binary.cpu().detach().squeeze(0).squeeze(0).numpy(), cmap="gray")
-                plt.show()
-                raise Exception
-            else:
-                continue
             plt.imshow(pred_mask_binary.cpu().detach().squeeze(0).squeeze(0).numpy(), cmap="gray")
             plt.savefig(os.path.join(sample_train_folder, f"sample_pred_binary_{suffix}.png"))
             # plt.show()
