@@ -29,8 +29,8 @@ from tqdm import tqdm
 import signal
 import sys
 
-model_folder = r"E:\\Mishaal\\GapJunction\\models"
-sample_preds_folder = r"E:\\Mishaal\\GapJunction\\results"
+model_folder = r"/home/mishaalk/scratch/gapjunc/models/"
+sample_preds_folder = r"/home/mishaalk/scratch/gapjunc/results/"
 table, class_labels = None, None #wandb stuff
 
 DATASETS = {
@@ -108,16 +108,18 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
 
     signal.signal(signal.SIGINT, sigint_handler)
 
+    pbar = tqdm(range(epochs))
+
     for epoch in range(epochs):
         for i, data in enumerate(train_loader):
-            print("Progress: {:.2%}".format(i/len(train_loader)))
+            pbar.set_description("Progress: {:.2%}".format(i/len(train_loader)))
             inputs, labels = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             pred = model(inputs)
             loss = criterion(pred, labels)
             loss.backward() # calculate gradients (backpropagation)
             optimizer.step() # update model weights (values for kernels)
-            print(f"Step: {i}, Loss: {loss}")
+            pbar.set_postfix(step = f"Step: {i}", loss = f"Loss: {loss}")
             loss_list.append(loss)
             wandb.log({"loss": loss})
         
@@ -231,25 +233,29 @@ def train_loop_split(model, train_loader, classifier_criterion, criterion, optim
 
     signal.signal(signal.SIGINT, sigint_handler)
 
+    
     for epoch in range(epochs):
+        pbar = tqdm(total = len(train_loader))
         for i, data in enumerate(train_loader):
-            print("Progress: {:.2%}".format(i/len(train_loader)))
+            pbar.set_description("Progress: {:.2%}".format(i/len(train_loader)))
             inputs, labels = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             class_labels = labels.view(labels.shape[0], -1).sum(axis=-1) >= 1 # loss mask
 
             pred, classifier = model(inputs)
-            classifier_loss = classifier_criterion(classifier, class_labels).mean()
+            classifier_loss = classifier_criterion(classifier.squeeze(-1), class_labels.to(dtype=torch.float32)).mean()
 
             #might have to scale the criteria, decide from experiments
 
-            loss = criterion(pred, labels, class_labels)
+            loss = criterion(pred, labels)
             loss += classifier_loss
             loss.backward() # calculate gradients (backpropagation)
             optimizer.step() # update model weights (values for kernels)
-            print(f"Step: {i}, Loss: {loss}")
+            pbar.set_postfix(step=f"Step: {i}", loss=f"Loss: {loss}")
             loss_list.append(loss)
             wandb.log({"loss": loss})
+            pbar.update(1)
+            pbar.refresh()
         
         epoch_non_empty = False
 
@@ -408,6 +414,10 @@ if __name__ == "__main__":
 
     if args.dataset is None: print("----WARNING: RUNNING OLD DATASET----")
 
+    #set the model and results path
+    model_folder += args.dataset+"/"
+    sample_preds_folder += args.dataset + "/"
+
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
     valid_loader = DataLoader(valid_dataset, batch_size=16, shuffle=False, num_workers=4)
     print("Data loaders created.")
@@ -425,7 +435,7 @@ if __name__ == "__main__":
 
             #calc focal weighting:
             smushed_labels = None
-            for i in range(len(train_dataset)):
+            for i in tqdm(range(len(train_dataset))):
                 if smushed_labels is None: smushed_labels = train_dataset[i][1].to(torch.int64)
                 else: smushed_labels = torch.concat([smushed_labels, train_dataset[i][1].to(torch.int64)])
             class_counts = torch.bincount(smushed_labels.flatten())
