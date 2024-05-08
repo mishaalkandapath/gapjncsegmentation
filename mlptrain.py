@@ -56,6 +56,12 @@ def make_dataset_new(aug=False):
     train, valid = torch.utils.random_split(dataset, [len(dataset)-200, 200])
     return train, valid
 
+def make_dataset_tiny(aug=False):
+    pass
+
+def make_dataset_erased(aug=False):
+    pass
+
 def make_dataset_old(aug=False):
 
     x_train_dir=r"/home/mishaalk/scratch/gapjunc/small_data/original/train"
@@ -250,6 +256,8 @@ if __name__ == "__main__":
     parser.add_argument("--aug", action="store_true")
     parser.add_arguments("--new", action="store_true")
     parser.add_arguments("--model_name", default=None, type=str)
+    parser.add_argument("--infer", action="store_true")
+    parser.add_argument("--cpu", action="store_true")
 
 
     args = parser.parse_args()
@@ -270,35 +278,37 @@ if __name__ == "__main__":
     valid_loader = DataLoader(valid_dataset, batch_size=16, shuffle=False, num_workers=4)
     print("Data loaders created.")
 
-    DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
 
     if args.model_name is None: model = SplitUNet().to(DEVICE)
     else: model = joblib.load(os.path.join(model_folder, args.model_name)) # load model
 
+    if not args.infer:
+        #calc focal weighting:
+        smushed_labels = None
+        for i in range(len(train_dataset)):
+            if smushed_labels is None: smushed_labels = train_dataset[i][1].to(torch.int64)
+            else: smushed_labels = torch.concat([smushed_labels, train_dataset[i][1].to(torch.int64)])
+        class_counts = torch.bincount(smushed_labels.flatten())
+        total_samples = len(train_dataset) * 512 * 512
+        w1, w2 = 1/(class_counts[0]/total_samples), 1/(class_counts[1]/total_samples)
+        cls_weights = torch.Tensor([w1, w2/9])
+        print(cls_weights)
 
-    #calc focal weighting:
-    smushed_labels = None
-    for i in range(len(train_dataset)):
-        if smushed_labels is None: smushed_labels = train_dataset[i][1].to(torch.int64)
-        else: smushed_labels = torch.concat([smushed_labels, train_dataset[i][1].to(torch.int64)])
-    class_counts = torch.bincount(smushed_labels.flatten())
-    total_samples = len(train_dataset) * 512 * 512
-    w1, w2 = 1/(class_counts[0]/total_samples), 1/(class_counts[1]/total_samples)
-    cls_weights = torch.Tensor([w1, w2/9])
-    print(cls_weights)
+        #init oprtimizers
+        criterion = FocalLoss(alpha=cls_weights, device=DEVICE)
+        classifier_criterion = torch.nn.BCEWithLogitsLoss()
+        optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
+        decayed_lr = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
+        loss_list = [] 
+        
 
-    #init oprtimizers
-    criterion = FocalLoss(alpha=cls_weights, device=DEVICE)
-    classifier_criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
-    decayed_lr = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
-    loss_list = [] 
-    
+        setup_wandb(30, 0.001)
 
-    setup_wandb(30, 0.001)
+        print("Starting training...")
+        start = time.time()
 
-    print("Starting training...")
-    start = time.time()
-
-    train_loop(model, train_loader, criterion, classifier_criterion optimizer, valid_loader, epochs=30)
+        train_loop(model, train_loader, criterion, classifier_criterion optimizer, valid_loader, epochs=30)
+    else:
+        inference_save(model, train_dataset, valid_dataset)
 

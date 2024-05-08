@@ -60,9 +60,9 @@ class CaImagesDataset(torch.utils.data.Dataset):
         mask_labels, counts = np.unique(mask, return_counts=True)
         if (len(mask_labels)>2):
             print("More than 2 labels found for mask")
-        num_one = mask_labels[np.argmin(counts)]
-        mask[mask != num_one] = 0
-        mask[mask == num_one] = 1
+        # num_one = mask_labels[np.argmin(counts)]
+        mask[mask != 1] = 0
+        mask[mask == 1] = 1
         
         
         # apply augmentations
@@ -86,12 +86,12 @@ class CaImagesDataset(torch.utils.data.Dataset):
 
         mask = transforms.Compose(_transform)(mask)
         mask_labels, counts = np.unique(mask, return_counts=True)
-        num_one = mask_labels[np.argmin(counts)]
+        # num_one = mask_labels[np.argmin(counts)]
         if len(mask_labels) == 1:
             mask[:] = 0
         else:
-            mask[mask != num_one] = 0
-            mask[mask == num_one] = 1
+            mask[mask != 1] = 0
+            mask[mask == 1] = 1
         ont_hot_mask = mask
         # ont_hot_mask = F.one_hot(mask.long(), num_classes=2).squeeze().permute(2, 0, 1).float()
 

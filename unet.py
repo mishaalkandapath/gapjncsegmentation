@@ -32,11 +32,14 @@ import sys
 model_folder = r"E:\\Mishaal\\GapJunction\\models"
 sample_preds_folder = r"E:\\Mishaal\\GapJunction\\results"
 table, class_labels = None, None #wandb stuff
-                
-def make_dataset_new(aug=False):
-    x_new_dir = r"/home/mishaalk/scratch/gapjunc/seg_50_data/images"
-    y_new_dir = r"/home/mishaalk/scratch/gapjunc/seg_50_data/labels"
 
+DATASETS = {
+    "new": (r"/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/gts"), 
+    "erased": (r"/home/mishaalk/scratch/gapjunc/train_datasets/erased_neurons/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/erased_neurons/gts"), 
+    "tiny": (r"/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only/gts")
+}
+                
+def make_dataset_new(x_new_dir, y_new_dir, aug=False):
     height, width = cv2.imread(os.path.join(x_new_dir, os.listdir(x_new_dir)[0])).shape[:2]
 
     # Get train and val dataset instances
@@ -240,11 +243,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--aug", action="store_true")
-    parser.add_argument("--new", action="store_true")
     parser.add_argument("--seed", action="store_true")
     parser.add_argument("--model_name", default=None, type=str)
     parser.add_argument("--infer", action="store_true")
     parser.add_argument("--cpu", action="store_true")
+    parser.add_argument("--dataset", default=None, type=str)
 
 
     args = parser.parse_args()
@@ -259,7 +262,9 @@ if __name__ == "__main__":
 
     batch_size = args.batch_size
 
-    train_dataset, valid_dataset = make_dataset_new(args.aug) if args.new else make_dataset_old(args.aug)
+    train_dataset, valid_dataset = make_dataset_new(**DATASETS[args.dataset], args.aug) if args.new is not None else make_dataset_old(args.aug)
+
+    if args.new is None: print("----WARNING: RUNNING OLD DATASET----")
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
     valid_loader = DataLoader(valid_dataset, batch_size=16, shuffle=False, num_workers=4)
