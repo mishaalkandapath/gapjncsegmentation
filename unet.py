@@ -146,6 +146,11 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
             else:
                 epoch_non_empty = False
         if decay is not None: decay.step(valid_loss)
+        if epoch % 5 == 0 and table is not None:
+                print("logging to WANDB")
+                wandb.log({"Table" : table})
+                joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
+                wandb.finish()
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
@@ -280,7 +285,7 @@ if __name__ == "__main__":
         class_counts = torch.bincount(smushed_labels.flatten())
         total_samples = len(train_dataset) * 512 * 512
         w1, w2 = 1/(class_counts[0]/total_samples), 1/(class_counts[1]/total_samples)
-        cls_weights = torch.Tensor([w1, w2/9])
+        cls_weights = torch.Tensor([w1, w2/2])
         print(cls_weights)
 
         #init oprtimizers
