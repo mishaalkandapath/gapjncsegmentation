@@ -57,12 +57,12 @@ class CaImagesDataset(torch.utils.data.Dataset):
 
         # make sure each pixel is 0 or 255
         
-        mask_labels = np.unique(mask)
+        mask_labels, counts = np.unique(mask, return_counts=True)
         if (len(mask_labels)>2):
             print("More than 2 labels found for mask")
-        num_one = mask_labels[0] # this is 0 which happens to be the positive color
-        mask[mask != num_one] = 1
-        mask[mask == num_one] = 0
+        num_one = mask_labels[np.argmin(counts)]
+        mask[mask != num_one] = 0
+        mask[mask == num_one] = 1
         
         
         # apply augmentations
@@ -75,7 +75,7 @@ class CaImagesDataset(torch.utils.data.Dataset):
 
         img_size = 512
         width, height = self.image_dim
-        max_dim = max(img_size, width, height)
+        max_dim = max(img_size, width,    )
         pad_left = (max_dim-width)//2
         pad_right = max_dim-width-pad_left
         pad_top = (max_dim-height)//2
@@ -86,7 +86,7 @@ class CaImagesDataset(torch.utils.data.Dataset):
 
         mask = transforms.Compose(_transform)(mask)
         mask_labels, counts = np.unique(mask, return_counts=True)
-        num_one = mask_labels[np.argmin(counts)] # this is 0 which happens to be the positive color
+        num_one = mask_labels[np.argmin(counts)]
         if len(mask_labels) == 1:
             mask[:] = 0
         else:
