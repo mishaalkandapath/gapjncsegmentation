@@ -82,7 +82,7 @@ class CaImagesDataset(torch.utils.data.Dataset):
         pad_bottom = max_dim-height-pad_top
         _transform.append(transforms.Pad(padding=(pad_left, pad_top, pad_right, pad_bottom), 
                                         padding_mode='edge'))
-        _transform.append(transforms.Resize(interpolation=transforms.InterpolationMode.NEAREST_EXACT,size=(img_size, img_size)))  
+        # _transform.append(transforms.Resize(interpolation=transforms.InterpolationMode.NEAREST_EXACT,size=(img_size, img_size)))  
 
         mask = transforms.Compose(_transform)(mask)
         mask_labels, counts = np.unique(mask, return_counts=True)
@@ -90,8 +90,8 @@ class CaImagesDataset(torch.utils.data.Dataset):
         if len(mask_labels) == 1:
             mask[:] = 0
         else:
-            mask[mask != 1] = 0
-            mask[mask == 1] = 1
+            mask[mask == 0] = 0
+            mask[mask != 0] = 1
         ont_hot_mask = mask
         # ont_hot_mask = F.one_hot(mask.long(), num_classes=2).squeeze().permute(2, 0, 1).float()
 
@@ -213,20 +213,30 @@ class SplitUNet(nn.Module):
         x: (16, 1, 512, 512)
         """
         x, skip1_out = self.down_conv1(x) # x: (16, 64, 256, 256), skip1_out: (16, 64, 512, 512) (batch_size, channels, height, width)
+        print("Step 1 shape {} and skipout {}".format(x.shape, skip1_out.shape))
         x, skip2_out = self.down_conv2(x) # x: (16, 128, 128, 128), skip2_out: (16, 128, 256, 256)
+        print("Step 2 shape {} and skipout {}".format(x.shape, skip2_out.shape))
         x, skip3_out = self.down_conv3(x) # x: (16, 256, 64, 64), skip3_out: (16, 256, 128, 128)
+        print("Step 3 shape {} and skipout {}".format(x.shape, skip3_out.shape))
         x, skip4_out = self.down_conv4(x) # x: (16, 512, 32, 32), skip4_out: (16, 512, 64, 64)
+        print("Step 4 shape {} and skipout {}".format(x.shape, skip4_out.shape))
         x = self.double_conv(x) # x: (16, 1024, 32, 32)
-
+        print("Step 5 shape {}".format(x.shape))
+    
         x_ = self.flat1(x.view(x.shape[0], -1)) # flattent and pass into 
         x_ = self.flat2(x_)
         x_ = self.flat3(x_)
 
         x = self.up_conv4(x, skip4_out) # x: (16, 512, 64, 64)
+        print("Step 6 shape {}".format(x.shape))
         x = self.up_conv3(x, skip3_out) # x: (16, 256, 128, 128)
+        print("Step 7 shape {}".format(x.shape))
         x = self.up_conv2(x, skip2_out) # x: (16, 128, 256, 256)
+        print("Step 8 shape {}".format(x.shape))
         x = self.up_conv1(x, skip1_out) # x: (16, 64, 512, 512)
+        print("Step 9 shape {}".format(x.shape))
         x = self.conv_last(x) # x: (16, 1, 512, 512)
+        print("Step 10 shape {}".format(x.shape))
         return x, x_
     
 class FocalLoss(nn.Module):

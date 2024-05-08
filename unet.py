@@ -55,7 +55,7 @@ def make_dataset_new(x_new_dir, y_new_dir, aug=False):
         image_dim = (width, height), augmentation=augmentation if aug else None
     )
 
-    train, valid = torch.utils.random_split(dataset, [len(dataset)-200, 200])
+    train, valid = torch.utils.data.random_split(dataset, [len(dataset)-200, 200])
     return train, valid
 
 def make_dataset_old(aug=False):
@@ -149,6 +149,11 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
             else:
                 epoch_non_empty = False
         if decay is not None: decay.step(valid_loss)
+        if epoch % 5 == 0 and table is not None:
+                print("logging to WANDB")
+                wandb.log({"Table" : table})
+                joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
+                wandb.finish()
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
@@ -211,6 +216,136 @@ def inference_save(model, train_dataset, valid_dataset):
         plt.savefig(os.path.join(sample_val_folder, f"sample_pred_binary_{suffix}.png"))
 
 
+def train_loop_split(model, train_loader, classifier_criterion, criterion, optimizer, valid_loader=None, epochs=30, decay=None):
+    global table, class_labels, model_folder, DEVICE
+    
+    print(f"Using device: {DEVICE}")
+    model_name = "model5"
+    def sigint_handler(sig, frame):
+        if table is not None:
+            print("logging to WANDB")
+            wandb.log({"Table" : table})
+            joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
+            wandb.finish()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, sigint_handler)
+
+    for epoch in range(epochs):
+        for i, data in enumerate(train_loader):
+            print("Progress: {:.2%}".format(i/len(train_loader)))
+            inputs, labels = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
+            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            class_labels = labels.view(labels.shape[0], -1).sum(axis=-1) >= 1 # loss mask
+
+            pred, classifier = model(inputs)
+            classifier_loss = classifier_criterion(classifier, class_labels).mean()
+
+            #might have to scale the criteria, decide from experiments
+
+            loss = criterion(pred, labels, class_labels)
+            loss += classifier_loss
+            loss.backward() # calculate gradients (backpropagation)
+            optimizer.step() # update model weights (values for kernels)
+            print(f"Step: {i}, Loss: {loss}")
+            loss_list.append(loss)
+            wandb.log({"loss": loss})
+        
+        epoch_non_empty = False
+
+        for i, data in enumerate(valid_loader):
+            valid_inputs, valid_labels = data
+            valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
+            valid_pred = model(valid_inputs)
+            valid_loss = criterion(valid_pred, valid_labels)
+            mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy(), 
+                                    masks = {
+                                        "predictions" : {
+                            "mask_data" : (torch.round(nn.Sigmoid()(valid_pred[0].squeeze(0))) * 255).cpu().detach().numpy(),
+                            "class_labels" : class_labels
+                        },
+                        "ground_truth" : {
+                            "mask_data" : (valid_labels[0].squeeze(0) * 255).cpu().numpy(),
+                            "class_labels" : class_labels
+                        }}
+            )
+            table.add_data(f"Epoch {epoch} Step {i}", mask_img)
+            wandb.log({"valid_loss": valid_loss})
+            uniques = np.unique(torch.round(nn.Sigmoid()(valid_pred[0].squeeze(0))).detach().cpu().numpy())
+            if len(uniques) == 2:
+                if not epoch_non_empty:
+                    epoch_non_empty = True
+                    print("UNIQUE OUTPUTS!")
+            else:
+                epoch_non_empty = False
+        if decay is not None: decay.step(valid_loss)
+        if epoch % 5 == 0 and table is not None:
+                print("logging to WANDB")
+                wandb.log({"Table" : table})
+                joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
+                wandb.finish()
+
+        print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
+        print(f"Time elapsed: {time.time() - start} seconds")
+        temp_name = model_name+"_epoch"+str(epoch)
+        joblib.dump(model, os.path.join(model_folder, f"{temp_name}.pk1"))
+    print(f"Total time: {time.time() - start} seconds")
+    wandb.log({"Table" : table})
+    joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
+    wandb.finish()
+    try:
+        joblib.dump(loss_list, os.path.join(model_folder, "loss_list_1.pkl"))
+    except:
+        print("Failed to save loss list")
+
+def inference_save_split(model, train_dataset, valid_dataset):
+    global DEVICE, model_folder, sample_preds_folder
+
+    sample_train_folder = sample_preds_folder+"//train_res"
+    model = joblib.load(os.path.join(model_folder, "model5_epoch17.pk1"))
+    model = model.to(DEVICE)
+    model.eval()
+    for i in tqdm(range(len(train_dataset))):
+        image, gt_mask = train_dataset[i] # image and ground truth from test dataset
+        # print(image.shape, gt_mask.shape) # [1, 512, 512] and [2, 512, 512]
+        # print(image)
+        suffix = "_1_{}".format(i)
+        plt.imshow(image.squeeze(0).numpy(), cmap='gray')
+        plt.savefig(os.path.join(sample_train_folder, f"sample_pred_{suffix}.png"))
+        # plt.show()
+        plt.imshow(gt_mask.squeeze(0).detach().numpy(), cmap="gray")
+        plt.savefig(os.path.join(sample_train_folder, f"sample_gt_{suffix}.png"))
+        # plt.show()
+        x_tensor = image.to(DEVICE).unsqueeze(0)
+        pred_mask = model(x_tensor) # [1, 2, 512, 512]
+        # print(pred_mask.shape)
+        # pred_mask_binary = pred_mask.squeeze(0).detach()
+        pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
+        plt.imshow(pred_mask_binary.cpu().detach().squeeze(0).squeeze(0).numpy(), cmap="gray")
+        plt.savefig(os.path.join(sample_train_folder, f"sample_pred_binary_{suffix}.png"))
+        # plt.show()
+
+    sample_val_folder = sample_preds_folder+"//valid_res"
+    for i in tqdm(range(len(valid_dataset))):
+        image, gt_mask = valid_dataset[i] # image and ground truth from test dataset
+        # print(image.shape, gt_mask.shape) # [1, 512, 512] and [2, 512, 512]
+        # print(image)
+        suffix = "_1_{}".format(i)
+        plt.imshow(image.squeeze(0).numpy(), cmap='gray')
+        plt.savefig(os.path.join(sample_val_folder, f"sample_pred_{suffix}.png"))
+        # plt.show()
+        plt.imshow(gt_mask.squeeze(0).detach().numpy(), cmap="gray")
+        plt.savefig(os.path.join(sample_val_folder, f"sample_gt_{suffix}.png"))
+        # plt.show()
+        x_tensor = image.to(DEVICE).unsqueeze(0)
+        pred_mask = model(x_tensor) # [1, 2, 512, 512]
+        
+        # pred_mask_binary = torch.argmax(pred_mask.squeeze(0).detach(), 0)
+        pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
+        plt.imshow(pred_mask_binary.cpu().detach().squeeze(0).squeeze(0).numpy(), cmap="gray")
+        plt.savefig(os.path.join(sample_val_folder, f"sample_pred_binary_{suffix}.png"))
+
+
 def setup_wandb(epochs, lr):
     global table, class_labels
     WANDB_API_KEY = "42a2147c44b602654473783bde1ecd15579cc313"
@@ -248,6 +383,7 @@ if __name__ == "__main__":
     parser.add_argument("--infer", action="store_true")
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--dataset", default=None, type=str)
+    parser.add_argument("--split", action="store_true")
 
 
     args = parser.parse_args()
@@ -262,37 +398,53 @@ if __name__ == "__main__":
 
     batch_size = args.batch_size
 
-    train_dataset, valid_dataset = make_dataset_new(**DATASETS[args.dataset], args.aug) if args.new is not None else make_dataset_old(args.aug)
+    
+    if args.dataset is not None:
+        train_dir, train_segs = (DATASETS[args.dataset])
+        train_dataset, valid_dataset =  make_dataset_new(train_dir, train_segs, aug=args.aug)
+    else: make_dataset_old(args.aug)
 
-    if args.new is None: print("----WARNING: RUNNING OLD DATASET----")
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+
+    if args.dataset is None: print("----WARNING: RUNNING OLD DATASET----")
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
     valid_loader = DataLoader(valid_dataset, batch_size=16, shuffle=False, num_workers=4)
     print("Data loaders created.")
 
     DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
 
-    if args.model_name is None: model = UNet().to(DEVICE)
+    if args.model_name is None: model = UNet().to(DEVICE) if not args.split else SplitUNet().to(DEVICE)
     else: model = joblib.load(os.path.join(model_folder, args.model_name)) # load model
 
     if not args.infer:
 
-        #calc focal weighting:
-        smushed_labels = None
-        for i in range(len(train_dataset)):
-            if smushed_labels is None: smushed_labels = train_dataset[i][1].to(torch.int64)
-            else: smushed_labels = torch.concat([smushed_labels, train_dataset[i][1].to(torch.int64)])
-        class_counts = torch.bincount(smushed_labels.flatten())
-        total_samples = len(train_dataset) * 512 * 512
-        w1, w2 = 1/(class_counts[0]/total_samples), 1/(class_counts[1]/total_samples)
-        cls_weights = torch.Tensor([w1, w2/9])
-        print(cls_weights)
+        print("Current dataset {}".format(args.dataset))
+
+        if args.dataset != "tiny":
+
+            #calc focal weighting:
+            smushed_labels = None
+            for i in range(len(train_dataset)):
+                if smushed_labels is None: smushed_labels = train_dataset[i][1].to(torch.int64)
+                else: smushed_labels = torch.concat([smushed_labels, train_dataset[i][1].to(torch.int64)])
+            class_counts = torch.bincount(smushed_labels.flatten())
+            total_samples = len(train_dataset) * 512 * 512
+            w1, w2 = 1/(class_counts[0]/total_samples), 1/(class_counts[1]/total_samples)
+            cls_weights = torch.Tensor([w1, w2/2])
+            print(cls_weights)
+        else:
+            cls_weights = cls_weights = torch.Tensor([1, 90])
+            print(cls_weights)
 
         #init oprtimizers
         criterion = FocalLoss(alpha=cls_weights, device=DEVICE)#torch.nn.BCEWithLogitsLoss()
         optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
         decayed_lr = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
         loss_list = [] 
+
+        if args.split:
+            classifier_criterion = torch.nn.BCEWithLogitsLoss()
         
 
         setup_wandb(30, 0.001)
@@ -300,7 +452,16 @@ if __name__ == "__main__":
         print("Starting training...")
         start = time.time()
 
-        train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=30)
+        if not args.split:
+            train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=30)
+        else:
+            train_loop_split(model, train_loader, criterion, classifier_criterion, optimizer, valid_loader, epochs=30)
+            
     else:
-        inference_save(model, train_dataset, valid_dataset)
+
+        if not args.split:
+            inference_save(model, train_dataset, valid_dataset)
+        else:
+            inference_save_split(model, train_dataset, valid_dataset)
+
 
