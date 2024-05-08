@@ -39,6 +39,31 @@ def ressample(arr, N):
         A.extend([*np.hsplit(v, arr.shape[0] // N)])
     return A
 
+
+def erase_neurons():
+    img_files = os.listdir(BASE+"jnc_only_images\\")
+    seg_files = os.listdir(BASE+"jnc_only_seg\\")
+    neuron_files = os.listdir("E:\Mishaal\GapJunction\seg_export\\")
+    os.mkdir(BASE+"erased_neurons\\")
+    os.mkdir(BASE+"erased_neurons\\gts\\")
+    os.mkdir(BASE+"erased_neurons\\imgs\\")
+
+    for i in tqdm(range(len(neuron_files))):
+        img_file = neuron_files[i].replace("20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_", "SEM_dauer_2_image_export_")
+        seg_file = neuron_files[i].replace("20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_", "sem2dauer_gj_2d_training.vsseg_export_")
+        if not os.path.isfile(BASE+"jnc_only_images\\" + img_file) or not os.path.isfile(BASE+"jnc_only_seg\\" + seg_file): continue
+        img = cv2.cvtColor(cv2.imread(BASE+"jnc_only_images\\"+img_file), cv2.COLOR_BGR2GRAY)
+        neuron_mask = cv2.cvtColor(cv2.imread("E:\Mishaal\GapJunction\seg_export\\"+neuron_files[i]), cv2.COLOR_BGR2GRAY)
+        seg = cv2.cvtColor(cv2.imread(BASE+"jnc_only_seg\\"+seg_file), cv2.COLOR_BGR2GRAY)
+        seg[seg != 1] = 0
+        seg[seg == 1] = 255
+        
+        img[neuron_mask != 0] = 255
+
+        #write the new image to directory along with a seg directory 
+        cv2.imwrite(BASE+"erased_neurons\\imgs\\"+img_file, img)
+        cv2.imwrite(BASE+"erased_neurons\\gts\\"+seg_file, seg)
+
 def shorten_pics():
     counter = 0
     img_files = sorted(os.listdir(BASE+"jnc_only_images\\"))
@@ -50,17 +75,20 @@ def shorten_pics():
     for i in tqdm(range(len(img_files))):
         img = cv2.cvtColor(cv2.imread(BASE+"jnc_only_images\\"+img_files[i]), cv2.COLOR_BGR2GRAY)
         seg = cv2.cvtColor(cv2.imread(BASE+"jnc_only_seg\\"+seg_files[i]), cv2.COLOR_BGR2GRAY)
+        seg[seg != 1] = 0
+        seg[seg == 1] = 255
 
         #split the image into 32x32 bits
-        imgs, segs = ressample(img, 32), ressample(seg, 32)
+        imgs, segs = ressample(img, 32), ressample(seg, 128)
         # save these 
         count=0
         for i in range(len(segs)):
-            cv2.imwrite(BASE+"tiny_jnc_only\\gts\\{}.png".format(counter), segs[i])
-            cv2.imwrite(BASE+"tiny_jnc_only\\imgs\\{}.png".format(counter), imgs[i])
+            cv2.imwrite(BASE+"tiny_jnc_only\\gts\\{}.png".format(seg_files[i][:-4] + "_"+str(counter)), segs[i])
+            cv2.imwrite(BASE+"tiny_jnc_only\\imgs\\{}.png".format(img_files[i][:-4] + "_"+str(counter)), imgs[i])
             counter+=1
     
 if __name__ == "__main__":
+    # erase_neurons()
     shorten_pics()
     # only_junc_images_datast()
     # neuron_present_images_dataset()
@@ -70,5 +98,22 @@ if __name__ == "__main__":
     #     filename=BASE+"image_export\\" + line.strip() 
     #     dest=BASE+"jnc_only_images\\"+ line.strip() 
     #     copyfile(filename, dest)
+
+    #make a jnc_only_dataset
+    # os.mkdir(BASE+"jnc_only_dataset\\")
+    # os.mkdir(BASE+"jnc_only_dataset\\gts\\")
+    # os.mkdir(BASE+"jnc_only_dataset\\imgs\\")
+
+    # img_files = sorted(os.listdir(BASE+"jnc_only_images\\"))
+    # seg_files = sorted(os.listdir(BASE+"jnc_only_seg\\"))
+
+    # for i in tqdm(range(len(img_files))):
+    #     img = cv2.cvtColor(cv2.imread(BASE+"jnc_only_images\\"+img_files[i]), cv2.COLOR_BGR2GRAY)
+    #     seg = cv2.cvtColor(cv2.imread(BASE+"jnc_only_seg\\"+seg_files[i]), cv2.COLOR_BGR2GRAY)
+    #     seg[seg != 1] = 0
+    #     seg[seg == 1] = 255
+
+    #     cv2.imwrite(BASE+"jnc_only_dataset\\gts\\{}.png".format(seg_files[i]), seg)
+    #     cv2.imwrite(BASE+"jnc_only_dataset\\imgs\\{}.png".format(img_files[i]), img)
 
 
