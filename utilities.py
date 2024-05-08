@@ -60,11 +60,10 @@ class CaImagesDataset(torch.utils.data.Dataset):
         mask_labels, counts = np.unique(mask, return_counts=True)
         if (len(mask_labels)>2):
             print("More than 2 labels found for mask")
-        # num_one = mask_labels[np.argmin(counts)]
-        mask[mask != 1] = 0
-        mask[mask == 1] = 1
+        mask[mask == 0] = 0
+        mask[mask == 255] = 1
         
-        
+        mask_ref = mask.copy()
         # apply augmentations
         if self.augmentation:
             image, mask = self.augmentation(image, mask)
@@ -73,24 +72,21 @@ class CaImagesDataset(torch.utils.data.Dataset):
         _transform = []
         _transform.append(transforms.ToTensor())
 
-        img_size = 512
-        width, height = self.image_dim
-        max_dim = max(img_size, width,    )
-        pad_left = (max_dim-width)//2
-        pad_right = max_dim-width-pad_left
-        pad_top = (max_dim-height)//2
-        pad_bottom = max_dim-height-pad_top
-        _transform.append(transforms.Pad(padding=(pad_left, pad_top, pad_right, pad_bottom), 
-                                        padding_mode='edge'))
+        # img_size = 512
+        # width, height = self.image_dim
+        # max_dim = max(img_size, width,    )
+        # pad_left = (max_dim-width)//2
+        # pad_right = max_dim-width-pad_left
+        # pad_top = (max_dim-height)//2
+        # pad_bottom = max_dim-height-pad_top
+        # _transform.append(transforms.Pad(padding=(pad_left, pad_top, pad_right, pad_bottom), 
+        #                                 padding_mode='edge'))
         # _transform.append(transforms.Resize(interpolation=transforms.InterpolationMode.NEAREST_EXACT,size=(img_size, img_size)))  
 
         mask = transforms.Compose(_transform)(mask)
-        mask_labels, counts = np.unique(mask, return_counts=True)
-        num_one = mask_labels[np.argmin(counts)]
         if len(mask_labels) == 1:
             mask[:] = 0
         else:
-            mask[mask == 0] = 0
             mask[mask != 0] = 1
         ont_hot_mask = mask
         # ont_hot_mask = F.one_hot(mask.long(), num_classes=2).squeeze().permute(2, 0, 1).float()
