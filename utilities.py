@@ -47,6 +47,23 @@ class CaImagesDataset(torch.utils.data.Dataset):
         
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
+
+        if "tiny" in images_dir:
+            #class balancing (65-35)
+            empty_segs, present_segs = [], []
+            for i in range(len(self.image_paths)):
+                im = cv2.imread(self.mask_paths[i], cv2.COLOR_BGR2GRAY)
+                if len(np.unique(im)) == 2: present_segs.append(i)
+                else: empty_segs.append(i)
+            n_present = len(present_segs)
+            total = (n_present *100)//65
+            empty_segs = np.random.choices(np.array(empty_segs), k=total - n_present)
+            all_segs = empty_segs + present_segs
+            self.image_paths = [f for i, f in enumerate(self.image_path) if i in all_segs]
+            self.mask_paths = [f for i, f in enumerate(self.mask_paths) if i in all_segs]
+
+            print("Class balanced tiny has {} empty and {} present with a total of {} points".format(empty_segs, present_segs, len(self.image_paths)))
+
         if mask_neurons:
             assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "well shet"
             self.neuron_paths = [os.path.join(mask_neurons, neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_")) for neuron_id in sorted(os.listdir(images_dir))]
