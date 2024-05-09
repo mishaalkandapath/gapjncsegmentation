@@ -287,8 +287,8 @@ class FocalLoss(nn.Module):
         bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
         pt = torch.exp(-bce_loss)
         targets = targets.to(torch.int64)
-        loss = self.alpha[targets.view(targets.shape[0], -1)].view(targets.shape[0], -1) * pt ** self.gamma * bce_loss
-        if loss_mask: loss = loss * loss_mask
+        loss = self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape) * (1-pt) ** self.gamma * bce_loss
+        if loss_mask is not None: loss = loss * loss_mask
         return loss.mean() 
 
 def get_training_augmentation():

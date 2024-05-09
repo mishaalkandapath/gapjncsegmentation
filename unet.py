@@ -114,12 +114,11 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
         pbar = tqdm(total=len(train_loader))
         for i, data in enumerate(train_loader):
             pbar.set_description("Progress: {:.2%}".format(i/len(train_loader)))
-            inputs, labels = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
+            inputs, labels, neuron_mask = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-            if neuron_mask: neuron_mask = neuron_mask.to(DEVICE)
+            if neuron_mask is not None: neuron_mask = neuron_mask.to(DEVICE)
             pred = model(inputs)
-            loss = criterion(pred, labels)
-            if neuron_mask: loss = loss * neuron_mask # mask the loss
+            loss = criterion(pred, labels, neuron_mask)
             loss.backward() # calculate gradients (backpropagation)
             optimizer.step() # update model weights (values for kernels)
             pbar.set_postfix(step = f"Step: {i}", loss = f"Loss: {loss}")
@@ -133,10 +132,10 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels, valid_neuron_mask = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
-            if valid_neuron_mask: valid_neuron_mask.to(DEVICE)
+            if valid_neuron_mask is not None: valid_neuron_mask.to(DEVICE)
             valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
-            if valid_neuron_mask: loss *= valid_neuron_mask
+            if valid_neuron_mask is not None: loss *= valid_neuron_mask
             mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy(), 
                                     masks = {
                                         "predictions" : {
@@ -244,7 +243,7 @@ def train_loop_split(model, train_loader, classifier_criterion, criterion, optim
         pbar = tqdm(total = len(train_loader))
         for i, data in enumerate(train_loader):
             pbar.set_description("Progress: {:.2%}".format(i/len(train_loader)))
-            inputs, labels = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
+            inputs, labels, _ = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             train_class_labels = labels.view(labels.shape[0], -1).sum(axis=-1) >= 1 # loss mask
 
@@ -266,7 +265,7 @@ def train_loop_split(model, train_loader, classifier_criterion, criterion, optim
         epoch_non_empty = False
 
         for i, data in enumerate(valid_loader):
-            valid_inputs, valid_labels = data
+            valid_inputs, valid_labels, _ = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
             valid_class_labels = valid_labels.view(valid_labels.shape[0], -1).sum(axis=-1) >= 1 # loss mask
 
@@ -323,7 +322,7 @@ def inference_save_split(model, train_dataset, valid_dataset):
     model = model.to(DEVICE)
     model.eval()
     for i in tqdm(range(len(train_dataset))):
-        image, gt_mask = train_dataset[i] # image and ground truth from test dataset
+        image, gt_mask, _ = train_dataset[i] # image and ground truth from test dataset
         # print(image.shape, gt_mask.shape) # [1, 512, 512] and [2, 512, 512]
         # print(image)
         suffix = "_1_{}".format(i)
@@ -344,7 +343,7 @@ def inference_save_split(model, train_dataset, valid_dataset):
 
     sample_val_folder = sample_preds_folder+"//valid_res"
     for i in tqdm(range(len(valid_dataset))):
-        image, gt_mask = valid_dataset[i] # image and ground truth from test dataset
+        image, gt_mask, _ = valid_dataset[i] # image and ground truth from test dataset
         # print(image.shape, gt_mask.shape) # [1, 512, 512] and [2, 512, 512]
         # print(image)
         suffix = "_1_{}".format(i)
@@ -447,17 +446,18 @@ if __name__ == "__main__":
             print("MASKING NEURONS IS SET TO {}".format(args.mask_neurons))
 
             #calc focal weighting:
-            smushed_labels = None
-            for i in tqdm(range(len(train_dataset))):
-                if smushed_labels is None: smushed_labels = train_dataset[i][1].to(torch.int64)
-                else: smushed_labels = torch.concat([smushed_labels, train_dataset[i][1].to(torch.int64)])
-
-            torch.save(smushed_labels, "smushed.pt")
-            torch.save(nm, "nm.pt")
-            print(nm.dtype)
+            # smushed_labels = None
+            # if args.mask_neurons: nm = None
+            # for i in tqdm(range(len(train_dataset))):
+            #     if smushed_labels is None: smushed_labels = train_dataset[i][1].to(torch.int64)
+            #     else: smushed_labels = torch.concat([smushed_labels, train_dataset[i][1].to(torch.int64)])
+            #     if args.mask_neurons and nm is None: nm = torch.Tensor(train_dataset[i][2], dtype=torch.bool)
+            #     elif args.mask_neurons: nm = torch.concat([nm,  torch.Tensor(train_dataset[i][2])], dtype=torch.bool)
+            smushed_labels = torch.load("smushed.pt")
+            nm = torch.load("nm.pt").to(dtype=torch.bool)
+            # print(nm.dtype)
             smushed_labels = smushed_labels.flatten() if not args.mask_neurons else smushed_labels.flatten()[nm.flatten()]
-
-            class_counts = torch.bincount(smushed_labels.flatten())
+            class_counts = torch.bincount(smushed_labels)
             total_samples = len(train_dataset) * 512 * 512
             w1, w2 = 1/(class_counts[0]/total_samples), 1/(class_counts[1]/total_samples)
             cls_weights = torch.Tensor([w1, w2/2])
