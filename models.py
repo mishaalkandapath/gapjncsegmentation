@@ -6,7 +6,14 @@ import torchvision.transforms as transforms
 
 # correspond to arrows in paper figure
 class DoubleConv(nn.Module):
-    """(Conv2d -> BN -> ReLU) * 2"""
+    """Two Conv2D + BN + ReLU
+    
+    Note: "Conv2D" is a convolutional layer with kernel size 3x3, or 1x3x3 in 3D
+    
+    Attributes:
+        in_channels (int): number of input channels
+        out_channels (int): number of output channels
+    """
     def __init__(self, in_channels, out_channels):
         super(DoubleConv, self).__init__()
         self.double_conv = nn.Sequential(
@@ -15,12 +22,18 @@ class DoubleConv(nn.Module):
             nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True),
             # 1x3x3 conv + BN + ReLU
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.Conv3d(out_channels, out_channels, kernel_size=(1,3,3), padding=1),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
 
     def forward(self, x):
+        """ 
+        Args:
+            x (torch.Tensor): 5D input tensor of shape (batch_size, channel=1, depth, height, width)
+        """
+        if len(x.shape) == 4:
+            x = x.unsqueeze(0)
         return self.double_conv(x)
     
 class SingleConv3D(nn.Module):
@@ -65,6 +78,16 @@ class DownBlock(nn.Module):
         self.down_sample = nn.MaxPool2d(2, stride=2)
 
     def forward(self, x):
+        """ 
+        Args:
+            x (torch.Tensor): 5D input tensor of shape (batch_size, channel=1, depth, height, width)
+        """
+        # add batch dimension if not present (ie. single image input)
+        if len(x.shape) == 4:
+            x = x.unsqueeze(0)
+        # apply 3D conv if needed
+        if self.add_3d:
+            x = self.conv_3d(x)
         skip_out = self.double_conv(x)
         down_out = self.down_sample(skip_out)
         return (down_out, skip_out)
@@ -112,7 +135,7 @@ class UNet(nn.Module):
         self.up_sample_mode = up_sample_mode
         
         # Downsampling Path
-        self.down_conv1 = DownBlock(1, 64, add_3d=True) # 3 input channels --> 64 output channels
+        self.down_conv1 = DownBlock(1, 64, add_3d=True) # 1 input channels --> 64 output channels
         self.down_conv2 = DownBlock(64, 128, add_3d=True) # 64 input channels --> 128 output channels
         self.down_conv3 = DownBlock(128, 256) # 128 input channels --> 256 output channels
         
@@ -146,10 +169,11 @@ class UNet(nn.Module):
     def forward(self, x):
         """Forward pass of the UNet model
         Args:
-            x (torch.Tensor): input tensor (depth, channels=1, height, width)
+            x (torch.Tensor): 5D input tensor (batch_size, channel=1, depth, height, width)
+                - note: in pytorch docs, (N, C, D, H, W) is used
         """
         # Encoder-Decoder Path (depth doesn't change)
-        x, skip1_out = self.down_conv1(x) # x: (5, 64, 150, 150), skip1_out: (16, 64, 512, 512) (depth, channels, height, width)
+        x, skip1_out = self.down_conv1(x) # x: (1, 64, 150, 150)
         x, skip2_out = self.down_conv2(x) # x: (5, 128, 75, 75)
         x, skip3_out = self.down_conv3(x) # x: (5, 256, 37, 37)
         x = self.double_conv(x) # x: (5, 512, 75, 75)
