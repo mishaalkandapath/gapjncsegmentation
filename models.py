@@ -16,16 +16,14 @@ class DoubleConv(nn.Module):
     """
     def __init__(self, in_channels, out_channels):
         super(DoubleConv, self).__init__()
-        self.double_conv = nn.Sequential(
-            # 1x3x3 conv + BN + ReLU
-            nn.Conv3d(in_channels, out_channels, kernel_size=(1,3,3), padding=1),
-            nn.BatchNorm3d(out_channels),
-            nn.ReLU(inplace=True),
-            # 1x3x3 conv + BN + ReLU
-            nn.Conv3d(out_channels, out_channels, kernel_size=(1,3,3), padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-        )
+        # 1x3x3 conv + BN + ReLU
+        self.conv1 = nn.Conv3d(in_channels, out_channels, kernel_size=(1,3,3), padding=(0,1,1))
+        self.bn1 = nn.BatchNorm3d(out_channels)
+        self.relu1 = nn.ReLU(inplace=True)
+        # 1x3x3 conv + BN + ReLU
+        self.conv2 = nn.Conv3d(out_channels, out_channels, kernel_size=(1,3,3), padding=(0,1,1))
+        self.bn2 = nn.BatchNorm3d(out_channels)
+        self.relu2 = nn.ReLU(inplace=True)
 
     def forward(self, x):
         """ 
@@ -34,7 +32,13 @@ class DoubleConv(nn.Module):
         """
         if len(x.shape) == 4:
             x = x.unsqueeze(0)
-        return self.double_conv(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+        return x
     
 class SingleConv3D(nn.Module):
     """ 3x3x3 Convolution followed by BN and ReLU"""
@@ -66,43 +70,41 @@ class SingleConv1D(nn.Module):
 
 # group into blocks for easier reading
 class DownBlock(nn.Module):
-    """Double Convolution followed by Max Pooling"""
+    """Double Convolution followed by Max Pooling
+    
+    Attributes:
+        add_3d (bool): whether to add 3D convolution before double conv
+    """
     def __init__(self, in_channels, out_channels, add_3d = False):
         super(DownBlock, self).__init__()
+        self.add_3d = add_3d
+        self.in_channels = in_channels
+        self.out_channels = out_channels
         if add_3d:
             # add 3d conv before double conv
-            self.conv_3d = nn.Conv3d(in_channels, out_channels//2, kernel_size=(3,3,3), padding=1)
+            self.conv_3d = nn.Conv3d(in_channels, out_channels//2, kernel_size=(3,3,3), padding=(1,1,1))
             self.double_conv = DoubleConv(out_channels//2, out_channels)
         else:
             self.double_conv = DoubleConv(in_channels, out_channels)
-        self.down_sample = nn.MaxPool2d(2, stride=2)
+        self.down_sample = nn.MaxPool3d((1,2,2), stride=(1,2,2))
 
     def forward(self, x):
         """ 
         Args:
             x (torch.Tensor): 5D input tensor of shape (batch_size, channel=1, depth, height, width)
         """
-        # add batch dimension if not present (ie. single image input)
-        if len(x.shape) == 4:
-            x = x.unsqueeze(0)
         # apply 3D conv if needed
         if self.add_3d:
-            x = self.conv_3d(x)
-        skip_out = self.double_conv(x)
-        down_out = self.down_sample(skip_out)
-        return (down_out, skip_out)
+            x = self.conv_3d(x) # x: (1, 32, 5, 512, 512)
+        skip_out = self.double_conv(x) # (1, 64, 5, 512, 512)
+        down_out = self.down_sample(skip_out) # (1, 64, 5, 256, 256)
+        return down_out, skip_out
 
 class UpBlock(nn.Module):
     """Up Convolution (Upsampling followed by Double Convolution)"""
-    def __init__(self, in_channels, out_channels, up_sample_mode='conv_transpose', add_3d = False):
+    def __init__(self, in_channels, out_channels, add_3d = False):
         super(UpBlock, self).__init__()
-        if up_sample_mode == 'conv_transpose':
-            self.up_sample = nn.ConvTranspose2d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2)        
-        elif up_sample_mode == 'bilinear':
-            self.up_sample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        else:
-            raise ValueError("Unsupported `up_sample_mode` (can take one of `conv_transpose` or `bilinear`)")
-        
+        self.up_sample = nn.ConvTranspose3d(in_channels-out_channels, in_channels-out_channels, kernel_size=(2,2,2), stride=(2,2,2))
         if add_3d:
             self.conv3d = nn.Conv3d(in_channels, out_channels//2, kernel_size=(3,3,3), padding=1)
             self.double_conv = DoubleConv(out_channels//2, out_channels)
@@ -129,10 +131,9 @@ class PyramidBlock(nn.Module):
 # model architecture
 class UNet(nn.Module):
     """UNet Architecture"""
-    def __init__(self, out_classes=2, up_sample_mode='conv_transpose'):
+    def __init__(self, out_classes=2):
         """Initialize the UNet model"""
         super(UNet, self).__init__()
-        self.up_sample_mode = up_sample_mode
         
         # Downsampling Path
         self.down_conv1 = DownBlock(1, 64, add_3d=True) # 1 input channels --> 64 output channels
@@ -143,9 +144,9 @@ class UNet(nn.Module):
         self.double_conv = DoubleConv(256, 512)
         
         # Upsampling Path
-        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode) # 256 + 512 input channels --> 256 output channels
-        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode, add_3d=True)
-        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode, add_3d=True)
+        self.up_conv3 = UpBlock(256 + 512, 256) # 256 + 512 input channels --> 256 output channels
+        self.up_conv2 = UpBlock(128 + 256, 128, add_3d=True)
+        self.up_conv1 = UpBlock(128 + 64, 64, add_3d=True)
         
         # 1x1x1 conv + ReLU
         self.one_conv1 = SingleConv1D(64, out_classes)
@@ -159,7 +160,7 @@ class UNet(nn.Module):
         # -- side 2
         self.single_three_conv2 = SingleConv3D(out_classes, 128)
         self.pyramid2 = PyramidBlock(num_convs=7, num_channels=128)
-        self.transpose = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.transpose = nn.ConvTranspose3d(128, 64, kernel_size=(2,2,2), stride=(2,2,2))
         
         # Final Convolution
         self.single_conv2 = SingleConv1D(128, out_classes)
@@ -173,13 +174,13 @@ class UNet(nn.Module):
                 - note: in pytorch docs, (N, C, D, H, W) is used
         """
         # Encoder-Decoder Path (depth doesn't change)
-        x, skip1_out = self.down_conv1(x) # x: (1, 64, 150, 150)
-        x, skip2_out = self.down_conv2(x) # x: (5, 128, 75, 75)
-        x, skip3_out = self.down_conv3(x) # x: (5, 256, 37, 37)
-        x = self.double_conv(x) # x: (5, 512, 75, 75)
-        x = self.up_conv3(x, skip3_out) # x: (5, 256, 150, 150)
-        x = self.up_conv2(x, skip2_out) # x: (5, 128, 300, 300)
-        out1 = self.up_conv1(x, skip1_out) # x: (5, 64, 300, 300)        
+        x, skip1_out = self.down_conv1(x) # x: (1, 64, 5, 150, 150)
+        x, skip2_out = self.down_conv2(x) # x: (1, 128, 5, 75, 75)
+        x, skip3_out = self.down_conv3(x) # x: (1, 256, 5, 37, 37)
+        x = self.double_conv(x) # x: (1, 512, 5, 37, 37)
+        x = self.up_conv3(x, skip3_out) # x: (1, 256, 5, 75, 75)
+        x = self.up_conv2(x, skip2_out) # x: (1, 128, 5, 150, 150)
+        out1 = self.up_conv1(x, skip1_out) # x: (1, 64, 5, 300, 300)
         
         x = self.one_conv1(out1) # skip_out: (5, 2, 300, 300)
         x = self.softmax(x)
@@ -189,7 +190,7 @@ class UNet(nn.Module):
         x1 = self.single_three_conv1(x)
         x1 = self.pyramid1(x1)
         
-        x2 = nn.MaxPool2d(2, stride=2)(x) # x: (5, 66, 150, 150)
+        x2 = nn.MaxPool3d((1,2,2), stride=(1,2,2))(x) # x: (5, 66, 150, 150)
         x2 = self.single_three_conv2(x2)
         x2 = self.pyramid2(x2)
         x2 = self.transpose1(x2)
