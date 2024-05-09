@@ -1,85 +1,89 @@
 import os
 import cv2
 import random
+import re
+import numpy as np
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+from typing import Tuple
 
-class SliceDataset(torch.utils.data.Dataset):
 
-    """ Dataset for 2D slices of 3D EM images
+def get_z_y_x(file_name, pattern) -> Tuple[int, int, int]:
+    """ Get z, y, x from file name using pattern
+
+    Args:
+        file_name (str): file name (can be full path)
+        pattern (str): pattern to extract z, y, x from file name
+        
+    Returns:
+        z: int, z coordinate
+        y: int, y coordinate
+        x: int, x coordinate
+    """
+    file_name = os.path.basename(file_name)
+    match = re.match(pattern, file_name)
+    if match:
+        if len(match.groups()) != 3:
+            return None
+        z, y, x = match.groups()
+        return int(z), int(y), int(x)
+    else:
+        return None
     
-    Read images, apply augmentation and preprocessing transformations.
+def get_img_by_coords(z, y, x, img_files, img_pattern) -> np.array:
+    """ Get image from img_files by z, y, x
     
     Args:
-        images_dir (str): path to images folder
-        masks_dir (str): path to segmentation masks folder
-        augmentation (torchvision.transforms.Compose): data augmentations
+        z: int, z coordinate
+        y: int, y coordinate
+        x: int, x coordinate
+        img_files: list of str, paths to images
+        img_pattern: str, pattern to extract z, y, x from image file name
+        
+    Returns:
+        img: np.array, image whose file path contains z, y, x (ie. slice at z, y, x)
     """
-    def __init__(
-            self, 
-            images_dir, 
-            masks_dir,
-            image_dim = (512, 512),
-            augmentation=None,
-    ):
-        
-        self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
-        self.image_dim = image_dim
-    
-    def __getitem__(self, i):
-        # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
-        image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
-        mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
-        
-        # pad the image to make it square
-        img_size = 512
-        width, height = self.image_dim
-        max_dim = max(img_size, width, height)
-        pad_left = (max_dim-width)//2
-        pad_right = max_dim-width-pad_left
-        pad_top = (max_dim-height)//2
-        pad_bottom = max_dim-height-pad_top
-        
-        # define transformations for preprocessing
-        _transform_mask = [] # (for mask)
-        _transform_mask.append(transforms.ToTensor())
-        _transform_mask.append(transforms.Pad(padding=(pad_left, pad_top, pad_right, pad_bottom), padding_mode='edge')) # pad with edge values
-        _transform_mask.append(transforms.Resize(interpolation=transforms.InterpolationMode.NEAREST_EXACT,size=(img_size, img_size))) # nearest neighbor interpolation
-        _transform_img = _transform_mask.copy() # (for image)
-        _transform_img.append(transforms.Normalize(mean=[0.5], std=[0.5]))
-        
-        # apply transformations
-        mask = transforms.Compose(_transform_mask)(mask)
-        image = transforms.Compose(_transform_img)(image)
-        
-        # apply augmentations, if any
-        if self.augmentation:
-            image = self.augmentation(image)
-            mask = self.augmentation(mask)
-            
-        # one-hot encode the mask (ie. convert from 0, 255 to 0, 1)
-        ont_hot_mask = F.one_hot(mask.long(), num_classes=2).squeeze().permute(2, 0, 1).float()
-        return image, ont_hot_mask
-        
-    def __len__(self):
-        return len(self.image_paths)
+    for i in range(len(img_files)):
+        img_file = img_files[i]
+        z_, y_, x_ = get_z_y_x(img_file, img_pattern)
+        if z == z_ and y == y_ and x == x_:
+            return cv2.imread(img_file, cv2.IMREAD_GRAYSCALE)
+    return None
 
-class FocalLoss(nn.Module):
-    def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
-        super(FocalLoss, self).__init__()
-        self.gamma = gamma
-        self.device = device
-        self.alpha = alpha.to(device)
+def get_3d_slice(z,y,x, img_files, mask_files, img_pattern, mask_pattern, depth=1, width=512, height=512) -> Tuple[np.array, np.array]:
+    """ get 3d slice by z, y, x 
     
-    def forward(self, inputs, targets):
-        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-        pt = torch.exp(-bce_loss)
-        targets = targets.to(torch.int64)
-        loss = self.alpha[targets.view(-1, 512*512)].view(-1, 512, 512) * pt ** self.gamma * bce_loss
-        return loss.mean() 
+    -think of the original image as 3d volume, and each slice is a pixel
+    -so we want a column of pixels, with the center pixel being the pixel at z, y, x, and sliding up and down along the z axis
+    
+    Args:
+        z: int, z coordinate
+        y: int, y coordinate
+        x: int, x coordinate
+        img_files: list of str, paths to images
+        mask_files: list of str, paths to masks
+        img_pattern: str, pattern to extract z, y, x from image file name
+        mask_pattern: str, pattern to extract z, y, x from mask file name
+        depth: int, how many slices to include above and below the center slice
+        width: int, width of each slice
+        height: int, height of each slice
+        
+    Returns:
+        img_3d: np.array, 3d image volume (2*depth+1, width, height)
+        mask_3d: np.array, 3d mask volume (2*depth+1, width, height)
+    """
+    img_3d = np.zeros((2*depth+1, width, height))
+    mask_3d = np.zeros((2*depth+1, width, height))
+    for i in range(-depth, depth+1):
+        z_coord = z+i
+        img = get_img_by_coords(z_coord, y, x, img_files, img_pattern)
+        mask = get_img_by_coords(z_coord, y, x, mask_files, mask_pattern)
+        if img is not None and mask is not None:
+            img_3d[i+depth] = img
+            mask_3d[i+depth] = mask
+    return img_3d, mask_3d
 
 def checkpoint(model, optimizer, epoch, loss, path):
     """ Save model checkpoint
