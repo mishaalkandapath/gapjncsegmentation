@@ -1,3 +1,9 @@
 wandb/
 __pycache__/
 seg_export/
+.DS_Store
+.vscode/
+gapvenv/
+small_data_five.tgz
+small_data/
+small_data_3d/
