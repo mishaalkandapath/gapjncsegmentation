@@ -240,10 +240,10 @@ def train_loop_split(model, train_loader, classifier_criterion, criterion, optim
             pbar.set_description("Progress: {:.2%}".format(i/len(train_loader)))
             inputs, labels = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-            class_labels = labels.view(labels.shape[0], -1).sum(axis=-1) >= 1 # loss mask
+            train_class_labels = labels.view(labels.shape[0], -1).sum(axis=-1) >= 1 # loss mask
 
             pred, classifier = model(inputs)
-            classifier_loss = classifier_criterion(classifier.squeeze(-1), class_labels.to(dtype=torch.float32)).mean()
+            classifier_loss = classifier_criterion(classifier.squeeze(-1), train_class_labels.to(dtype=torch.float32)).mean()
 
             #might have to scale the criteria, decide from experiments
 
@@ -262,8 +262,13 @@ def train_loop_split(model, train_loader, classifier_criterion, criterion, optim
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
-            valid_pred = model(valid_inputs)
+            valid_class_labels = valid_labels.view(valid_labels.shape[0], -1).sum(axis=-1) >= 1 # loss mask
+
+            valid_pred, valid_classifier = model(valid_inputs)
+            valid_classifier_loss = classifier_criterion(valid_classifier.squeeze(-1), valid_class_labels.to(dtype=torch.float32)).mean()
+
             valid_loss = criterion(valid_pred, valid_labels)
+            valid_loss += valid_classifier_loss
             mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy(), 
                                     masks = {
                                         "predictions" : {
