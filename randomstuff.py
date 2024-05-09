@@ -68,9 +68,9 @@ def shorten_pics():
     counter = 0
     img_files = sorted(os.listdir(BASE+"jnc_only_images\\"))
     seg_files = sorted(os.listdir(BASE+"jnc_only_seg\\"))
-    os.mkdir(BASE+"tiny_jnc_only\\")
-    os.mkdir(BASE+"tiny_jnc_only\\gts\\")
-    os.mkdir(BASE+"tiny_jnc_only\\imgs\\")
+    os.mkdir(BASE+"tiny_jnc_only1\\")
+    os.mkdir(BASE+"tiny_jnc_only1\\gts\\")
+    os.mkdir(BASE+"tiny_jnc_only1\\imgs\\")
 
     for i in tqdm(range(len(img_files))):
         img = cv2.cvtColor(cv2.imread(BASE+"jnc_only_images\\"+img_files[i]), cv2.COLOR_BGR2GRAY)
@@ -79,17 +79,17 @@ def shorten_pics():
         seg[seg == 1] = 255
 
         #split the image into 32x32 bits
-        imgs, segs = ressample(img, 32), ressample(seg, 128)
+        imgs, segs = ressample(img, 128), ressample(seg, 128)
         # save these 
         count=0
         for i in range(len(segs)):
-            cv2.imwrite(BASE+"tiny_jnc_only\\gts\\{}.png".format(seg_files[i][:-4] + "_"+str(counter)), segs[i])
-            cv2.imwrite(BASE+"tiny_jnc_only\\imgs\\{}.png".format(img_files[i][:-4] + "_"+str(counter)), imgs[i])
+            cv2.imwrite(BASE+"tiny_jnc_only1\\gts\\{}.png".format(seg_files[i][:-4] + "_"+str(counter)), segs[i])
+            cv2.imwrite(BASE+"tiny_jnc_only1\\imgs\\{}.png".format(img_files[i][:-4] + "_"+str(counter)), imgs[i])
             counter+=1
     
 if __name__ == "__main__":
     # erase_neurons()
-    # shorten_pics()
+    shorten_pics()
     # only_junc_images_datast()
     # neuron_present_images_dataset()
 
@@ -103,20 +103,20 @@ if __name__ == "__main__":
     # os.mkdir(BASE+"jnc_only_dataset\\")
     # os.mkdir(BASE+"jnc_only_dataset\\gts\\")
     # os.mkdir(BASE+"jnc_only_dataset\\imgs\\")
-    for sec in ["train", "test", "valid"]:
-        BASE = "E:\\Mishaal\\GapJunction\\small_data\\ground_truth\\"
-        # img_files = sorted(os.listdir(BASE+"jnc_only_images\\"))
-        seg_files = sorted(os.listdir(BASE+sec+"\\"))
-        os.mkdir(BASE+sec+"_new\\")
+    # for sec in ["train", "test", "valid"]:
+    #     BASE = "E:\\Mishaal\\GapJunction\\small_data\\ground_truth\\"
+    #     # img_files = sorted(os.listdir(BASE+"jnc_only_images\\"))
+    #     seg_files = sorted(os.listdir(BASE+sec+"\\"))
+    #     os.mkdir(BASE+sec+"_new\\")
 
-        for i in tqdm(range(len(seg_files))):
-            # img = cv2.cvtColor(cv2.imread(BASE+"jnc_only_images\\"+img_files[i]), cv2.COLOR_BGR2GRAY)
-            seg = cv2.cvtColor(cv2.imread(BASE+sec+"\\"+seg_files[i]), cv2.COLOR_BGR2GRAY)
-            if len(np.unique(seg)) > 2: raise Exception(np.unique(seg))
-            seg[seg == 30] = 0
-            seg[seg == 215] = 255
+    #     for i in tqdm(range(len(seg_files))):
+    #         # img = cv2.cvtColor(cv2.imread(BASE+"jnc_only_images\\"+img_files[i]), cv2.COLOR_BGR2GRAY)
+    #         seg = cv2.cvtColor(cv2.imread(BASE+sec+"\\"+seg_files[i]), cv2.COLOR_BGR2GRAY)
+    #         if len(np.unique(seg)) > 2: raise Exception(np.unique(seg))
+    #         seg[seg == 30] = 0
+    #         seg[seg == 215] = 255
 
-            cv2.imwrite(BASE+sec+"_new\\{}".format(seg_files[i]), seg)
-            # cv2.imwrite(BASE+"jnc_only_dataset\\imgs\\{}.png".format(img_files[i]), img)
+    #         cv2.imwrite(BASE+sec+"_new\\{}".format(seg_files[i]), seg)
+    #         # cv2.imwrite(BASE+"jnc_only_dataset\\imgs\\{}.png".format(img_files[i]), img)
 
 

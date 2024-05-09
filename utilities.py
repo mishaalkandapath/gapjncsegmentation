@@ -40,11 +40,16 @@ class CaImagesDataset(torch.utils.data.Dataset):
             masks_dir, 
             augmentation=None, 
             preprocessing=None,
-            image_dim = (512, 512)
+            image_dim = (512, 512),
+            mask_neurons=None
     ):
         
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
+        if mask_neurons:
+            assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "well shet"
+            self.neuron_paths = [os.path.join(mask_neurons, neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_")) for neuron_id in sorted(os.listdir(images_dir))]
+        else: self.neuron_paths = None
         self.augmentation = augmentation 
         self.preprocessing = preprocessing
         self.image_dim = image_dim
@@ -94,8 +99,12 @@ class CaImagesDataset(torch.utils.data.Dataset):
         _transform_img = _transform.copy()
         # _transform_img.append(transforms.Normalize(mean=[0.5], std=[0.5]))
         image = transforms.Compose(_transform_img)(image)
+
+        #get the coresponding neuron mask
+        if self.neuron_paths: neurons = cv2.cvtColor(cv2.imread(self.neuron_paths[i][:-4]), cv2.COLOR_BGR2GRAY)
+        
             
-        return image, ont_hot_mask
+        return image, ont_hot_mask, neurons == 0 if self.neuron_paths else None
         
     def __len__(self):
         # return length of 

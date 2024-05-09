@@ -33,9 +33,9 @@ model_folder = r"E:\\Mishaal\\GapJunction\\models"
 sample_preds_folder = r"E:\\Mishaal\\GapJunction\\results"
 table, class_labels = None, None #wandb stuff
                 
-def make_dataset_new(aug=False):
-    x_new_dir = r"/home/mishaalk/scratch/gapjunc/seg_50_data/images"
-    y_new_dir = r"/home/mishaalk/scratch/gapjunc/seg_50_data/labels"
+def make_dataset_new(aug=False, neuron_mask=False):
+    x_new_dir = r"E:\\Mishaal\\sem_dauer_2\\jnc_only_dataset\\imgs"
+    y_new_dir = r"E:\\Mishaal\\sem_dauer_2\\jnc_only_dataset\\gts"
 
     height, width = cv2.imread(os.path.join(x_new_dir, os.listdir(x_new_dir)[0])).shape[:2]
 
@@ -49,10 +49,11 @@ def make_dataset_new(aug=False):
     dataset = CaImagesDataset(
         x_new_dir, y_new_dir, 
         preprocessing=None,
-        image_dim = (width, height), augmentation=augmentation if aug else None
+        image_dim = (width, height), augmentation=augmentation if aug else None,
+        mask_neurons= "E:\\Mishaal\\GapJunction\\seg_export" if neuron_mask else None
     )
 
-    train, valid = torch.utils.random_split(dataset, [len(dataset)-200, 200])
+    train, valid = torch.utils.data.random_split(dataset, [len(dataset)-200, 200])
     return train, valid
 
 def make_dataset_old(aug=False):
@@ -108,10 +109,12 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
     for epoch in range(epochs):
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)))
-            inputs, labels = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
+            inputs, labels, neuron_mask = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            if neuron_mask: neuron_mask = neuron_mask.to(DEVICE)
             pred = model(inputs)
             loss = criterion(pred, labels)
+            if neuron_mask: loss = loss * neuron_mask # mask the loss
             loss.backward() # calculate gradients (backpropagation)
             optimizer.step() # update model weights (values for kernels)
             print(f"Step: {i}, Loss: {loss}")
@@ -121,10 +124,12 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
         epoch_non_empty = False
 
         for i, data in enumerate(valid_loader):
-            valid_inputs, valid_labels = data
+            valid_inputs, valid_labels, valid_neuron_mask = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
+            if valid_neuron_mask: valid_neuron_mask.to(DEVICE)
             valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
+            if valid_neuron_mask: loss *= valid_neuron_mask
             mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy(), 
                                     masks = {
                                         "predictions" : {
@@ -150,7 +155,6 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
                 print("logging to WANDB")
                 wandb.log({"Table" : table})
                 joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
-                wandb.finish()
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
@@ -250,7 +254,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_name", default=None, type=str)
     parser.add_argument("--infer", action="store_true")
     parser.add_argument("--cpu", action="store_true")
-
+    parser.add_argument("--mask_neurons", action="store_true")
 
     args = parser.parse_args()
 
@@ -264,7 +268,7 @@ if __name__ == "__main__":
 
     batch_size = args.batch_size
 
-    train_dataset, valid_dataset = make_dataset_new(args.aug) if args.new else make_dataset_old(args.aug)
+    train_dataset, valid_dataset = make_dataset_new(args.aug, neuron_mask=args.mask_neurons) if args.new else make_dataset_old(args.aug)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
     valid_loader = DataLoader(valid_dataset, batch_size=16, shuffle=False, num_workers=4)
@@ -277,12 +281,21 @@ if __name__ == "__main__":
 
     if not args.infer:
 
+        print("MASKING NEURONS IS SET TO {}".format(args.mask_neurons))
+
         #calc focal weighting:
         smushed_labels = None
-        for i in range(len(train_dataset)):
+        if args.mask_neurons: nm = None
+        for i in tqdm(range(len(train_dataset))):
             if smushed_labels is None: smushed_labels = train_dataset[i][1].to(torch.int64)
             else: smushed_labels = torch.concat([smushed_labels, train_dataset[i][1].to(torch.int64)])
-        class_counts = torch.bincount(smushed_labels.flatten())
+            if args.mask_neurons and nm is None: nm = torch.Tensor(train_dataset[i][2])
+            elif args.mask_neurons: nm = torch.concat([nm,  torch.Tensor(train_dataset[i][2])])
+        torch.save(smushed_labels, "smushed.pt")
+        torch.save(nm, "nm.pt")
+        print(nm.dtype)
+        smushed_labels = smushed_labels.flatten() if not args.mask_neurons else smushed_labels.flatten()[nm.flatten()]
+        class_counts = torch.bincount(smushed_labels)
         total_samples = len(train_dataset) * 512 * 512
         w1, w2 = 1/(class_counts[0]/total_samples), 1/(class_counts[1]/total_samples)
         cls_weights = torch.Tensor([w1, w2/2])
