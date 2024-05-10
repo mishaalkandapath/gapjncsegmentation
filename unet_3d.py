@@ -19,7 +19,7 @@ if __name__ == "__main__":
     
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
-    parser.add_argument("--data_dir", type=str, default="tiniest_data", help="Directory containing the tiniest dataset")
+    parser.add_argument("--data_dir", type=str, default="data", help="Directory containing the tiniest dataset")
     parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train for")
@@ -29,7 +29,9 @@ if __name__ == "__main__":
     parser.add_argument("--w1", type=float, default=0.2, help="Weight for class 0 in Focal Loss")
     parser.add_argument("--w2", type=float, default=0.2, help="Weight for class 1 in Focal Loss")
     parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
+    parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
     args = parser.parse_args()
+    
     
     data_dir = args.data_dir
     model_name = args.model_name
@@ -90,7 +92,14 @@ if __name__ == "__main__":
         "learning_rate": lr,
         "epochs": epochs,
         "alpha": alpha,
-        }
+        "model_name": model_name,
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "w1": w1,
+        "w2": w2,
+        "gamma": gamma
+        },
+        dir=args.wandb_log_path
     )      
     table = wandb.Table(columns=['Epoch', 'Image'])
 
@@ -103,7 +112,8 @@ if __name__ == "__main__":
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             inputs = inputs.unsqueeze(1) # add channel dimension
-            print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
+            if (i == 0):
+                print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
             optimizer.zero_grad() # zero gradients (otherwise they accumulate)
             pred = model(inputs)
             loss = criterion(pred, labels)
