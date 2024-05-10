@@ -7,3 +7,9 @@ gapvenv/
 small_data_five.tgz
 small_data/
 small_data_3d/
+data/small_data_256/
+data/small_data_2d/
+small_data_256.tgz
+data/tiniest_data_64.tgz
+data/tiniest_data_64/
+models/
