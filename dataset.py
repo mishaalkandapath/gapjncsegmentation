@@ -33,7 +33,11 @@ class SliceDataset(torch.utils.data.Dataset):
         mask = np.load(self.mask_paths[i]) # each pixel is 0 or 1, shape (depth, height, width)
         
         # normalize image to have mean 0 and std 1
-        image = (image - image.mean()) / image.std() 
+        try:
+            image = (image - image.mean()) / image.std() 
+        except:
+            print(f"Error in image: {self.image_paths[i]}")
+            print(f"Image shape: {image.shape}")
         
         # convert to tensor
         image = torch.tensor(image).float()
