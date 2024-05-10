@@ -13,10 +13,10 @@ class FocalLoss(nn.Module):
         self.device = device
         self.alpha = alpha.to(device)
     
-    def forward(self, inputs, targets):
-        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-        pt = torch.exp(-bce_loss)
-        targets = targets.to(torch.int64)
-        loss = self.alpha[targets.view(-1, 512*512)].view(-1, 512, 512) * pt ** self.gamma * bce_loss
+    def forward(self, inputs, targets, width=512, height=512):
+        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none") # (batch_size, class, depth, height, width)
+        pt = torch.exp(-bce_loss) # take the exp of the negative bce loss to get the probability of the correct class
+        targets = targets.to(torch.int64) # convert to int64 for indexing
+        loss = self.alpha[targets] * (1-pt)**self.gamma * bce_loss
         return loss.mean() 
 
