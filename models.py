@@ -104,22 +104,37 @@ class UpBlock(nn.Module):
     """Up Convolution (Upsampling followed by Double Convolution)"""
     def __init__(self, in_channels, out_channels, add_3d = False):
         super(UpBlock, self).__init__()
-        self.up_sample = nn.ConvTranspose3d(in_channels-out_channels, in_channels-out_channels, kernel_size=(2,2,2), stride=(2,2,2))
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.add_3d = add_3d
+        self.up_sample = nn.ConvTranspose3d(in_channels, in_channels//2, kernel_size=(1,2,2), stride=(1,2,2)) # doubles number of channels
+        # same number of channels
         if add_3d:
-            self.conv3d = nn.Conv3d(in_channels, out_channels//2, kernel_size=(3,3,3), padding=1)
+            self.conv3d = nn.Conv3d(in_channels, out_channels//2, kernel_size=(3,3,3), padding=(1,1,1))
             self.double_conv = DoubleConv(out_channels//2, out_channels)
         else:
             self.double_conv = DoubleConv(in_channels, out_channels)
 
     def forward(self, down_input, skip_input):
-        x = self.up_sample(down_input)
-        x = torch.cat([x, skip_input], dim=1)
-        return self.double_conv(x)
+        """ 
+        Args:
+            down_input (torch.Tensor): 5D input tensor of shape (batch_size, in_channels, depth, height, width)
+            skip_input (torch.Tensor): 5D input tensor from skip connection (batch_size, in_channels//2, depth, height*2, width*2)
+        """
+        x = self.up_sample(down_input) # -> (batch_size, in_channels//2, depth, height*2, width*2) # turn down_input into same shape as skip_input
+        x = torch.cat([x, skip_input], dim=1) # -> (batch_size, in_channels, depth, height*2, width*2) # concatenate along channels
+        if self.add_3d:
+            x = self.conv3d(x)
+        x = self.double_conv(x)
+        return x
+        
     
 class PyramidBlock(nn.Module):
     """ 3D Spatial Pyramid Pooling Block (3x3x3 conv + BN + ReLU)"""
     def __init__(self, num_convs, num_channels):
         super(PyramidBlock, self).__init__()
+        self.num_convs = num_convs
+        self.num_channels = num_channels
     
     def forward(self, x):
         for i in range(self.num_convs):
@@ -144,9 +159,9 @@ class UNet(nn.Module):
         self.double_conv = DoubleConv(256, 512)
         
         # Upsampling Path
-        self.up_conv3 = UpBlock(256 + 512, 256) # 256 + 512 input channels --> 256 output channels
-        self.up_conv2 = UpBlock(128 + 256, 128, add_3d=True)
-        self.up_conv1 = UpBlock(128 + 64, 64, add_3d=True)
+        self.up_conv3 = UpBlock(512, 256)
+        self.up_conv2 = UpBlock(256, 128, add_3d=True)
+        self.up_conv1 = UpBlock(128, 64, add_3d=True)
         
         # 1x1x1 conv + ReLU
         self.one_conv1 = SingleConv1D(64, out_classes)
@@ -156,14 +171,16 @@ class UNet(nn.Module):
         # -- side 1
         self.single_three_conv1 = SingleConv3D(64+out_classes, 64)
         self.pyramid1 = PyramidBlock(num_convs=2, num_channels=64)
+        self.res_conn = nn.Conv3d(64, 32, kernel_size=(1,1,1))
         
         # -- side 2
-        self.single_three_conv2 = SingleConv3D(out_classes, 128)
+        self.single_three_conv2 = SingleConv3D(64+out_classes, 128)
         self.pyramid2 = PyramidBlock(num_convs=7, num_channels=128)
-        self.transpose = nn.ConvTranspose3d(128, 64, kernel_size=(2,2,2), stride=(2,2,2))
+        self.single_conv2 = SingleConv3D(128, 64)
+        self.transpose = nn.ConvTranspose3d(64, 32, kernel_size=(1,2,2), stride=(1,2,2))
         
         # Final Convolution
-        self.single_conv2 = SingleConv1D(128, out_classes)
+        self.single_conv3 = SingleConv1D(64, out_classes)
         self.softmax = nn.Softmax(dim=1)
 
 
@@ -182,23 +199,26 @@ class UNet(nn.Module):
         x = self.up_conv2(x, skip2_out) # x: (1, 128, 5, 150, 150)
         out1 = self.up_conv1(x, skip1_out) # x: (1, 64, 5, 300, 300)
         
-        x = self.one_conv1(out1) # skip_out: (5, 2, 300, 300)
-        x = self.softmax(x)
+        x = self.one_conv1(out1)
+        x = self.softmax(x) # x: (1, 2, 5, 300, 300)
         x = torch.cat([x, out1], dim=1) # x: (5, 66, 300, 300)
         
         # 3D Spatial Pyramid
-        x1 = self.single_three_conv1(x)
-        x1 = self.pyramid1(x1)
+        # - side 1
+        x1 = self.single_three_conv1(x) # x: (1, 66, 5, 300, 300)
+        x1 = self.pyramid1(x1) # x: (1, 64, 5, 300, 300)
+        x1 = self.res_conn(x1)
         
         x2 = nn.MaxPool3d((1,2,2), stride=(1,2,2))(x) # x: (5, 66, 150, 150)
         x2 = self.single_three_conv2(x2)
         x2 = self.pyramid2(x2)
-        x2 = self.transpose1(x2)
+        x2 = self.single_conv2(x2)
+        x2 = self.transpose(x2)
         
         # Final Convolution
-        x = torch.cat([x1, x2], dim=1) # x: (5, 64, 150, 150)
-        x = self.single_conv1(x)
-        x = self.softmax(x) # x: (5, 2, 150, 150)
+        final = torch.cat([x1, x2], dim=1) # x: (5, 64, 150, 150)
+        final = self.single_conv3(final)
+        final = self.softmax(final) # x: (5, 2, 150, 150)
         
-        return x
+        return final
 

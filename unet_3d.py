@@ -22,18 +22,16 @@ if __name__ == "__main__":
 
 
     # Define directories
-    x_train_dir="small_data_3d/original/train"
-    y_train_dir="small_data_3d/ground_truth/train"
-
-    x_valid_dir="small_data_3d/original/valid"
-    y_valid_dir="small_data_3d/ground_truth/valid"
-
-    x_test_dir="small_data_3d/original/test"
-    y_test_dir="small_data_3d/ground_truth/test"
+    data_dir = "tiniest_data"
+    x_train_dir = os.path.join(data_dir, "original", "train")
+    y_train_dir = os.path.join(data_dir, "ground_truth", "train")
+    x_valid_dir = os.path.join(data_dir, "original", "valid")
+    y_valid_dir = os.path.join(data_dir, "ground_truth", "valid")
+    x_test_dir = os.path.join(data_dir, "original", "test")
+    y_test_dir = os.path.join(data_dir, "ground_truth", "test")
 
     model_folder = "models"
     sample_preds_folder = "results"
-
 
     depth, height, width = np.load(os.path.join(x_train_dir, os.listdir(x_train_dir)[0])).shape
 
@@ -43,8 +41,8 @@ if __name__ == "__main__":
     }
 
     # Get train and val dataset instances
-    train_dataset = SliceDataset(x_train_dir, y_train_dir, image_dim = (width, height), augmentation=None)
-    valid_dataset = SliceDataset(x_valid_dir, y_valid_dir, image_dim = (width, height))
+    train_dataset = SliceDataset(x_train_dir, y_train_dir, image_dim = (depth, width, height), augmentation=None)
+    valid_dataset = SliceDataset(x_valid_dir, y_valid_dir, image_dim = (depth, width, height))
     train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=8) # change num_workers as needed
     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
     print("Data loaders created.")
@@ -91,6 +89,9 @@ if __name__ == "__main__":
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)))
             inputs, labels = data
+            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            inputs = inputs.unsqueeze(1) # add channel dimension
+            print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
             optimizer.zero_grad() # zero gradients (otherwise they accumulate)
             pred = model(inputs)
             loss = criterion(pred, labels)
