@@ -57,7 +57,7 @@ def train(model, train_loader, valid_loader, criterion, optimizer, epochs, model
             label_img = valid_labels[0][1].cpu().numpy()
             pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
             # -- plot as 3 rows: input, ground truth, prediction
-            fig, ax = plt.subplots(3, depth, figsize=(15, 5),fignum=1)
+            fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
             for j in range(depth):
                 ax[0, j].imshow(input_img[j], cmap="gray")
                 ax[1, j].imshow(label_img[j], cmap="gray")
