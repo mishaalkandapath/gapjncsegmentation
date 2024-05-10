@@ -10,10 +10,10 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-EPOCHS=20
+EPOCHS=5
 BATCH_SIZE=8
 LR=0.001
-DATA_DIR=/home/hluo/projects/def-mzhen/hluo/gapjncsegmentation/data/tiniest_data_64
+DATA_DIR=/home/hluo/scratch/tiniest_data_64
 MODEL_NAME="test1"
 python /home/hluo/projects/def-mzhen/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME
 
