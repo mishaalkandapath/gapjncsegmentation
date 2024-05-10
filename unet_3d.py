@@ -77,8 +77,7 @@ if __name__ == "__main__":
     load_model_path = args.load_model_path
     if load_model_path is not None:
         model, optimizer, start_epoch, loss = load_checkpoint(model, optimizer, load_model_path)
-    model = model.to(DEVICE)
-    model = model.train()
+    model.to(DEVICE)
     print(f"Model is on device {next(model.parameters()).device}")
 
     w1, w2 = args.w1, args.w2
