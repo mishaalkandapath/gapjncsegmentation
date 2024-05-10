@@ -77,7 +77,8 @@ if __name__ == "__main__":
     load_model_path = args.load_model_path
     if load_model_path is not None:
         model, optimizer, start_epoch, loss = load_checkpoint(model, optimizer, load_model_path)
-    model.train()
+    model = model.to(DEVICE)
+    model = model.train()
     print("Model initialized.")
 
     w1, w2 = args.w1, args.w2
