@@ -135,14 +135,21 @@ class PyramidBlock(nn.Module):
         super(PyramidBlock, self).__init__()
         self.num_convs = num_convs
         self.num_channels = num_channels
+        self.pyramid = nn.Sequential()
+        for i in range(num_convs):
+            self.pyramid.add_module(f"conv{i}", nn.Conv3d(num_channels, num_channels, kernel_size=(3,3,3), padding=1))
+            self.pyramid.add_module(f"bn{i}", nn.BatchNorm3d(num_channels))
+            self.pyramid.add_module(f"relu{i}", nn.ReLU(inplace=True))
+            
     
     def forward(self, x):
-        for i in range(self.num_convs):
-            x = nn.Conv3d(self.num_channels, self.num_channels, kernel_size=(3,3,3), padding=1)(x)
-            x = nn.BatchNorm3d(self.num_channels)(x)
-            x = nn.ReLU(inplace=True)(x)
+        x = self.pyramid(x)
+        # for i in range(self.num_convs):
+        #     x = nn.Conv3d(self.num_channels, self.num_channels, kernel_size=(3,3,3), padding=1)(x)
+        #     x = nn.BatchNorm3d(self.num_channels)(x)
+        #     x = nn.ReLU(inplace=True)(x)
         return x
-
+    
 # model architecture
 class UNet(nn.Module):
     """UNet Architecture"""
