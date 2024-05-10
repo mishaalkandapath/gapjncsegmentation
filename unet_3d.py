@@ -131,9 +131,9 @@ if __name__ == "__main__":
             
             # Save sample predictions as image to wandb
             # -- remove batch dim and take argmax to reverse one hot encoding -> (D, H, W)
-            input_img = valid_inputs.squeeze(0).numpy()
-            label_img = valid_labels[0][1].numpy()
-            pred_img = np.argmax(valid_pred[0].detach(), 0).numpy()
+            input_img = valid_inputs.squeeze(0).cpu().numpy()
+            label_img = valid_labels[0][1].cpu().numpy()
+            pred_img = np.argmax(valid_pred[0].detach(), 0).cpu().numpy()
             # -- plot as 3 rows: input, ground truth, prediction
             fig, ax = plt.subplots(3, depth, figsize=(15, 5))
             for i in range(depth):
