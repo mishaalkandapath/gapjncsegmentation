@@ -79,7 +79,7 @@ if __name__ == "__main__":
         model, optimizer, start_epoch, loss = load_checkpoint(model, optimizer, load_model_path)
     model = model.to(DEVICE)
     model = model.train()
-    print("Model initialized.")
+    print(f"Model is on device {next(model.parameters()).device}")
 
     w1, w2 = args.w1, args.w2
     alpha = torch.Tensor([w1, w2/9])
@@ -115,6 +115,7 @@ if __name__ == "__main__":
             inputs = inputs.unsqueeze(1) # add channel dimension
             if (i == 0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
+                print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
             optimizer.zero_grad() # zero gradients (otherwise they accumulate)
             pred = model(inputs)
             loss = criterion(pred, labels)
