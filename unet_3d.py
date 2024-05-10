@@ -135,11 +135,11 @@ if __name__ == "__main__":
             label_img = valid_labels[0][1].cpu().numpy()
             pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
             # -- plot as 3 rows: input, ground truth, prediction
-            fig, ax = plt.subplots(3, depth, figsize=(15, 5))
-            for i in range(depth):
-                ax[0, i].imshow(input_img[i], cmap="gray")
-                ax[1, i].imshow(label_img[i], cmap="gray")
-                ax[2, i].imshow(pred_img[i], cmap="gray")
+            fig, ax = plt.subplots(3, depth, figsize=(15, 5),fignum=1)
+            for j in range(depth):
+                ax[0, j].imshow(input_img[j], cmap="gray")
+                ax[1, j].imshow(label_img[j], cmap="gray")
+                ax[2, j].imshow(pred_img[j], cmap="gray")
             ax[0, 0].set_ylabel("Input")
             ax[1, 0].set_ylabel("Ground Truth")
             ax[2, 0].set_ylabel("Prediction")
@@ -154,6 +154,7 @@ if __name__ == "__main__":
             #     )
             table.add_data(f"Epoch {epoch} Step {i}", mask_img)
             wandb.log({"valid_loss": valid_loss})
+            plt.close(fig)
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
