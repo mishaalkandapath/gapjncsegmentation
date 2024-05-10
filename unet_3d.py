@@ -125,6 +125,7 @@ if __name__ == "__main__":
 
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
+            valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
             valid_pred = model(valid_inputs) # (N, C=2, D, H, W)
             valid_loss = criterion(valid_pred, valid_labels)
             
