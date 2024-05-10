@@ -155,6 +155,7 @@ if __name__ == "__main__":
             table.add_data(f"Epoch {epoch} Step {i}", mask_img)
             wandb.log({"valid_loss": valid_loss})
             plt.close(fig)
+            plt.close("all")
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
