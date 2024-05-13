@@ -32,18 +32,11 @@ class SliceDataset(torch.utils.data.Dataset):
         # read images and masks (3D grayscale images)
         image = np.load(self.image_paths[i]) # each pixel is 0-255, shape (depth, height, width)
         mask = np.load(self.mask_paths[i]) # each pixel is 0 or 1, shape (depth, height, width)
+        image_tensor = torch.tensor(image).unsqueeze(0).float()
+        mask_tensor = torch.tensor(mask).unsqueeze(0).float()
         
         # normalize image to have mean 0 and std 1
-        try:
-            image = (image - image.mean()) / image.std() 
-            # image = tio.transforms.ZNormalization()(image)
-        except:
-            print(f"Error in image: {self.image_paths[i]}")
-            print(f"Image shape: {image.shape}")
-            
-        # convert to tensor
-        image = torch.tensor(image).float()
-        mask = torch.tensor(mask).float()
+        image_tensor = tio.transforms.ZNormalization()(image_tensor)
 
                 
         # apply augmentations, if any

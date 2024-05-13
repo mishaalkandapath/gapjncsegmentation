@@ -18,7 +18,7 @@ from models import *
 from dataset import *
 from loss import *
 
-def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, model_folder: str, model_name: str):
+def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, model_folder: str, model_name: str, results_dir:str):
     """ Train the model for a given number of epochs
     
     Args:
@@ -30,6 +30,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
         epochs (int): number of epochs to train for
         model_folder (str): directory to save model checkpoints
         model_name (str): name of the model to save
+        results_dir (str): directory to save results
     """
     depth, height, width = 5, 256, 256
     for epoch in range(epochs):
@@ -83,9 +84,12 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
                 ax[0, 0].set_ylabel("Input")
                 ax[1, 0].set_ylabel("Ground Truth")
                 ax[2, 0].set_ylabel("Prediction")
+                # save figure to wandb
                 mask_img = wandb.Image(fig)          
                 table.add_data(f"Epoch {epoch} Step {i}", mask_img)
                 wandb.log({"Table" : table})
+                # save figure to local
+                fig.savefig(os.path.join(results_dir, f"epoch_{epoch}_step_{i}.png"))
             wandb.log({"valid_loss": valid_loss})
             plt.close(fig)
             plt.close("all")
@@ -110,6 +114,7 @@ if __name__ == "__main__":
       
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
+    parser.add_argument("--results_dir", type=str, default="results", help="Directory to save results")
     parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
     parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
     parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
@@ -125,6 +130,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
      # Define directories
+    results_dir = args.results_dir
+    if not os.path.exists(results_dir): print(f"{results_dir} is not a valid results directory")
     model_name = args.model_name
     # make subdirectory for model (save all checkpoints for model here)
     model_folder = os.path.join(args.model_dir, model_name)
