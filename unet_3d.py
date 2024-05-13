@@ -54,11 +54,12 @@ def train(model, train_loader, valid_loader, criterion, optimizer, epochs, model
             
             # Save sample predictions as image to wandb
             # -- remove batch dim and take argmax to reverse one hot encoding -> (D, H, W)
-            input_img = valid_inputs.squeeze(0).cpu().numpy()
+            input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
             label_img = valid_labels[0][1].cpu().numpy()
             pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
             # -- plot as 3 rows: input, ground truth, prediction
             fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
+            print(f"Input shape: {input_img.shape}, Label shape: {label_img.shape}, Pred shape: {pred_img.shape}")
             for j in range(depth):
                 ax[0, j].imshow(input_img[j], cmap="gray")
                 ax[1, j].imshow(label_img[j], cmap="gray")
@@ -81,7 +82,7 @@ def train(model, train_loader, valid_loader, criterion, optimizer, epochs, model
 if __name__ == "__main__":    
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
-    parser.add_argument("--data_dir", type=str, default="data", help="Directory containing the tiniest dataset")
+    parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
     parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train for")
