@@ -85,7 +85,7 @@ def get_3d_slice(z,y,x, img_files, mask_files, img_pattern, mask_pattern, depth=
             mask_3d[i+depth] = mask
     return img_3d, mask_3d
 
-def checkpoint(model, optimizer, epoch, loss, path):
+def checkpoint(model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights, path):
     """ Save model checkpoint
     
     Args:
@@ -93,6 +93,9 @@ def checkpoint(model, optimizer, epoch, loss, path):
         optimizer (torch.optim): optimizer to save
         epoch (int): epoch number
         loss (float): loss value
+        batch_size (int): batch size
+        lr (float): learning rate
+        focal_loss_weights (Tuple[float, float]): weights for focal loss
         path (str): path to save the checkpoint
     """
     torch.save({
@@ -100,6 +103,9 @@ def checkpoint(model, optimizer, epoch, loss, path):
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
+        'batch_size': batch_size,
+        'lr': lr,
+        'focal_loss_weights': focal_loss_weights
     }, path)
 
 def load_checkpoint(model, optimizer, path):
@@ -115,14 +121,21 @@ def load_checkpoint(model, optimizer, path):
         optimizer (torch.optim): loaded optimizer
         epoch (int): epoch number
         loss (float): loss value
+        batch_size (int): batch size
+        lr (float): learning rate
+        focal loss weights (Tuple[float, float]): weights for focal loss
     """
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
+    batch_size = checkpoint['batch_size']
+    lr = checkpoint['lr']
+    focal_loss_weights = checkpoint['focal_loss_weights']
     
-    return model, optimizer, epoch, loss
+    
+    return model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights
 
 def crop_image(image, target_image_dims):
     """ Crop the image to the target image dimensions
