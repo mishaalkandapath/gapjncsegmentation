@@ -88,7 +88,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
-        checkpoint(model, optimizer, epoch, loss, os.path.join(model_folder, f"{model_name}_epoch{epoch}.pk1"))
+        checkpoint(model, optimizer, epoch, loss, batch_size, lr, (w1, w2), os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
     wandb.log({"Table" : table})
     wandb.finish()
 
@@ -107,6 +107,7 @@ if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
     parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
+    parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
     parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train for")
@@ -121,7 +122,8 @@ if __name__ == "__main__":
     
      # Define directories
     model_name = args.model_name
-    model_folder = os.path.join("models", model_name)
+    # make subdirectory for model (save all checkpoints for model here)
+    model_folder = os.path.join(args.model_dir, model_name)
     data_dir = args.data_dir
     if not os.path.exists(model_folder): os.makedirs(model_folder)
     x_train_dir = os.path.join(data_dir, "original", "train")
@@ -160,7 +162,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     load_model_path = args.load_model_path
     if load_model_path is not None:
-        model, optimizer, start_epoch, loss = load_checkpoint(model, optimizer, load_model_path)
+        model, optimizer, start_epoch, loss, batch_size, lr, focal_loss_weights = load_checkpoint(model, optimizer, load_model_path)
     model = model.to(DEVICE)
     print(f"Model is on device {next(model.parameters()).device}")
 
