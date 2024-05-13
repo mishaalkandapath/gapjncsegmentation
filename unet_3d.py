@@ -66,7 +66,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             
             # Save sample predictions as image to wandb every 10 steps
             # -- remove batch dim and take argmax to reverse one hot encoding -> (D, H, W)
-            if i % 50 == 0:
+            if i % 10 == 0:
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
                 pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
@@ -148,7 +148,7 @@ if __name__ == "__main__":
     valid_dataset = SliceDataset(x_valid_dir, y_valid_dir, image_dim = (depth, width, height))
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
-    print("Data loaders created. Train dataset size: {len(train_dataset)}, Validation dataset size: {len(valid_dataset)}")
+    print(f"Data loaders created. Train dataset size: {len(train_dataset)}, Validation dataset size: {len(valid_dataset)}")
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
 
     # Check if GPU is available
