@@ -1,6 +1,8 @@
 # import packages
 import os
 import cv2
+import signal
+import sys
 import numpy as np;
 import torch 
 import torchvision.transforms as transforms
@@ -62,22 +64,24 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
             
-            # Save sample predictions as image to wandb
+            # Save sample predictions as image to wandb every 10 steps
             # -- remove batch dim and take argmax to reverse one hot encoding -> (D, H, W)
-            input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
-            label_img = valid_labels[0][1].cpu().numpy()
-            pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
-            # -- plot as 3 rows: input, ground truth, prediction
-            fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
-            for j in range(depth):
-                ax[0, j].imshow(input_img[j], cmap="gray")
-                ax[1, j].imshow(label_img[j], cmap="gray")
-                ax[2, j].imshow(pred_img[j], cmap="gray")
-            ax[0, 0].set_ylabel("Input")
-            ax[1, 0].set_ylabel("Ground Truth")
-            ax[2, 0].set_ylabel("Prediction")
-            mask_img = wandb.Image(fig)          
-            table.add_data(f"Epoch {epoch} Step {i}", mask_img)
+            if i % 50 == 0:
+                input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
+                label_img = valid_labels[0][1].cpu().numpy()
+                pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
+                # -- plot as 3 rows: input, ground truth, prediction
+                fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
+                for j in range(depth):
+                    ax[0, j].imshow(input_img[j], cmap="gray")
+                    ax[1, j].imshow(label_img[j], cmap="gray")
+                    ax[2, j].imshow(pred_img[j], cmap="gray")
+                ax[0, 0].set_ylabel("Input")
+                ax[1, 0].set_ylabel("Ground Truth")
+                ax[2, 0].set_ylabel("Prediction")
+                mask_img = wandb.Image(fig)          
+                table.add_data(f"Epoch {epoch} Step {i}", mask_img)
+                wandb.log({"Table" : table})
             wandb.log({"valid_loss": valid_loss})
             plt.close(fig)
             plt.close("all")
@@ -88,7 +92,18 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
     wandb.log({"Table" : table})
     wandb.finish()
 
-if __name__ == "__main__":    
+
+# signal handler to run wandb.finish() on SIGINT
+def signal_handler(sig_num: int, frame: object):
+    print("Received SIGINT, exiting... (saving wandb logs)")
+    wandb.finish()
+    sys.exit(0)
+
+if __name__ == "__main__":  
+    
+    # Register signal handler
+    signal.signal(signal.SIGINT, signal_handler)
+      
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
     parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
