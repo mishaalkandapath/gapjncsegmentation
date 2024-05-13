@@ -123,7 +123,6 @@ if __name__ == "__main__":
      # Define directories
     model_name = args.model_name
     # make subdirectory for model (save all checkpoints for model here)
-    if not os.path.exists(args.model_dir): os.makedirs(args.model_dir)
     model_folder = os.path.join(args.model_dir, model_name)
     data_dir = args.data_dir
     if not os.path.exists(model_folder): os.makedirs(model_folder)
