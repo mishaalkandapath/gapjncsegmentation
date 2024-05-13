@@ -19,4 +19,4 @@ MODEL_DIR=/home/hluo/scratch/models
 LOAD_MODEL_PATH="model_512_3"
 MODEL_NAME="model_512_3_two"
 RESULTS_DIR=/home/hluo/scratch/results
-python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --results_dir $RESULTS_DIR --load_modeel_path $LOAD_MODEL_PATH
+python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --results_dir $RESULTS_DIR --load_model_path $LOAD_MODEL_PATH
