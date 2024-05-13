@@ -109,6 +109,12 @@ def load_checkpoint(model, optimizer, path):
         model (nn.Module): model to load checkpoint
         optimizer (torch.optim): optimizer to load checkpoint
         path (str): path to load the checkpoint
+        
+    Returns:
+        model (nn.Module): loaded model
+        optimizer (torch.optim): loaded optimizer
+        epoch (int): epoch number
+        loss (float): loss value
     """
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['model_state_dict'])

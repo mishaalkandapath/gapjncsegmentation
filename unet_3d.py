@@ -15,7 +15,7 @@ from models import *
 from dataset import *
 from loss import *
 
-def train(model, train_loader, valid_loader, criterion, optimizer, epochs, model_folder, model_name):
+def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, model_folder: str, model_name: str):
     """ Train the model for a given number of epochs
     
     Args:
