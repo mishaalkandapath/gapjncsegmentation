@@ -11,7 +11,7 @@ module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
 EPOCHS=20
-BATCH_SIZE=8
+BATCH_SIZE=1
 NUM_WORKERS=4
 LR=0.001
 DATA_DIR=/home/hluo/scratch/small_data_3d_3
