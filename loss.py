@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
-from tqdm import tqdm
 
 class FocalLoss(nn.Module):
     def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
@@ -31,9 +30,10 @@ def calculate_alpha(train_dataset):
     train_dataset (torch.utils.data.Dataset): the training dataset
     """
     smushed_labels = None
-    for i in tqdm(range(len(train_dataset))):
+    for i in range(len(train_dataset)):
         if smushed_labels is None: smushed_labels = train_dataset[i][1].to(torch.int64)
         else: smushed_labels = torch.concat([smushed_labels, train_dataset[i][1].to(torch.int64)])
+        print(f"Processed {i+1}/{len(train_dataset)} images", end="\r")
     class_counts = torch.bincount(smushed_labels.flatten())
     total_samples = len(train_dataset) * 512 * 512
     w1, w2 = 1/(class_counts[0]/total_samples), 1/(class_counts[1]/total_samples)
