@@ -204,5 +204,5 @@ if __name__ == "__main__":
     # Train model
     print("Starting training...")
     start = time.time()
-    train(model, train_loader, valid_loader, criterion, optimizer, epochs, model_folder, model_name)
+    train(model, train_loader, valid_loader, criterion, optimizer, epochs, model_folder, model_name, results_dir)
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
