@@ -28,6 +28,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
         model_folder (str): directory to save model checkpoints
         model_name (str): name of the model to save
     """
+    depth, height, width = 5, 256, 256
     for epoch in range(epochs):
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)))
@@ -37,6 +38,11 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             if (i == 0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
+                _, _, depth, height, width = inputs.shape
+            
+            if inputs.shape[2:] != (depth, height, width):
+                print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
+                continue
             optimizer.zero_grad() # zero gradients (otherwise they accumulate)
             pred = model(inputs)
             loss = criterion(pred, labels)
@@ -48,7 +54,11 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
-            valid_inputs = valid_inputs.unsqueeze(1)
+            valid_inputs = valid_inputs.unsqueeze(1) # add channel dimension (num_batches, CHANNELS, depth, height, width)
+            if valid_inputs.shape[2:] != (depth, height, width):
+                print(f"Skipping batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
+                continue
+            
             valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
             
@@ -59,7 +69,6 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
             # -- plot as 3 rows: input, ground truth, prediction
             fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
-            print(f"Input shape: {input_img.shape}, Label shape: {label_img.shape}, Pred shape: {pred_img.shape}")
             for j in range(depth):
                 ax[0, j].imshow(input_img[j], cmap="gray")
                 ax[1, j].imshow(label_img[j], cmap="gray")
