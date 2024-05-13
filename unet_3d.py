@@ -129,8 +129,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
      # Define directories
-    results_dir = args.results_dir
-    if not os.path.exists(results_dir): print(f"{results_dir} is not a valid results directory")
+    results_dir = os.path.join(args.results_dir, args.model_name)
+    if not os.path.exists(results_dir): os.makedirs(results_dir)
     model_name = args.model_name
     # make subdirectory for model (save all checkpoints for model here)
     model_folder = os.path.join(args.model_dir, model_name)
