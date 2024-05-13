@@ -3,6 +3,7 @@ import cv2
 import numpy as np;
 import torch 
 import torchvision.transforms as transforms
+import torchio as tio
 
 class SliceDataset(torch.utils.data.Dataset):
     """ Dataset for 2D slices of 3D EM images
@@ -35,14 +36,16 @@ class SliceDataset(torch.utils.data.Dataset):
         # normalize image to have mean 0 and std 1
         try:
             image = (image - image.mean()) / image.std() 
+            # image = tio.transforms.ZNormalization()(image)
         except:
             print(f"Error in image: {self.image_paths[i]}")
             print(f"Image shape: {image.shape}")
-        
+            
         # convert to tensor
         image = torch.tensor(image).float()
         mask = torch.tensor(mask).float()
-        
+
+                
         # apply augmentations, if any
         if self.augmentation:
             image = self.augmentation(image)

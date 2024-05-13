@@ -10,6 +10,7 @@ import wandb
 import time
 import argparse
 import matplotlib.pyplot as plt
+import torchio as tio
 
 from torch.utils.data import DataLoader
 from utilities import *
@@ -40,7 +41,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             if (i == 0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
-                _, _, depth, height, width = inputs.shape
+                _, _, depth, height, width = inputs.shape # initialize depth, height, width
             
             if inputs.shape[2:] != (depth, height, width):
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
@@ -63,13 +64,16 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             
             valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
+            print(f"Validation Step: {i}, input size: {valid_inputs.shape}, Loss: {valid_loss}")
             
             # Save sample predictions as image to wandb every 10 steps
             # -- remove batch dim and take argmax to reverse one hot encoding -> (D, H, W)
-            if i % 10 == 0:
+            if i % 5 == 0:
+                print(f"Saving predictions for epoch {epoch} step {i}")
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
                 pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
+                
                 # -- plot as 3 rows: input, ground truth, prediction
                 fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
                 for j in range(depth):
