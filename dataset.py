@@ -3,6 +3,7 @@ import cv2
 import numpy as np;
 import torch 
 import torchvision.transforms as transforms
+import torchio as tio
 
 class SliceDataset(torch.utils.data.Dataset):
     """ Dataset for 2D slices of 3D EM images
@@ -31,20 +32,29 @@ class SliceDataset(torch.utils.data.Dataset):
         # read images and masks (3D grayscale images)
         image = np.load(self.image_paths[i]) # each pixel is 0-255, shape (depth, height, width)
         mask = np.load(self.mask_paths[i]) # each pixel is 0 or 1, shape (depth, height, width)
-        image_tensor = torch.tensor(image).unsqueeze(0).float()
-        mask_tensor = torch.tensor(mask).unsqueeze(0).float()
         
         # normalize image to have mean 0 and std 1
-        image_tensor = (image_tensor - image_tensor.mean()) / image_tensor.std()
+        try:
+            image = (image - image.mean()) / image.std() 
+        except:
+            print(f"Error in image: {self.image_paths[i]}")
+            print(f"Image shape: {image.shape}")
+            
+        
+        # convert to tensor
+        image = torch.tensor(image).float()
+        mask = torch.tensor(mask).float()
 
+                
         # apply augmentations, if any
         if self.augmentation:
-            image_tensor, mask_tensor = self.augmentation(image_tensor, mask_tensor)
+            image = self.augmentation(image)
+            mask = self.augmentation(mask)
             
         # one-hot encode the mask (depth, height, width) --> (depth, height, width, num_classes=2)
-        one_hot_mask_tensor = torch.nn.functional.one_hot(mask_tensor.long(), num_classes=2) # 0: depth, 1: height, 2: width, 3: num_classes
-        one_hot_mask_tensor = one_hot_mask_tensor.permute(3, 0, 1, 2).float() # (num_classes, depth, height, width)
-        return image_tensor, one_hot_mask_tensor
+        one_hot_mask = torch.nn.functional.one_hot(mask.long(), num_classes=2) # 0: depth, 1: height, 2: width, 3: num_classes
+        one_hot_mask = one_hot_mask.permute(3, 0, 1, 2).float() # (num_classes, depth, height, width)
+        return image, one_hot_mask
         
     def __len__(self):
         return len(self.image_paths)
