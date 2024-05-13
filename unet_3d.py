@@ -1,6 +1,8 @@
 # import packages
 import os
 import cv2
+import signal
+import sys
 import numpy as np;
 import torch 
 import torchvision.transforms as transforms
@@ -62,36 +64,50 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
             
-            # Save sample predictions as image to wandb
+            # Save sample predictions as image to wandb every 10 steps
             # -- remove batch dim and take argmax to reverse one hot encoding -> (D, H, W)
-            input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
-            label_img = valid_labels[0][1].cpu().numpy()
-            pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
-            # -- plot as 3 rows: input, ground truth, prediction
-            fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
-            for j in range(depth):
-                ax[0, j].imshow(input_img[j], cmap="gray")
-                ax[1, j].imshow(label_img[j], cmap="gray")
-                ax[2, j].imshow(pred_img[j], cmap="gray")
-            ax[0, 0].set_ylabel("Input")
-            ax[1, 0].set_ylabel("Ground Truth")
-            ax[2, 0].set_ylabel("Prediction")
-            mask_img = wandb.Image(fig)          
-            table.add_data(f"Epoch {epoch} Step {i}", mask_img)
+            if i % 50 == 0:
+                input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
+                label_img = valid_labels[0][1].cpu().numpy()
+                pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
+                # -- plot as 3 rows: input, ground truth, prediction
+                fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
+                for j in range(depth):
+                    ax[0, j].imshow(input_img[j], cmap="gray")
+                    ax[1, j].imshow(label_img[j], cmap="gray")
+                    ax[2, j].imshow(pred_img[j], cmap="gray")
+                ax[0, 0].set_ylabel("Input")
+                ax[1, 0].set_ylabel("Ground Truth")
+                ax[2, 0].set_ylabel("Prediction")
+                mask_img = wandb.Image(fig)          
+                table.add_data(f"Epoch {epoch} Step {i}", mask_img)
+                wandb.log({"Table" : table})
             wandb.log({"valid_loss": valid_loss})
             plt.close(fig)
             plt.close("all")
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
-        checkpoint(model, optimizer, epoch, loss, os.path.join(model_folder, f"{model_name}_epoch{epoch}.pk1"))
+        checkpoint(model, optimizer, epoch, loss, batch_size, lr, (w1, w2), os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
     wandb.log({"Table" : table})
     wandb.finish()
 
-if __name__ == "__main__":    
+
+# signal handler to run wandb.finish() on SIGINT
+def signal_handler(sig_num: int, frame: object):
+    print("Received SIGINT, exiting... (saving wandb logs)")
+    wandb.finish()
+    sys.exit(0)
+
+if __name__ == "__main__":  
+    
+    # Register signal handler
+    signal.signal(signal.SIGINT, signal_handler)
+      
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
     parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
+    parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
     parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train for")
@@ -106,7 +122,9 @@ if __name__ == "__main__":
     
      # Define directories
     model_name = args.model_name
-    model_folder = os.path.join("models", model_name)
+    # make subdirectory for model (save all checkpoints for model here)
+    if not os.path.exists(args.model_dir): os.makedirs(args.model_dir)
+    model_folder = os.path.join(args.model_dir, model_name)
     data_dir = args.data_dir
     if not os.path.exists(model_folder): os.makedirs(model_folder)
     x_train_dir = os.path.join(data_dir, "original", "train")
@@ -145,7 +163,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     load_model_path = args.load_model_path
     if load_model_path is not None:
-        model, optimizer, start_epoch, loss = load_checkpoint(model, optimizer, load_model_path)
+        model, optimizer, start_epoch, loss, batch_size, lr, focal_loss_weights = load_checkpoint(model, optimizer, load_model_path)
     model = model.to(DEVICE)
     print(f"Model is on device {next(model.parameters()).device}")
 
