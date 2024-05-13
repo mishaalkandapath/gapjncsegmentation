@@ -35,18 +35,16 @@ class SliceDataset(torch.utils.data.Dataset):
         mask_tensor = torch.tensor(mask).unsqueeze(0).float()
         
         # normalize image to have mean 0 and std 1
-        image_tensor = tio.transforms.ZNormalization()(image_tensor)
+        image_tensor = (image_tensor - image_tensor.mean()) / image_tensor.std()
 
-                
         # apply augmentations, if any
         if self.augmentation:
-            image = self.augmentation(image)
-            mask = self.augmentation(mask)
+            image_tensor, mask_tensor = self.augmentation(image_tensor, mask_tensor)
             
         # one-hot encode the mask (depth, height, width) --> (depth, height, width, num_classes=2)
-        one_hot_mask = torch.nn.functional.one_hot(mask.long(), num_classes=2) # 0: depth, 1: height, 2: width, 3: num_classes
-        one_hot_mask = one_hot_mask.permute(3, 0, 1, 2).float() # (num_classes, depth, height, width)
-        return image, one_hot_mask
+        one_hot_mask_tensor = torch.nn.functional.one_hot(mask_tensor.long(), num_classes=2) # 0: depth, 1: height, 2: width, 3: num_classes
+        one_hot_mask_tensor = one_hot_mask_tensor.permute(3, 0, 1, 2).float() # (num_classes, depth, height, width)
+        return image_tensor, one_hot_mask_tensor
         
     def __len__(self):
         return len(self.image_paths)
