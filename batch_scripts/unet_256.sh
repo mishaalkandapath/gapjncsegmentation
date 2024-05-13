@@ -15,7 +15,8 @@ BATCH_SIZE=4
 NUM_WORKERS=4
 LR=0.001
 DATA_DIR=/home/hluo/scratch/small_data_256
+RESULTS_DIR=/home/hluo/scratch/results
 MODEL_DIR=/home/hluo/scratch/models
 MODEL_NAME="model_256_1"
-python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR
+python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --results_dir $RESULTS_DIR
 

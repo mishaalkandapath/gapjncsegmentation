@@ -10,11 +10,13 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-EPOCHS=20
+EPOCHS=100
 BATCH_SIZE=1
 NUM_WORKERS=4
 LR=0.001
 DATA_DIR=/home/hluo/scratch/small_data_3d_3
 MODEL_DIR=/home/hluo/scratch/models
-MODEL_NAME="model_512_3"
-python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR
+LOAD_MODEL_PATH="model_512_3"
+MODEL_NAME="model_512_3_two"
+RESULTS_DIR=/home/hluo/scratch/results
+python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --results_dir $RESULTS_DIR --load_modeel_path $LOAD_MODEL_PATH
