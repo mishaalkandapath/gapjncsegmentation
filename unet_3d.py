@@ -10,7 +10,6 @@ import wandb
 import time
 import argparse
 import matplotlib.pyplot as plt
-import torchio as tio
 
 from torch.utils.data import DataLoader
 from utilities import *

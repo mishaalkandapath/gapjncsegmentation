@@ -3,7 +3,6 @@ import cv2
 import numpy as np;
 import torch 
 import torchvision.transforms as transforms
-import torchio as tio
 
 class SliceDataset(torch.utils.data.Dataset):
     """ Dataset for 2D slices of 3D EM images
