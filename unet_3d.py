@@ -48,6 +48,7 @@ def train(model, train_loader, valid_loader, criterion, optimizer, epochs, model
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
+            valid_inputs = valid_inputs.unsqueeze(1)
             valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
             
