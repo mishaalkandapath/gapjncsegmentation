@@ -179,6 +179,7 @@ if __name__ == "__main__":
     alpha = torch.Tensor(inverse_class_freq)
     alpha = scale_to_sum_to_one(alpha).to(DEVICE)
     print(f"Alpha values: {alpha}")
+    print("Alpha values calculated.")
     gamma = args.gamma
     criterion = FocalLoss(alpha=alpha, gamma=gamma, device=DEVICE)
     print("Loss function initialized.")
