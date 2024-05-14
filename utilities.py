@@ -125,7 +125,8 @@ def load_checkpoint(model, optimizer, path):
         lr (float): learning rate
         focal loss weights (Tuple[float, float]): weights for focal loss
     """
-    checkpoint = torch.load(path)
+    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    checkpoint = torch.load(path, map_location=DEVICE)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
