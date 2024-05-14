@@ -17,7 +17,22 @@ from models import *
 from dataset import *
 from loss import *
 
-global table # table to store sample predictions for each epoch
+def log_predictions(input_img, label_img, pred_img, epoch, step, table):
+    depth, height, width = input_img.shape
+    
+    # -- plot as 3 rows: input, ground truth, prediction
+    fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
+    for j in range(depth):
+        ax[0, j].imshow(input_img[j], cmap="gray")
+        ax[1, j].imshow(label_img[j], cmap="gray")
+        ax[2, j].imshow(pred_img[j], cmap="gray")
+    ax[0, 0].set_ylabel("Input")
+    ax[1, 0].set_ylabel("Ground Truth")
+    ax[2, 0].set_ylabel("Prediction")
+    
+    # save figure to wandb
+    mask_img = wandb.Image(fig)          
+    table.add_data(f"Epoch {epoch} Step {step}", mask_img)
 
 def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, model_folder: str, model_name: str, results_dir:str):
     """ Train the model for a given number of epochs
@@ -55,7 +70,9 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             optimizer.step() # update weights based on calculated gradients
             print(f"Step: {i}, Loss: {loss}")
             wandb.log({"loss": loss})
-
+            
+        valid_artifact = wandb.Artifact("valid_predictions" + str(wandb.run.id), type="predictions")
+        valid_table = wandb.Table(columns=['Epoch', 'Image'])
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
@@ -69,50 +86,26 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             print(f"Validation Step: {i}, input size: {valid_inputs.shape}, Loss: {valid_loss}")
             
             # Save sample predictions as image to wandb every 10 steps
-            # -- remove batch dim and take argmax to reverse one hot encoding -> (D, H, W)
-            if i < 3:
+            if i % 10 == 0:
                 print(f"Saving predictions for epoch {epoch} step {i}")
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
                 pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
                 
-                # -- plot as 3 rows: input, ground truth, prediction
-                fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
-                for j in range(depth):
-                    ax[0, j].imshow(input_img[j], cmap="gray")
-                    ax[1, j].imshow(label_img[j], cmap="gray")
-                    ax[2, j].imshow(pred_img[j], cmap="gray")
-                ax[0, 0].set_ylabel("Input")
-                ax[1, 0].set_ylabel("Ground Truth")
-                ax[2, 0].set_ylabel("Prediction")
-                # save figure to wandb
-                mask_img = wandb.Image(fig)          
-                table.add_data(f"Epoch {epoch} Step {i}", mask_img)
+                log_predictions(input_img, label_img, pred_img, epoch, i, valid_table)
+                valid_artifact.add(valid_table, "predictions")
+                wandb.run.log_artifact(valid_artifact)
                 
-                # save figure to local
-                fig.savefig(os.path.join(results_dir, f"epoch_{epoch}_step_{i}.png"))
             wandb.log({"valid_loss": valid_loss})
-            plt.close(fig)
             plt.close("all")
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
         checkpoint(model, optimizer, epoch, loss, batch_size, lr, inverse_class_freq, os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
-    wandb.log({"Table" : table})
+    wandb.log({"Table" : valid_table})
     wandb.finish()
-
-
-# signal handler to run wandb.finish() on SIGINT
-def signal_handler(sig_num: int, frame: object):
-    print("Received SIGINT, exiting... (saving wandb logs)")
-    wandb.log({"Table" : table})
-    wandb.finish()
-    sys.exit(0)
 
 if __name__ == "__main__":  
-    
-    # Register signal handler
-    signal.signal(signal.SIGINT, signal_handler)
       
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
@@ -199,7 +192,6 @@ if __name__ == "__main__":
         },
         dir=args.wandb_log_path
     )      
-    table = wandb.Table(columns=['Epoch', 'Image'])
 
     # Train model
     print("Starting training...")
