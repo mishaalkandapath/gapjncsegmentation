@@ -49,6 +49,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
         results_dir (str): directory to save results
     """
     depth, height, width = 5, 256, 256
+    total_table = wandb.Table(columns=['Epoch', 'Image'])
     for epoch in range(epochs):
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)))
@@ -73,6 +74,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             
         valid_artifact = wandb.Artifact("valid_predictions" + str(wandb.run.id), type="predictions")
         valid_table = wandb.Table(columns=['Epoch', 'Image'])
+        num_logged = 0
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
@@ -86,7 +88,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             print(f"Validation Step: {i}, input size: {valid_inputs.shape}, Loss: {valid_loss}")
             
             # Save sample predictions as image to wandb every 10 steps
-            if i % 10 == 0:
+            if num_logged < 5:
                 print(f"Saving predictions for epoch {epoch} step {i}")
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
@@ -95,6 +97,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
                 log_predictions(input_img, label_img, pred_img, epoch, i, valid_table)
                 valid_artifact.add(valid_table, "predictions")
                 wandb.run.log_artifact(valid_artifact)
+                num_logged += 1
                 
             wandb.log({"valid_loss": valid_loss})
             plt.close("all")
