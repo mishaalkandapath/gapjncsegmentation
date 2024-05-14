@@ -107,4 +107,13 @@ def get_inverse_class_frequencies(train_dataset, num_classes=2):
     class_frequencies = [(num_classes * total_num_zeros) / total_pixels, (num_classes * total_num_ones) / total_pixels]
     inverse_class_frequencies = [1/freq for freq in class_frequencies]
     return inverse_class_frequencies
+
+def scale_to_sum_to_one(alpha):
+    """ 
+    Scale the alpha values to sum to one
+    
+    Args:
+    alpha (torch.Tensor): the alpha values
+    """
+    return alpha / torch.sum(alpha)
         
