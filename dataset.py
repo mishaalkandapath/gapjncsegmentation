@@ -26,7 +26,7 @@ class SliceDataset(torch.utils.data.Dataset):
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
         self.image_dim = image_dim
-        self.augmentation = augment
+        self.augment = augment
     
     def __getitem__(self, i):
         # read images and masks (3D grayscale images)
@@ -34,13 +34,11 @@ class SliceDataset(torch.utils.data.Dataset):
         mask = np.load(self.mask_paths[i]) # each pixel is 0 or 1, shape (depth, height, width)
 
         # convert to tensor
-        image = torch.tensor(image).float()
-        mask = torch.tensor(mask).float()
+        image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
+        mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
+        image = tio.ZNormalization()(image)
 
         # define preprocessing and augmentations
-        preprocessing = tio.Compose([
-            tio.ZNormalization() # normalize image to have zero mean and unit variance
-        ])
         mask_augment = tio.Compose([
             tio.RandomFlip(flip_probability=0.5)
             ])
@@ -51,8 +49,6 @@ class SliceDataset(torch.utils.data.Dataset):
             tio.RandomGamma(p=0.5)
         ])
 
-        image = preprocessing(image)
-        mask = preprocessing(mask)
     
         # apply augmentations, if any
         if self.augment:
