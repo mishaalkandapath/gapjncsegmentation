@@ -155,7 +155,7 @@ if __name__ == "__main__":
     # Get train and val dataset instances
     batch_size = args.batch_size
     num_workers = args.num_workers
-    train_dataset = SliceDataset(x_train_dir, y_train_dir, image_dim = (depth, width, height), augmentation=None)
+    train_dataset = SliceDataset(x_train_dir, y_train_dir, image_dim = (depth, width, height), augment=None)
     valid_dataset = SliceDataset(x_valid_dir, y_valid_dir, image_dim = (depth, width, height))
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)

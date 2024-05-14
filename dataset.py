@@ -13,7 +13,7 @@ class SliceDataset(torch.utils.data.Dataset):
     Args:
         images_dir (str): path to images folder
         masks_dir (str): path to segmentation masks folder
-        augmentation (torchvision.transforms.Compose): data augmentations
+        augment (bool): whether to apply augmentations
     """
     def __init__(
             self, 
