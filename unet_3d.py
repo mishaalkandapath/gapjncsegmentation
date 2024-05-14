@@ -39,7 +39,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             print("Progress: {:.2%}".format(i/len(train_loader)))
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-            inputs = inputs.unsqueeze(1) # add channel dimension (num_batches, CHANNELS, depth, height, width)
+            # inputs = inputs.unsqueeze(1) # add channel dimension (num_batches, CHANNELS, depth, height, width)
             if (i == 0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
@@ -59,7 +59,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
-            valid_inputs = valid_inputs.unsqueeze(1) # add channel dimension (num_batches, CHANNELS, depth, height, width)
+            # valid_inputs = valid_inputs.unsqueeze(1) # add channel dimension (num_batches, CHANNELS, depth, height, width)
             if valid_inputs.shape[2:] != (depth, height, width):
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
                 continue
@@ -97,7 +97,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
-        checkpoint(model, optimizer, epoch, loss, batch_size, lr, (w1, w2), os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
+        checkpoint(model, optimizer, epoch, loss, batch_size, lr, inverse_class_freq, os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
     wandb.log({"Table" : table})
     wandb.finish()
 
@@ -125,8 +125,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
     parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for DataLoader")
     parser.add_argument("--load_model_path", type=str, default=None, help="Path to load model from")
-    parser.add_argument("--w1", type=float, default=0.2, help="Weight for class 0 in Focal Loss")
-    parser.add_argument("--w2", type=float, default=0.2, help="Weight for class 1 in Focal Loss")
     parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
     parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
     args = parser.parse_args()
@@ -180,12 +178,12 @@ if __name__ == "__main__":
     print(f"Model is on device {next(model.parameters()).device}")
 
     # Initialize loss function
-    w1, w2 = args.w1, args.w2
-    alpha = torch.Tensor([w1, w2/9])
+    print("Calculating alpha values for focal loss...")
+    inverse_class_freq = get_inverse_class_frequencies(train_dataset)
+    alpha = torch.Tensor(inverse_class_freq).to(DEVICE)
     gamma = args.gamma
     criterion = FocalLoss(alpha=alpha, gamma=gamma, device=DEVICE)
     print("Loss function initialized.")
-
     # Initialize wandb
     wandb.init(
         project="gapjnc-dense-cell",
@@ -196,8 +194,7 @@ if __name__ == "__main__":
         "model_name": model_name,
         "batch_size": batch_size,
         "num_workers": num_workers,
-        "w1": w1,
-        "w2": w2,
+        "inverse class frequencies": inverse_class_freq,
         "gamma": gamma
         },
         dir=args.wandb_log_path
