@@ -122,6 +122,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for DataLoader")
     parser.add_argument("--load_model_path", type=str, default=None, help="Path to load model from")
     parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
+    parser.add_argument("--alpha", type=float, default=None, help="Alpha parameter for Focal Loss")
     parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
     args = parser.parse_args()
     
@@ -178,6 +179,10 @@ if __name__ == "__main__":
     inverse_class_freq = get_inverse_class_frequencies(train_dataset)
     alpha = torch.Tensor(inverse_class_freq)
     alpha = scale_to_sum_to_one(alpha).to(DEVICE)
+    
+    if args.alpha is not None:
+        alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
+        
     print(f"Alpha values: {alpha}")
     print("Alpha values calculated.")
     gamma = args.gamma
