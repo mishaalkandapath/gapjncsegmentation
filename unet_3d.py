@@ -17,6 +17,8 @@ from models import *
 from dataset import *
 from loss import *
 
+global table # table to store sample predictions for each epoch
+
 def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, model_folder: str, model_name: str, results_dir:str):
     """ Train the model for a given number of epochs
     
@@ -68,7 +70,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             
             # Save sample predictions as image to wandb every 10 steps
             # -- remove batch dim and take argmax to reverse one hot encoding -> (D, H, W)
-            if i % 5 == 0:
+            if i < 3:
                 print(f"Saving predictions for epoch {epoch} step {i}")
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
@@ -86,7 +88,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
                 # save figure to wandb
                 mask_img = wandb.Image(fig)          
                 table.add_data(f"Epoch {epoch} Step {i}", mask_img)
-                wandb.log({"Table" : table})
+                
                 # save figure to local
                 fig.savefig(os.path.join(results_dir, f"epoch_{epoch}_step_{i}.png"))
             wandb.log({"valid_loss": valid_loss})
@@ -103,6 +105,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
 # signal handler to run wandb.finish() on SIGINT
 def signal_handler(sig_num: int, frame: object):
     print("Received SIGINT, exiting... (saving wandb logs)")
+    wandb.log({"Table" : table})
     wandb.finish()
     sys.exit(0)
 
