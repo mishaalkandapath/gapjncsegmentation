@@ -34,7 +34,7 @@ def log_predictions(input_img, label_img, pred_img, epoch, step, table):
     mask_img = wandb.Image(fig)          
     table.add_data(f"Epoch {epoch} Step {step}", mask_img)
 
-def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, model_folder: str, model_name: str, results_dir:str):
+def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, model_folder: str, model_name: str, results_dir:str, num_predictions_to_log:int=5) -> None:
     """ Train the model for a given number of epochs
     
     Args:
@@ -86,8 +86,8 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             valid_loss = criterion(valid_pred, valid_labels)
             print(f"Validation Step: {i}, input size: {valid_inputs.shape}, Loss: {valid_loss}")
             
-            # Save 5 predictions for each epoch
-            if num_logged < 5:
+            # Save predictions for each epoch
+            if num_logged < num_predictions_to_log:
                 print(f"Saving predictions for epoch {epoch} step {i}")
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
@@ -124,6 +124,7 @@ if __name__ == "__main__":
     parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
     parser.add_argument("--alpha", type=float, default=None, help="Alpha parameter for Focal Loss")
     parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
+    parser.add_argument("--num_predictions_to_log", type=int, default=5, help="Number of predictions to log per epoch")
     args = parser.parse_args()
     
      # Define directories
@@ -207,5 +208,5 @@ if __name__ == "__main__":
     # Train model
     print("Starting training...")
     start = time.time()
-    train(model, train_loader, valid_loader, criterion, optimizer, epochs, model_folder, model_name, results_dir)
+    train(model, train_loader, valid_loader, criterion, optimizer, epochs, model_folder, model_name, results_dir, args.num_predictions_to_log)
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
