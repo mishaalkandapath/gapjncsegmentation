@@ -96,11 +96,11 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
                 log_predictions(input_img, label_img, pred_img, epoch, i, valid_table) # adds row to artifact table
                 log_predictions(input_img, label_img, pred_img, epoch, i, total_table) # adds row to total table
                 num_logged += 1
-            valid_artifact.add(valid_table, "predictions")
-            wandb.run.log_artifact(valid_artifact)
                 
             wandb.log({"valid_loss": valid_loss})
             plt.close("all")
+        valid_artifact.add(valid_table, "predictions")
+        wandb.run.log_artifact(valid_artifact)
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
