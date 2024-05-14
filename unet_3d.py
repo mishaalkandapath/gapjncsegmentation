@@ -55,7 +55,6 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             print("Progress: {:.2%}".format(i/len(train_loader)))
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-            # inputs = inputs.unsqueeze(1) # add channel dimension (num_batches, CHANNELS, depth, height, width)
             if (i == 0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
@@ -72,13 +71,13 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             print(f"Step: {i}, Loss: {loss}")
             wandb.log({"loss": loss})
             
+        # one artifact per epoch
         valid_artifact = wandb.Artifact("valid_predictions" + str(wandb.run.id), type="predictions")
         valid_table = wandb.Table(columns=['Epoch', 'Image'])
         num_logged = 0
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
-            # valid_inputs = valid_inputs.unsqueeze(1) # add channel dimension (num_batches, CHANNELS, depth, height, width)
             if valid_inputs.shape[2:] != (depth, height, width):
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
                 continue
@@ -87,17 +86,18 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             valid_loss = criterion(valid_pred, valid_labels)
             print(f"Validation Step: {i}, input size: {valid_inputs.shape}, Loss: {valid_loss}")
             
-            # Save sample predictions as image to wandb every 10 steps
+            # Save 5 predictions for each epoch
             if num_logged < 5:
                 print(f"Saving predictions for epoch {epoch} step {i}")
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
                 pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
                 
-                log_predictions(input_img, label_img, pred_img, epoch, i, valid_table)
-                valid_artifact.add(valid_table, "predictions")
-                wandb.run.log_artifact(valid_artifact)
+                log_predictions(input_img, label_img, pred_img, epoch, i, valid_table) # adds row to artifact table
+                log_predictions(input_img, label_img, pred_img, epoch, i, total_table) # adds row to total table
                 num_logged += 1
+            valid_artifact.add(valid_table, "predictions")
+            wandb.run.log_artifact(valid_artifact)
                 
             wandb.log({"valid_loss": valid_loss})
             plt.close("all")
@@ -105,7 +105,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
         checkpoint(model, optimizer, epoch, loss, batch_size, lr, inverse_class_freq, os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
-    wandb.log({"Table" : valid_table})
+    wandb.log({"Table" : total_table})
     wandb.finish()
 
 if __name__ == "__main__":  
