@@ -72,7 +72,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             wandb.log({"loss": loss})
             
         # one artifact per epoch
-        valid_artifact = wandb.Artifact(f"valid_epoch_{epoch}" + str(wandb.run.id), type="predictions")
+        valid_artifact = wandb.Artifact(f"valid" + str(wandb.run.id), type="predictions")
         valid_table = wandb.Table(columns=['Epoch', 'Image'])
         num_logged = 0
         for i, data in enumerate(valid_loader):
