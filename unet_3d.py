@@ -173,7 +173,9 @@ if __name__ == "__main__":
     # Initialize loss function
     print("Calculating alpha values for focal loss...")
     inverse_class_freq = get_inverse_class_frequencies(train_dataset)
-    alpha = torch.Tensor(inverse_class_freq).to(DEVICE)
+    alpha = torch.Tensor(inverse_class_freq)
+    alpha = scale_to_sum_to_one(alpha).to(DEVICE)
+    print(f"Alpha values: {alpha}")
     gamma = args.gamma
     criterion = FocalLoss(alpha=alpha, gamma=gamma, device=DEVICE)
     print("Loss function initialized.")
