@@ -14,12 +14,12 @@ EPOCHS=100
 BATCH_SIZE=1
 NUM_WORKERS=4
 LR=0.01
+LOSSTYPE="focal_tversky"
 DATA_DIR=/home/hluo/scratch/data/filtered_data_512
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/results
 MODEL_NAME="model_job14"
 ALPHA=0.76
 GAMMA=0.75
-LOSS_TYPE = "focal_tversky"
 NUM_PREDICTIONS_TO_LOG=10
-python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --results_dir $RESULTS_DIR --alpha $ALPHA --gamma $GAMMA --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG --loss_type $LOSS_TYPE
+python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --results_dir $RESULTS_DIR --alpha $ALPHA --gamma $GAMMA --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG --loss_type $LOSSTYPE

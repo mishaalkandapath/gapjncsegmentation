@@ -100,5 +100,16 @@ if __name__ == "__main__":
     # Train model
     print("Starting training...")
     start = time.time()
-    train(model=model, train_loader=train_loader, valid_loader=valid_loader, criterion=criterion, optimizer=optimizer, epochs=epochs, batch_size=args.batch_size, lr=args.lr, model_folder=model_folder, model_name=model_name, results_dir=results_dir, num_predictions_to_log=args.num_predictions_to_log)
+    train(model=model, 
+          train_loader=train_loader, 
+          valid_loader=valid_loader, 
+          criterion=criterion, 
+          optimizer=optimizer, 
+          epochs=epochs, 
+          batch_size=args.batch_size, 
+          lr=args.lr, 
+          model_folder=model_folder, 
+          model_name=model_name, 
+          results_dir=results_dir, 
+          num_predictions_to_log=args.num_predictions_to_log)
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
