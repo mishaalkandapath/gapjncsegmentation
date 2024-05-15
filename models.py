@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import torchvision.transforms as transforms
 
-# correspond to arrows in paper figure
+# --- correspond to arrows in paper figure ---
 class DoubleConv(nn.Module):
     """Two Conv2D + BN + ReLU
     
@@ -68,7 +68,7 @@ class SingleConv1D(nn.Module):
     def forward(self, x):
         return self.single_conv(x)
 
-# group into blocks for easier reading
+# --- group into blocks for easier reading ---
 class DownBlock(nn.Module):
     """Double Convolution followed by Max Pooling
     
@@ -128,7 +128,6 @@ class UpBlock(nn.Module):
         x = self.double_conv(x)
         return x
         
-    
 class PyramidBlock(nn.Module):
     """ 3D Spatial Pyramid Pooling Block (3x3x3 conv + BN + ReLU)"""
     def __init__(self, num_convs, num_channels):
@@ -150,7 +149,7 @@ class PyramidBlock(nn.Module):
         #     x = nn.ReLU(inplace=True)(x)
         return x
     
-# model architecture
+# --- put it all together ---
 class UNet(nn.Module):
     """UNet Architecture"""
     def __init__(self, out_classes=2):
