@@ -45,6 +45,24 @@ class FocalLoss(nn.Module):
         return loss.mean() 
     
 
+class FocalTverskyLoss(nn.Module):
+    def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu")):
+        super(FocalTverskyLoss, self).__init__()
+        self.device = device
+        self.gamma = gamma
+        self.alpha = alpha.to(device)
+        self.beta = beta.to(device)
+    
+    def forward(self, inputs, targets, smooth=1):
+        true_pos = torch.sum(targets * inputs, dim=(1,2,3,4))
+        false_neg = torch.sum(targets * (1-inputs), dim=(1,2,3,4))
+        false_pos = torch.sum((1-targets) * inputs, dim=(1,2,3,4))
+        tversky = (true_pos + smooth) / (true_pos + self.alpha * false_neg + self.beta * false_pos + smooth)
+        tversky_loss = 1 - tversky
+        focal_tversky_loss = torch.pow(tversky_loss, self.gamma)
+        return focal_tversky_loss.mean()
+
+
 class CustomLoss(nn.Module):
     def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
         super(CustomLoss, self).__init__()

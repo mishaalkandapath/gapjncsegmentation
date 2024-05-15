@@ -66,15 +66,20 @@ if __name__ == "__main__":
 
     # Initialize loss function
     print("Calculating alpha values for focal loss...")
-    if args.alpha is None:
-        inverse_class_freq = get_inverse_class_frequencies(train_dataset)
-        alpha = torch.Tensor(inverse_class_freq)
-        alpha = scale_to_sum_to_one(alpha).to(DEVICE)
+    if args.loss_type == "focal":
+        if args.alpha is None:
+            inverse_class_freq = get_inverse_class_frequencies(train_dataset)
+            alpha = torch.Tensor(inverse_class_freq)
+            alpha = scale_to_sum_to_one(alpha).to(DEVICE)
+        else:
+            alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
+        print(f"Alpha values: {alpha}")
+        gamma = args.gamma
+        criterion = FocalLoss(alpha=alpha, gamma=gamma, device=DEVICE)
+    elif args.loss_type == "focal_tversky":
+        criterion = FocalTverskyLoss(alpha =args.alpha, beta= 1- args.alpha, gamma=args.gamma, device=DEVICE)
     else:
-        alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
-    print(f"Alpha values: {alpha}")
-    gamma = args.gamma
-    criterion = FocalLoss(alpha=alpha, gamma=gamma, device=DEVICE)
+        print("Invalid loss type. Exiting...")
     print("Loss function initialized.")
     
     # Initialize wandb

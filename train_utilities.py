@@ -148,6 +148,8 @@ def parse_arguments():
     parser.add_argument("--alpha", type=float, default=None, help="Alpha parameter for Focal Loss")
     parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
     parser.add_argument("--num_predictions_to_log", type=int, default=5, help="Number of predictions to log per epoch")
+    parser.add_argument("--augment", type=bool, default=False, help="Whether to augment the data")
+    parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
     args = parser.parse_args()
     return args
 
