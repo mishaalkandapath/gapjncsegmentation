@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job7
+#SBATCH --job-name=job8
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=v100l:1
@@ -17,8 +17,8 @@ LR=0.01
 DATA_DIR=/home/hluo/scratch/data/small_data_3d
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/results
-MODEL_NAME="model_job7"
-ALPHA=0.63
-GAMMA=2
+MODEL_NAME="model_job8"
+ALPHA=0.1
+GAMMA=3
 NUM_PREDICTIONS_TO_LOG=10
 python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --results_dir $RESULTS_DIR --alpha $ALPHA --gamma $GAMMA --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG

@@ -19,13 +19,11 @@ class SliceDataset(torch.utils.data.Dataset):
             self, 
             images_dir, 
             masks_dir,
-            image_dim = (5, 512, 512),
             augment=False
     ):
         
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
-        self.image_dim = image_dim
         self.augment = augment
     
     def __getitem__(self, i):
