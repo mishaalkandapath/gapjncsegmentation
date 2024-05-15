@@ -152,6 +152,12 @@ if __name__ == "__main__":
     # Check if GPU is available
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
+    
+    # Set random seed for reproducibility
+    seed = 42
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    
       
     # Parse arguments
     args = parse_arguments()
@@ -206,11 +212,10 @@ if __name__ == "__main__":
         "model_name": model_name,
         "batch_size": batch_size,
         "num_workers": num_workers,
-        "inverse class frequencies": inverse_class_freq,
         "gamma": gamma
         },
         dir=args.wandb_log_path
-    )      
+    )
 
     # Train model
     print("Starting training...")
