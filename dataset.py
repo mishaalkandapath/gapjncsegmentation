@@ -27,6 +27,17 @@ class SliceDataset(torch.utils.data.Dataset):
         self.augment = augment
     
     def __getitem__(self, i):
+        """ 
+        Get image and mask at index i
+        
+        Note: for original image, 0 is gap junction, 1 is not gap junction
+        
+        Returns:
+            image (torch.Tensor): image tensor, shape (1, depth, height, width)
+            one_hot_mask (torch.Tensor): one-hot encoded mask tensor, shape (num_classes=2, depth, height, width)
+            - one_hot_mask[0] is the background class, or not gap junction class (1 if not gap junction)
+            - one_hot_mask[1] is the foreground class, or gap junction class (1 if gap junction)
+        """
         # read images and masks (3D grayscale images)
         image = np.load(self.image_paths[i]) # each pixel is 0-255, shape (depth, height, width)
         mask = np.load(self.mask_paths[i]) # each pixel is 0 or 1, shape (depth, height, width)
@@ -35,23 +46,28 @@ class SliceDataset(torch.utils.data.Dataset):
         image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         image = tio.ZNormalization()(image)
-
-        # define preprocessing and augmentations
-        mask_augment = tio.Compose([
-            tio.RandomFlip(flip_probability=0.5)
-            ])
-        img_augment = tio.Compose([
-            mask_augment,
-            tio.RandomBlur(p=0.5),
-            tio.RandomNoise(p=0.5),
-            tio.RandomGamma(p=0.5)
-        ])
-
     
         # apply augmentations, if any
         if self.augment:
-            image = img_augment(image)
-            mask = mask_augment(mask)
+            # Apply the flip transformation to the subject
+            subject = tio.Subject(
+                image=tio.ScalarImage(tensor=image),
+                mask=tio.LabelMap(tensor=mask)
+            )
+            flip_transform = tio.RandomFlip(flip_probability=1)
+            flipped_subject = flip_transform(subject)
+            image = flipped_subject.image.tensor
+            mask = flipped_subject.mask.tensor
+
+            # Define additional transformations for the image
+            additional_transforms = tio.Compose([
+                tio.RandomBlur(p=0.5),
+                tio.RandomNoise(p=0.5),
+                tio.RandomGamma(p=0.5)
+            ])
+
+            # Apply the additional transformations to the flipped image
+            image = additional_transforms(image)
             
         # one-hot encode the mask (depth, height, width) --> (depth, height, width, num_classes=2)
         one_hot_mask = torch.nn.functional.one_hot(mask.squeeze(0).long(), num_classes=2)
