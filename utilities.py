@@ -1,7 +1,8 @@
 import os
 import cv2
 import numpy as np;
-import random, tqdm
+import random
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch 
 import torch.nn as nn
@@ -18,6 +19,7 @@ from typing import Tuple, List
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from collections import OrderedDict
+from PIL import Image
 
 # import segmentation_models_pytorch.utils.metrics
 
@@ -42,32 +44,40 @@ class CaImagesDataset(torch.utils.data.Dataset):
             augmentation=None, 
             preprocessing=None,
             image_dim = (512, 512),
-            mask_neurons=None
+            mask_neurons=None,
+            mask_mito=None
     ):
         
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
 
-        if "tiny" in images_dir:
-            #class balancing (65-35)
-            empty_segs, present_segs = [], []
-            for i in range(len(self.image_paths)):
-                im = cv2.imread(self.mask_paths[i], cv2.COLOR_BGR2GRAY)
-                if len(np.unique(im)) == 2: present_segs.append(i)
-                else: empty_segs.append(i)
-            n_present = len(present_segs)
-            total = (n_present *100)//65
-            empty_segs = np.random.choices(np.array(empty_segs), k=total - n_present)
-            all_segs = empty_segs + present_segs
-            self.image_paths = [f for i, f in enumerate(self.image_path) if i in all_segs]
-            self.mask_paths = [f for i, f in enumerate(self.mask_paths) if i in all_segs]
+        # if "tiny" in images_dir:
+        #     print("---Class Balancing--")
+        #     #class balancing (65-35)
+        #     empty_segs, present_segs = [], []
+        #     for i in tqdm(range(len(self.image_paths))):
+        #         im = cv2.imread(self.mask_paths[i], cv2.COLOR_BGR2GRAY)
+        #         if len(np.unique(im)) == 2: present_segs.append(i)
+        #         else: empty_segs.append(i)
+        #     n_present = len(present_segs)
+        #     total = (n_present *100)//65
+        #     empty_segs = np.random.choices(np.array(empty_segs), k=total - n_present)
+        #     all_segs = empty_segs + present_segs
+        #     self.image_paths = [f for i, f in enumerate(self.image_path) if i in all_segs]
+        #     self.mask_paths = [f for i, f in enumerate(self.mask_paths) if i in all_segs]
 
-            print("Class balanced tiny has {} empty and {} present with a total of {} points".format(empty_segs, present_segs, len(self.image_paths)))
+        #     print("Class balanced tiny has {} empty and {} present with a total of {} points".format(empty_segs, present_segs, len(self.image_paths)))
 
         if mask_neurons:
             assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "well shet"
             self.neuron_paths = [os.path.join(mask_neurons, neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_")) for neuron_id in sorted(os.listdir(images_dir))]
         else: self.neuron_paths = None
+
+        if mask_mito:
+            self.mito_mask = [os.path.join(mask_mito, neuron_id) for neuron_id in sorted(os.listdir(images_dir))]
+        else:
+            self.mito_mask=None
+            
         self.augmentation = augmentation 
         self.preprocessing = preprocessing
         self.image_dim = image_dim
@@ -75,7 +85,11 @@ class CaImagesDataset(torch.utils.data.Dataset):
     def __getitem__(self, i):
         
         # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
-        image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
+        try:
+            image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
+        except Exception as e:
+            print(self.image_paths[i])
+            raise Exception(self.image_paths[i])
         mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
 
         # make sure each pixel is 0 or 255
@@ -119,10 +133,11 @@ class CaImagesDataset(torch.utils.data.Dataset):
         image = transforms.Compose(_transform_img)(image)
 
         #get the coresponding neuron mask
-        if self.neuron_paths: neurons = cv2.cvtColor(cv2.imread(self.neuron_paths[i][:-4]), cv2.COLOR_BGR2GRAY)
+        if self.neuron_paths: neurons = cv2.cvtColor(cv2.imread(self.neuron_paths[i]), cv2.COLOR_BGR2GRAY)
+        if self.mito_mask: mitos = np.array(Image.open(self.image_paths[i].replace("imgs", "mito_masks")))
         
             
-        return image, ont_hot_mask, neurons == 0 if self.neuron_paths else None
+        return image, ont_hot_mask, neurons == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
         
     def __len__(self):
         # return length of 
@@ -283,12 +298,21 @@ class FocalLoss(nn.Module):
         self.device = device
         self.alpha = alpha.to(device)
     
-    def forward(self, inputs, targets, loss_mask=None):
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
         bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
         pt = torch.exp(-bce_loss)
         targets = targets.to(torch.int64)
         loss = self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape) * (1-pt) ** self.gamma * bce_loss
-        if loss_mask is not None: loss = loss * loss_mask
+        if mito_mask != []:
+            #first modify loss_mask, neuron_mask is always on.
+            loss_mask = loss_mask | mito_mask
+            # factor = 1
+            # loss = loss * (1 + (mito_mask * factor))#weight this a bit more. 
+        if loss_mask != []: 
+            #better way? TODO: get rid of this if statement
+            if len(loss.shape) > len(loss_mask): loss = loss * loss_mask.unsqueeze(-1)
+            else: loss = loss * loss_mask # remove everything that is a neuron body, except ofc if the mito_mask was on. 
+
         return loss.mean() 
 
 def get_training_augmentation():
