@@ -8,42 +8,19 @@ import torchvision.transforms as transforms
 import torchio as tio
 
 class FocalLoss(nn.Module):
-    """ Focal loss function for binary classification tasks
-    
-    Focal loss is a modification of the cross-entropy loss that focuses on hard examples.
-    
-    Attributes:
-        alpha (torch.Tensor): term that offsets for class imbalance
-        - set as inversely proportional class frequencies or hyperparameter tuning through cross-validation
-        - this is a tensor of shape (num_classes,) where num_classes is the number of classes
-        - the alpha values are inversely proportional to the class frequencies
-        - ex. if class 0 has 100 samples and class 1 has 10 samples, then class frequencies are 100/110 and 10/110, so alpha = [10/110, 100/110] or [0.09, 0.91]
-        gamma (int): focusing parameter that adjusts the rate at which easy examples are downweighted
-        - larger gamma values focus more on hard examples
-        - gamma = 0 is equivalent to cross-entropy loss, it is usually set to gamma=2
-        - in practice, we tune alpha more, leaving gamma at 2
-
-    
-    """
-    def __init__(self, alpha, gamma=3, device=torch.device("cpu")):
+    def __init__(self, alpha, beta, gamma=3, device=torch.device("cpu")):
         super(FocalLoss, self).__init__()
         self.device = device
         self.gamma = gamma # larger gamma values focus more on hard examples
         self.alpha = alpha.to(device) # focusing parameter in practice: set as inversely proportional class frequencies or hyperparameter tuning through cross-validation
-            
-    def forward(self, inputs, targets):
-        """ 
-        
-        Args:
-            inputs (torch.Tensor): model predictions (batch_size, class, depth, height, width)
-            targets (torch.Tensor): ground truth labels (batch_size, class, depth, height, width)
-        """
-        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none") # (batch_size, class, depth, height, width)
-        pt = torch.exp(-bce_loss) # take the exp of the negative bce loss to get the probability of the correct class
-        targets = targets.to(torch.int64) # convert to int64 for indexing
-        loss = self.alpha[targets] * (1-pt)**self.gamma * bce_loss
-        return loss.mean() 
+        self.beta = beta.to(device)
     
+    def forward(self, inputs, targets):
+        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none") # (batch_size, class=2, depth, height, width)
+        pt = torch.exp(-bce_loss)
+        targets = targets.to(torch.int64) # convert to int64 for indexing
+        focal_loss = self.alpha[targets] * (1-pt)**self.gamma * bce_loss
+        return focal_loss.mean()
 
 class FocalTverskyLoss(nn.Module):
     def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu")):
@@ -57,20 +34,34 @@ class FocalTverskyLoss(nn.Module):
         true_pos = torch.sum(targets * inputs, dim=(1,2,3,4))
         false_neg = torch.sum(targets * (1-inputs), dim=(1,2,3,4))
         false_pos = torch.sum((1-targets) * inputs, dim=(1,2,3,4))
+        print(f"True pos: {true_pos}, False neg: {false_neg}, False pos: {false_pos}")
         tversky = (true_pos + smooth) / (true_pos + self.alpha * false_neg + self.beta * false_pos + smooth)
         tversky_loss = 1 - tversky
         focal_tversky_loss = torch.pow(tversky_loss, self.gamma)
         return focal_tversky_loss.mean()
 
-
-class CustomLoss(nn.Module):
-    def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
-        super(CustomLoss, self).__init__()
-        self.c_2d = 0.33 # constant that weighs importance of intermediate 2D class predictions in the loss function
+class FocalTverskyLossWith2d3d(nn.Module):
+    def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu"), intermediate_weight = 0.33):
+        super(FocalTverskyLoss, self).__init__()
+        self.intermediate_loss = FocalTverskyLoss(alpha, beta, gamma, device)
+        self.final_loss = FocalTverskyLoss(alpha, beta, gamma, device)
     
     def forward(self, preds_2d, preds_3d, targets, width=512, height=512):
-        loss_2d = FocalLoss(preds_2d, targets) # intermediate 2D class predictions loss
-        loss_3d = FocalLoss(preds_3d, targets) # final 3D class predictions loss
+        loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss
+        loss_3d = self.final_loss(preds_3d, targets) # final 3D class predictions
+        return loss_3d + self.c_2d * loss_2d
+    
+
+class FocalLossWith2d3d(nn.Module):
+    def __init__(self, alpha, beta, gamma=2, device=torch.device("cpu")):
+        super(FocalLossWith2d3d, self).__init__()
+        self.c_2d = 0.33 # constant that weighs importance of intermediate 2D class predictions in the loss function
+        self.intermediate_loss = FocalLoss(alpha, beta, gamma, device)
+        self.final_loss = FocalLoss(alpha, beta, gamma, device)
+    
+    def forward(self, preds_2d, preds_3d, targets, width=512, height=512):
+        loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss
+        loss_3d = self.final_loss(preds_3d, targets)
         return loss_3d + self.c_2d * loss_2d
 
 

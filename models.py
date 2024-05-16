@@ -205,9 +205,9 @@ class UNet(nn.Module):
         x = self.up_conv2(x, skip2_out) # x: (1, 128, 5, 150, 150)
         out1 = self.up_conv1(x, skip1_out) # x: (1, 64, 5, 300, 300)
         
-        x = self.one_conv1(out1)
-        x = self.softmax(x) # x: (1, 2, 5, 300, 300)
-        x = torch.cat([x, out1], dim=1) # x: (5, 66, 300, 300)
+        x = self.one_conv1(out1) # x: (1, 2, 5, 300, 300)
+        intermediate = self.softmax(x) # x: (1, 2, 5, 300, 300)
+        x = torch.cat([intermediate, out1], dim=1) # x: (5, 66, 300, 300)
         
         # 3D Spatial Pyramid
         # - side 1
@@ -223,8 +223,8 @@ class UNet(nn.Module):
         
         # Final Convolution
         final = torch.cat([x1, x2], dim=1) # x: (5, 64, 150, 150)
-        final = self.single_conv3(final)
+        final = self.single_conv3(final) # x: (5, 2, 150, 150)
         final = self.softmax(final) # x: (5, 2, 150, 150)
         
-        return final
+        return intermediate, final
 
