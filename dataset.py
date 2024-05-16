@@ -37,6 +37,7 @@ class SliceDataset(torch.utils.data.Dataset):
             one_hot_mask (torch.Tensor): one-hot encoded mask tensor, shape (num_classes=2, depth, height, width)
             - one_hot_mask[0] is the background class, or not gap junction class (1 if not gap junction)
             - one_hot_mask[1] is the foreground class, or gap junction class (1 if gap junction)
+            USE ONE_HOT_MASK[1]
         """
         # read images and masks (3D grayscale images)
         image = np.load(self.image_paths[i]) # each pixel is 0-255, shape (depth, height, width)
