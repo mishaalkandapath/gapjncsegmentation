@@ -81,9 +81,14 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
     """
     depth, height, width = 5, 256, 256
     total_table = wandb.Table(columns=['Epoch', 'Image'])
+    total_train_table = wandb.Table(columns=['Epoch', 'train_image'])
     start = time.time()
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     for epoch in range(epochs):
+
+        train_artifact = wandb.Artifact(f"train" + str(wandb.run.id), type="predictions")
+        train_table = wandb.Table(columns=['Epoch', 'Image'])
+        num_train_logged = 0
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)))
             inputs, labels = data
@@ -103,6 +108,23 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             optimizer.step() # update weights based on calculated gradients
             print(f"Step: {i}, Loss: {loss}")
             wandb.log({"loss": loss})
+
+            # Save predictions for each epoch
+            if num_train_logged < num_predictions_to_log:
+                print(f"Saving predictions for epoch {epoch} step {i}")
+                input_img = inputs.squeeze(0).squeeze(0).cpu().numpy()
+                label_img = labels[0][1].cpu().numpy()
+                pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
+                # pred_img = pred[0].detach().cpu().numpy()
+                
+                log_predictions(input_img, label_img, pred_img, epoch, i, train_table)
+                log_predictions(input_img, label_img, pred_img, epoch, i, total_train_table)
+                num_train_logged += 1
+            plt.close("all")
+        train_artifact.add(train_table, "train_predictions")
+        wandb.run.log_artifact(train_artifact)
+
+
             
         # one artifact per epoch
         valid_artifact = wandb.Artifact(f"valid" + str(wandb.run.id), type="predictions")
