@@ -50,8 +50,8 @@ class FocalTverskyLoss(nn.Module):
         super(FocalTverskyLoss, self).__init__()
         self.device = device
         self.gamma = gamma
-        self.alpha = alpha.to(device)
-        self.beta = beta.to(device)
+        self.alpha = torch.Tensor([alpha]).to(device)
+        self.beta = torch.Tensor([beta]).to(device)
     
     def forward(self, inputs, targets, smooth=1):
         true_pos = torch.sum(targets * inputs, dim=(1,2,3,4))
