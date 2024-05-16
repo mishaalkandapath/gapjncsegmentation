@@ -68,7 +68,7 @@ if __name__ == "__main__":
         beta = torch.tensor(class_frequencies[1])
     else:
         alpha = args.alpha
-        beta = 1 - alpha
+        beta = args.alpha
 
     criterion = FocalTverskyLoss(alpha =alpha, beta= beta, gamma=args.gamma, device=DEVICE)
 
