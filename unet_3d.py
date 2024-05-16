@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # ----- Load data -----
     batch_size = args.batch_size
     num_workers = args.num_workers
-    train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders(data_dir, batch_size, num_workers)
+    train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders(data_dir, batch_size, num_workers, augment=args.augment)
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
     print(f"Data loaders created. Train dataset size: {len(train_dataset)}, Validation dataset size: {len(valid_dataset)}")
 
