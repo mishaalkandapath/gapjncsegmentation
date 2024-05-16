@@ -124,8 +124,8 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
                 print(f"Saving predictions for epoch {epoch} step {i}")
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
-                # pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
-                pred_img = valid_pred[0].detach().cpu().numpy()
+                pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
+                # pred_img = valid_pred[0].detach().cpu().numpy()
                 
                 log_predictions(input_img, label_img, pred_img, epoch, i, valid_table) # adds row to valid table
                 log_predictions(input_img, label_img, pred_img, epoch, i, total_table) # adds row to total table
