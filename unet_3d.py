@@ -1,17 +1,9 @@
 # import packages
 import os
-import cv2
-import signal
-import sys
 import numpy as np;
 import torch 
-import torchvision.transforms as transforms
 import wandb
-import time
-import argparse
-import matplotlib.pyplot as plt
 
-from torch.utils.data import DataLoader
 from utilities import *
 from models import *
 from dataset import *
@@ -19,40 +11,43 @@ from loss import *
 from train_utilities import *
     
 if __name__ == "__main__":  
-    # Define class labels (constant)
-    class_labels = {
-    0: "not gj",
-    1: "gj",
-    }
-    
-    # Check if GPU is available
+    # --- Setup device, random seed, and parse arguments ---
+    # Setup device
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
     
-    # Set random seed for reproducibility
+    # Setup random seed
     seed = 42
     torch.manual_seed(seed)
     np.random.seed(seed)
-    
+
     # Parse arguments
     args = parse_arguments()
     
-    # Define directories
+    # ----- Define class labels and directories -----
+    # Define class labels
+    class_labels = {
+    0: "not gj", 
+    1: "gj",
+    }
+    
+    # Define model directory
     model_name = args.model_name
     model_folder = os.path.join(args.model_dir, args.model_name)
     if not os.path.exists(model_folder): os.makedirs(model_folder)
+    
+    # Define data directory
     data_dir = args.data_dir
     if not os.path.exists(data_dir): print(f"Data directory {data_dir} does not exist.")
-    results_dir = os.path.join(args.results_dir, args.model_name)
-    if not os.path.exists(results_dir): os.makedirs(results_dir)
 
-    # Get train and val dataset instances
+    # ----- Load data -----
     batch_size = args.batch_size
     num_workers = args.num_workers
     train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders(data_dir, batch_size, num_workers)
-    print(f"Data loaders created. Train dataset size: {len(train_dataset)}, Validation dataset size: {len(valid_dataset)}")
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
+    print(f"Data loaders created. Train dataset size: {len(train_dataset)}, Validation dataset size: {len(valid_dataset)}")
 
+    # ----- Initialize model, loss function, and wandb -----
     # Initialize model
     lr = args.lr
     epochs = args.epochs
@@ -86,20 +81,19 @@ if __name__ == "__main__":
     wandb.init(
         project="gapjnc-dense-cell",
         config={
+        "model_name": model_name,
         "learning_rate": lr,
         "epochs": epochs,
-        "alpha": alpha,
-        "model_name": model_name,
         "batch_size": batch_size,
         "num_workers": num_workers,
+        "alpha": alpha,
         "gamma": gamma
         },
         dir=args.wandb_log_path
     )
 
-    # Train model
-    print("Starting training...")
-    start = time.time()
+
+    # ----- Train model -----
     train(model=model, 
           train_loader=train_loader, 
           valid_loader=valid_loader, 
@@ -110,6 +104,4 @@ if __name__ == "__main__":
           lr=args.lr, 
           model_folder=model_folder, 
           model_name=model_name, 
-          results_dir=results_dir, 
           num_predictions_to_log=args.num_predictions_to_log)
-    print(f"Training complete. Time elapsed: {time.time() - start} seconds")

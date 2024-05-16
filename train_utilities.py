@@ -1,11 +1,5 @@
-# import packages
 import os
-import cv2
-import signal
-import sys
-import numpy as np;
 import torch 
-import torchvision.transforms as transforms
 import wandb
 import time
 import argparse
@@ -17,23 +11,36 @@ from models import *
 from dataset import *
 from loss import *
 
-def log_predictions(input_img, label_img, pred_img, epoch, step, table):
-    """ 
-    Log input, ground truth, and prediction images to wandb
-    """
+def parse_arguments():
+    """ Parse command line arguments """
+    parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
+    parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
+    parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
+    parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
+    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training")
+    parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train for")
+    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
+    parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for DataLoader")
+    parser.add_argument("--load_model_path", type=str, default=None, help="Path to load model from")
+    parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
+    parser.add_argument("--alpha", type=float, default=None, help="Alpha parameter for Focal Loss")
+    parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
+    parser.add_argument("--num_predictions_to_log", type=int, default=5, help="Number of predictions to log per epoch")
+    parser.add_argument("--augment", type=bool, default=False, help="Whether to augment the data")
+    parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
+    args = parser.parse_args()
+    return args
+
+def log_predictions(input_img: np.ndarray, label_img: np.ndarray, pred_img: np.ndarray, epoch: int, step: int, table: wandb.Table):
+    """ Log input, ground truth, and prediction images to wandb """
     depth, height, width = input_img.shape
     
-    # -- 2 channels for prediction (since one hot encoded)
-    pred_img_one = pred_img[0]
-    pred_img_two = pred_img[1]
-    
     # -- plot as 3 rows: input, ground truth, prediction
-    fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
+    fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
     for j in range(depth):
         ax[0, j].imshow(input_img[j], cmap="gray")
         ax[1, j].imshow(label_img[j], cmap="gray")
-        ax[2, j].imshow(pred_img_one[j], cmap="gray")
-        ax[3, j].imshow(pred_img_two[j], cmap="gray")
+        ax[2, j].imshow(pred_img[j], cmap="gray")
     ax[0, 0].set_ylabel("Input")
     ax[1, 0].set_ylabel("Ground Truth")
     ax[2, 0].set_ylabel("Prediction")
@@ -42,19 +49,22 @@ def log_predictions(input_img, label_img, pred_img, epoch, step, table):
     mask_img = wandb.Image(fig)          
     table.add_data(f"Epoch {epoch} Step {step}", mask_img)
 
-def train(model: torch.nn.Module, 
-          train_loader: torch.utils.data.DataLoader, 
-          valid_loader: torch.utils.data.DataLoader, 
-          criterion: torch.nn.Module, 
-          optimizer: torch.optim.Optimizer, 
-          epochs: int, 
-          batch_size: int,
-          lr: float,
-          model_folder: str, 
-          model_name: str, 
-          results_dir:str, 
-          num_predictions_to_log:int=5) -> None:
-    """ Train the model for a given number of epochs
+def setup_datasets_and_dataloaders(data_dir: str, batch_size: int, num_workers: int, augment: bool=False):
+    """ Setup datasets and dataloaders for training and validation"""
+    x_train_dir = os.path.join(data_dir, "original", "train")
+    y_train_dir = os.path.join(data_dir, "ground_truth", "train")
+    x_valid_dir = os.path.join(data_dir, "original", "valid")
+    y_valid_dir = os.path.join(data_dir, "ground_truth", "valid")
+    
+    train_dataset = SliceDataset(x_train_dir, y_train_dir, augment=augment)
+    valid_dataset = SliceDataset(x_valid_dir, y_valid_dir)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
+    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
+    return train_dataset, valid_dataset, train_loader, valid_loader
+ 
+def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, num_predictions_to_log:int=5) -> None:
+    """ 
+    Train the model and log predictions to wandb.
     
     Args:
         model (torch.nn.Module): model to train
@@ -67,7 +77,6 @@ def train(model: torch.nn.Module,
         lr (float): learning rate
         model_folder (str): directory to save model checkpoints
         model_name (str): name of the model to save
-        results_dir (str): directory to save results
         num_predictions_to_log (int): number of predictions to log per epoch
     """
     depth, height, width = 5, 256, 256
@@ -132,36 +141,5 @@ def train(model: torch.nn.Module,
         checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(criterion.gamma, criterion.alpha), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
     wandb.log({"Table" : total_table})
     wandb.finish()
+    print(f"Training complete. Time elapsed: {time.time() - start} seconds")
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
-    parser.add_argument("--results_dir", type=str, default="results", help="Directory to save results")
-    parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
-    parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
-    parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training")
-    parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train for")
-    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
-    parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for DataLoader")
-    parser.add_argument("--load_model_path", type=str, default=None, help="Path to load model from")
-    parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
-    parser.add_argument("--alpha", type=float, default=None, help="Alpha parameter for Focal Loss")
-    parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
-    parser.add_argument("--num_predictions_to_log", type=int, default=5, help="Number of predictions to log per epoch")
-    parser.add_argument("--augment", type=bool, default=False, help="Whether to augment the data")
-    parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
-    args = parser.parse_args()
-    return args
-
-def setup_datasets_and_dataloaders(data_dir, batch_size, num_workers, augment=False):
-    x_train_dir = os.path.join(data_dir, "original", "train")
-    y_train_dir = os.path.join(data_dir, "ground_truth", "train")
-    x_valid_dir = os.path.join(data_dir, "original", "valid")
-    y_valid_dir = os.path.join(data_dir, "ground_truth", "valid")
-    
-    train_dataset = SliceDataset(x_train_dir, y_train_dir, augment=augment)
-    valid_dataset = SliceDataset(x_valid_dir, y_valid_dir)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
-    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
-    return train_dataset, valid_dataset, train_loader, valid_loader
- 
