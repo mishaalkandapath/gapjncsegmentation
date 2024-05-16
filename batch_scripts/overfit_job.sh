@@ -18,6 +18,7 @@ DATA_DIR=/home/hluo/scratch/one_512
 MODEL_DIR=/home/hluo/scratch/models
 MODEL_NAME="overfit_one"
 AUGMENT=False
+LOSS_TYPE="focal"
 ALPHA=0.95
 GAMMA=3
 NUM_PREDICTIONS_TO_LOG=10
