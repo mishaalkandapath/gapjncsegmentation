@@ -117,6 +117,32 @@ def get_inverse_class_frequencies(train_dataset, num_classes=2):
     inverse_class_frequencies = [1/freq for freq in class_frequencies]
     return inverse_class_frequencies
 
+def get_class_frequencies(train_dataset, num_classes=2):
+    """ 
+    Calculate the inverse class frequencies
+
+    negative class: 0
+    positive class: 1
+    
+    Args:
+    train_dataset (torch.utils.data.Dataset): the training dataset
+    """
+    total_negatives = 0
+    total_positives = 0
+    for i in range(len(train_dataset)):
+        inputs, labels = train_dataset[i]
+        if i == 0:
+            _, depth, height, width = inputs.shape
+        total_num_zeros += torch.sum(labels[1])
+        print(f"Processed {i+1}/{len(train_dataset)} images", end="\r")
+    
+    total_pixels_img = depth * height * width
+    total_pixels = total_pixels_img * len(train_dataset)
+    total_positives = total_pixels - total_negatives
+    
+    class_frequencies = [total_negatives / total_pixels, total_positives / total_pixels]
+    return class_frequencies
+
 def scale_to_sum_to_one(alpha):
     """ 
     Scale the alpha values to sum to one
