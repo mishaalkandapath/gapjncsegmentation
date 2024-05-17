@@ -58,7 +58,6 @@ if __name__ == "__main__":
         model, optimizer, start_epoch, loss, batch_size, lr, focal_loss_weights = load_checkpoint(model, optimizer, load_model_path)
         print(f"Model loaded from {load_model_path}. Starting from epoch {start_epoch}.")
     model = model.to(DEVICE)
-    optimizer = optimizer.to(DEVICE)
     print(f"Model is on device {next(model.parameters()).device}")
 
     # Initialize loss function

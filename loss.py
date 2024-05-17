@@ -26,6 +26,7 @@ class FocalLoss(nn.Module):
         focal_loss = self.alpha[targets] * (1-pt)**self.gamma * bce_loss
         return focal_loss.mean()
 
+
 class FocalTverskyLoss(nn.Module):
     def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu")):
         super(FocalTverskyLoss, self).__init__()
@@ -63,6 +64,7 @@ class FocalLossWith2d3d(nn.Module):
         """
         super(FocalLossWith2d3d, self).__init__()
         self.c_2d = 0.33 # constant that weighs importance of intermediate 2D class predictions in the loss function
+        self.c_2d = torch.Tensor([self.c_2d]).to(device)
         self.intermediate_loss = FocalLoss(alpha, gamma, device)
         self.final_loss = FocalLoss(alpha, gamma, device)
     
