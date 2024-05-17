@@ -142,7 +142,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
                 continue
             
-            valid_pred = model(valid_inputs)
+            valid_interm_pred, valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
             print(f"Validation Step: {i}, input size: {valid_inputs.shape}, Loss: {valid_loss}")
             
