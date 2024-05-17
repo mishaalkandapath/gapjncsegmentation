@@ -79,8 +79,5 @@ avg_accuracy = total_accuracy / num_samples
 avg_precision = total_precision / num_samples
 avg_recall = total_recall / num_samples
 avg_iou = total_iou / num_samples
-avg_tp = total_tp / num_samples
-avg_fp = total_fp / num_samples
-avg_tn = total_tn / num_samples
-avg_fn = total_fn / num_samples
 print(f"AVERAGE accuracy: {avg_accuracy:.4f}, precision: {avg_precision:.4f}, recall: {avg_recall:.4f}, iou: {avg_iou:.4f}")
+print(f"TOTAL TP = {total_tp}, FP = {total_fp}, TN = {total_tn}, FN = {total_fn}")
