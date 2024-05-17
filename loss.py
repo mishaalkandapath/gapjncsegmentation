@@ -8,12 +8,11 @@ import torchvision.transforms as transforms
 import torchio as tio
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha, beta, gamma=3, device=torch.device("cpu")):
+    def __init__(self, alpha, gamma=3, device=torch.device("cpu")):
         super(FocalLoss, self).__init__()
         self.device = device
         self.gamma = gamma # larger gamma values focus more on hard examples
         self.alpha = torch.tensor(alpha).to(device)
-        self.beta = torch.tensor(beta).to(device)
     
     def forward(self, inputs, targets):
         bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none") # (batch_size, class=2, depth, height, width)
@@ -53,11 +52,15 @@ class FocalTverskyLossWith2d3d(nn.Module):
     
 
 class FocalLossWith2d3d(nn.Module):
-    def __init__(self, alpha=0.8, beta=0.2, gamma=2, device=torch.device("cpu")):
+    def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
+        """ 
+        Args:
+            alpha: tensor of shape (2,) with the alpha values for the focal loss
+        """
         super(FocalLossWith2d3d, self).__init__()
         self.c_2d = 0.33 # constant that weighs importance of intermediate 2D class predictions in the loss function
-        self.intermediate_loss = FocalLoss(alpha, beta, gamma, device)
-        self.final_loss = FocalLoss(alpha, beta, gamma, device)
+        self.intermediate_loss = FocalLoss(alpha, gamma, device)
+        self.final_loss = FocalLoss(alpha, gamma, device)
     
     def forward(self, preds_2d, preds_3d, targets):
         loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss

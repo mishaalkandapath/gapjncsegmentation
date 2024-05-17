@@ -56,25 +56,21 @@ if __name__ == "__main__":
     load_model_path = args.load_model_path
     if load_model_path is not None:
         model, optimizer, start_epoch, loss, batch_size, lr, focal_loss_weights = load_checkpoint(model, optimizer, load_model_path)
+        print(f"Model loaded from {load_model_path}. Starting from epoch {start_epoch}.")
     model = model.to(DEVICE)
     print(f"Model is on device {next(model.parameters()).device}")
 
     # Initialize loss function
     print("Calculating alpha values for focal loss...")
-    if args.loss_type == "focal":
-        if args.alpha is None:
-            inverse_class_freq = get_inverse_class_frequencies(train_dataset)
-            alpha = torch.Tensor(inverse_class_freq)
-            alpha = scale_to_sum_to_one(alpha).to(DEVICE)
-        else:
-            alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
-        print(f"Alpha values: {alpha}")
-        gamma = args.gamma
-        criterion = FocalLoss(alpha=alpha, gamma=gamma, device=DEVICE)
-    elif args.loss_type == "focal_tversky":
-        criterion = FocalTverskyLoss(alpha =args.alpha, beta= 1- args.alpha, gamma=args.gamma, device=DEVICE)
+    if args.alpha is None:
+        inverse_class_freq = get_inverse_class_frequencies(train_dataset)
+        alpha = torch.Tensor(inverse_class_freq)
+        alpha = scale_to_sum_to_one(alpha).to(DEVICE)
     else:
-        print("Invalid loss type. Exiting...")
+        alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
+    print(f"Alpha values: {alpha}")
+    gamma = args.gamma
+    criterion = FocalLoss(alpha=alpha, gamma=gamma, device=DEVICE)
     print("Loss function initialized.")
     
     # Initialize wandb
