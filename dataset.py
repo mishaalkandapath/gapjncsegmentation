@@ -1,3 +1,6 @@
+"""
+dataset.py: Contains the SliceDataset class for loading 3D subvolumes of 3D EM images
+"""
 import os
 import cv2
 import numpy as np;

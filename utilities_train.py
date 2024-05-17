@@ -1,3 +1,7 @@
+"""
+Utility functions for training the model
+"""
+
 import os
 import torch 
 import wandb
@@ -165,7 +169,6 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
     wandb.log({"Table" : total_table})
     wandb.finish()
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
-
 
 def train_with_intermediate_pred(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, num_predictions_to_log:int=5) -> None:
     """ 

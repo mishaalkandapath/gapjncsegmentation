@@ -8,7 +8,7 @@ from utilities import *
 from models import *
 from dataset import *
 from loss import *
-from train_utilities import *
+from utilities_train import *
     
 if __name__ == "__main__":  
     # --- Setup device, random seed, and parse arguments ---

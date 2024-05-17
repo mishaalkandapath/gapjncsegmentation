@@ -1,3 +1,6 @@
+""" 
+Utility functions for visualization, processing data, and saving/loading models
+"""
 import os
 import cv2
 import random
@@ -8,7 +11,105 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 from typing import Tuple
+from matplotlib import pyplot as plt
 
+# --- saving and loading models ---
+def checkpoint(model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights, path):
+    """ Save model checkpoint
+    
+    Args:
+        model (nn.Module): model to save
+        optimizer (torch.optim): optimizer to save
+        epoch (int): epoch number
+        loss (float): loss value
+        batch_size (int): batch size
+        lr (float): learning rate
+        focal_loss_weights (Tuple[float, float]): weights for focal loss
+        path (str): path to save the checkpoint
+    """
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': loss,
+        'batch_size': batch_size,
+        'lr': lr,
+        'focal_loss_weights': focal_loss_weights
+    }, path)
+
+def load_checkpoint(model, optimizer, path):
+    """ Load model checkpoint
+    
+    Args:
+        model (nn.Module): model to load checkpoint
+        optimizer (torch.optim): optimizer to load checkpoint
+        path (str): path to load the checkpoint
+        
+    Returns:
+        model (nn.Module): loaded model
+        optimizer (torch.optim): loaded optimizer
+        epoch (int): epoch number
+        loss (float): loss value
+        batch_size (int): batch size
+        lr (float): learning rate
+        focal loss weights (Tuple[float, float]): weights for focal loss
+    """
+    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    checkpoint = torch.load(path, map_location=DEVICE)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch = checkpoint['epoch']
+    loss = checkpoint['loss']
+    batch_size = checkpoint['batch_size']
+    lr = checkpoint['lr']
+    focal_loss_weights = checkpoint['focal_loss_weights']
+    
+    
+    return model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights
+
+# --- data processing ---
+def create_train_valid_test_dir(data_dir):
+    """ 
+    Create folders for train, valid, and test data for ground truth and original images in data_dir
+    """
+    img_dir = os.path.join(data_dir, "original")
+    mask_dir = os.path.join(data_dir, "ground_truth")
+    if not os.path.exists(img_dir):
+        os.makedirs(img_dir)
+    if not os.path.exists(mask_dir):
+        os.makedirs(mask_dir)
+    if not os.path.exists(os.path.join(img_dir, "train")):
+        os.makedirs(os.path.join(img_dir, "train"))
+    if not os.path.exists(os.path.join(img_dir, "valid")):
+        os.makedirs(os.path.join(img_dir, "valid"))
+    if not os.path.exists(os.path.join(img_dir, "test")):
+        os.makedirs(os.path.join(img_dir, "test"))   
+    if not os.path.exists(os.path.join(mask_dir, "train")):
+        os.makedirs(os.path.join(mask_dir, "train"))
+    if not os.path.exists(os.path.join(mask_dir, "valid")):
+        os.makedirs(os.path.join(mask_dir, "valid"))
+    if not os.path.exists(os.path.join(mask_dir, "test")):
+        os.makedirs(os.path.join(mask_dir, "test"))
+        
+def visualize_3d_slice(img: np.array, fig_ax: plt.Axes, title: str = ""):
+    """ 
+    Takes in a 3d image of shape (depth, height, width) and plots each z-slice as a row of 2D images on the given axis.
+    
+    Args:
+        img (np.array): 3D image to visualize (depth, height, width)
+        fig_ax (plt.Axes): matplotlib axis to plot on
+        title (str): title of the plot
+        
+    Sample Usage:
+        fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
+        visualize_3d_slice(input_img, ax[0], "Input")
+        visualize_3d_slice(label_img, ax[1], "Ground Truth")
+        visualize_3d_slice(pred_img, ax[2], "Prediction")
+    """
+    depth, width, height = img.shape
+    for i in range(depth):
+        fig_ax[i].imshow(img[i], cmap="gray")
+    fig_ax[0].set_ylabel(title)
 
 def get_z_y_x(file_name, pattern) -> Tuple[int, int, int]:
     """ Get z, y, x from file name using pattern
@@ -85,106 +186,127 @@ def get_3d_slice(z,y,x, img_files, mask_files, img_pattern, mask_pattern, depth=
             mask_3d[i+depth] = mask
     return img_3d, mask_3d
 
-def checkpoint(model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights, path):
-    """ Save model checkpoint
+# --- evaluation metrics ---
+def dice_coefficient(pred, target, smooth=1e-6):
+    """ Calculate dice coefficient for binary segmentation
     
     Args:
-        model (nn.Module): model to save
-        optimizer (torch.optim): optimizer to save
-        epoch (int): epoch number
-        loss (float): loss value
-        batch_size (int): batch size
-        lr (float): learning rate
-        focal_loss_weights (Tuple[float, float]): weights for focal loss
-        path (str): path to save the checkpoint
-    """
-    torch.save({
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'loss': loss,
-        'batch_size': batch_size,
-        'lr': lr,
-        'focal_loss_weights': focal_loss_weights
-    }, path)
-
-def load_checkpoint(model, optimizer, path):
-    """ Load model checkpoint
-    
-    Args:
-        model (nn.Module): model to load checkpoint
-        optimizer (torch.optim): optimizer to load checkpoint
-        path (str): path to load the checkpoint
+        pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
+        target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
+        smooth (float): smoothing factor to prevent division by zero
         
     Returns:
-        model (nn.Module): loaded model
-        optimizer (torch.optim): loaded optimizer
-        epoch (int): epoch number
-        loss (float): loss value
-        batch_size (int): batch size
-        lr (float): learning rate
-        focal loss weights (Tuple[float, float]): weights for focal loss
+        dice (torch.Tensor): dice coefficient
     """
-    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    checkpoint = torch.load(path, map_location=DEVICE)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    epoch = checkpoint['epoch']
-    loss = checkpoint['loss']
-    batch_size = checkpoint['batch_size']
-    lr = checkpoint['lr']
-    focal_loss_weights = checkpoint['focal_loss_weights']
-    
-    
-    return model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights
+    pred = pred.view(-1)
+    target = target.view(-1)
+    intersection = (pred * target).sum()
+    dice = (2. * intersection + smooth) / (pred.sum() + target.sum() + smooth)
+    return dice
 
-def crop_image(image, target_image_dims):
-    """ Crop the image to the target image dimensions
+def get_confusion_matrix(pred, target):
+    """ Calculate confusion matrix for binary segmentation
+    
+    [[true_positives, false_positives], [false_negatives, true_negatives]]
     
     Args:
-        image (np.array): image to crop
-        target_image_dims (Tuple[int, int]): target image dimensions 
-    """
-
-    target_size = target_image_dims[0]
-    image_size = len(image)
-    padding = (image_size - target_size) // 2
-
-    return image[
-        padding:image_size - padding,
-        padding:image_size - padding,
-        :,
-    ]
-
-def find_centroids(segmented_img):
-    """ Find the centroids of the segmented image
-    
-    Args:
-        segmented_img (np.array): segmented image
-    """
-    centroids = []
-    cont, hierarchy = cv2.findContours(segmented_img, 
-                            cv2.RETR_EXTERNAL, 
-                            cv2.CHAIN_APPROX_SIMPLE)
-    for c in cont:
-        # compute the center of the contour
-        M = cv2.moments(c)
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
-        centroids.append((cX, cY))
-    
-    return centroids
-
-def get_subset(dataset, subset_size):
-    """Get a subset of the dataset
-    
-    Args:
-        dataset (CaImagesDataset): dataset to get subset from
-        subset_size (int): size of the subset
+        pred (torch.Tensor): predicted mask, shape (depth, height, width)
+        target (torch.Tensor): target mask, shape (depth, height, width)
         
     Returns:
-        subset (CaImagesDataset): subset of the dataset
+        confusion_matrix (torch.Tensor): confusion matrix
     """
-    # get a random subset of the dataset
-    subset = torch.utils.data.Subset(dataset, random.sample(range(len(dataset)), subset_size))
-    return subset
+    pred = pred.view(-1) # flatten
+    target = target.view(-1) # flatten
+    true_positives = torch.sum(pred * target) # pred and target are both 1  
+    false_positives = torch.sum(pred * (1 - target)) # pred is 1, target is 0
+    false_negatives = torch.sum((1 - pred) * target) # pred is 0, target is 1
+    true_negatives = torch.sum((1 - pred) * (1 - target)) # pred and target are both 0
+    return true_positives, false_positives, false_negatives, true_negatives
+
+def get_iou(pred, target, smooth=1e-6):
+    """ Calculate intersection over union for binary segmentation
+    
+    Args:
+        pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
+        target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
+        smooth (float): smoothing factor to prevent division by zero
+        
+    Returns:
+        iou (torch.Tensor): intersection over union
+    """
+    pred = pred.view(-1) # flatten
+    target = target.view(-1) # flatten
+    intersection = (pred * target).sum() # (pred * target) is 1 if both are 1, 0 otherwise
+    union = pred.sum() + target.sum() - intersection
+    iou = (intersection + smooth) / (union + smooth)
+    return iou
+
+def get_precision(pred, target, smooth=1e-6):
+    """ Calculate precision for binary segmentation
+    
+    Args:
+        pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
+        target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
+        smooth (float): smoothing factor to prevent division by zero
+        
+    Returns:
+        precision (torch.Tensor): precision
+    """
+    pred = pred.view(-1)
+    target = target.view(-1)
+    true_positives = (pred * target).sum()
+    false_positives = pred.sum() - true_positives
+    precision = (true_positives + smooth) / (true_positives + false_positives + smooth)
+    return precision
+
+def get_recall(pred, target, smooth=1e-6):
+    """ Calculate recall for binary segmentation
+    
+    Args:
+        pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
+        target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
+        smooth (float): smoothing factor to prevent division by zero
+        
+    Returns:
+        recall (torch.Tensor): recall
+    """
+    pred = pred.view(-1)
+    target = target.view(-1)
+    true_positives = (pred * target).sum()
+    false_negatives = target.sum() - true_positives
+    recall = (true_positives + smooth) / (true_positives + false_negatives + smooth)
+    return recall
+
+def get_f1_score(pred, target, smooth=1e-6):
+    """ Calculate f1 score for binary segmentation
+    
+    Args:
+        pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
+        target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
+        smooth (float): smoothing factor to prevent division by zero
+        
+    Returns:
+        f1 (torch.Tensor): f1 score
+    """
+    prec = precision(pred, target, smooth)
+    rec = recall(pred, target, smooth)
+    f1 = 2 * (prec * rec) / (prec + rec)
+    return f1
+
+def get_accuracy(pred, target):
+    """ Calculate accuracy for binary segmentation
+    
+    Args:
+        pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
+        target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
+        
+    Returns:
+        accuracy (torch.Tensor): accuracy
+    """
+    pred = pred.view(-1)
+    target = target.view(-1)
+    correct = (pred == target).sum()
+    total = pred.shape[0]
+    accuracy = correct / total
+    return accuracy

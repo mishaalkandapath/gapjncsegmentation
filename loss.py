@@ -1,3 +1,8 @@
+"""
+loss.py: Contains loss functions for training the UNet model, 
+and functions to calculate weights for class imbalance in the dataset
+"""
+
 import os
 import cv2
 import random
@@ -50,7 +55,6 @@ class FocalTverskyLossWith2d3d(nn.Module):
         loss_3d = self.final_loss(preds_3d, targets) # final 3D class predictions
         return loss_3d + self.c_2d * loss_2d
     
-
 class FocalLossWith2d3d(nn.Module):
     def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
         """ 
@@ -66,7 +70,6 @@ class FocalLossWith2d3d(nn.Module):
         loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss
         loss_3d = self.final_loss(preds_3d, targets)
         return loss_3d + self.c_2d * loss_2d
-
 
 def calculate_alpha(train_dataset):
     """ 

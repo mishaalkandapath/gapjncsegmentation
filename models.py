@@ -1,3 +1,8 @@
+""" 
+models.py: Contains the 2D-3D UNet model architecture for 3D segmentation
+adapted from the paper "3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation" by Cicek et al. (2016).
+"""
+
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
