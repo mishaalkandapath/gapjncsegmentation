@@ -12,8 +12,8 @@ class FocalLoss(nn.Module):
         super(FocalLoss, self).__init__()
         self.device = device
         self.gamma = gamma # larger gamma values focus more on hard examples
-        self.alpha = alpha.to(device) # focusing parameter in practice: set as inversely proportional class frequencies or hyperparameter tuning through cross-validation
-        self.beta = beta.to(device)
+        self.alpha = torch.tensor(alpha).to(device)
+        self.beta = torch.tensor(beta).to(device)
     
     def forward(self, inputs, targets):
         bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none") # (batch_size, class=2, depth, height, width)
