@@ -46,20 +46,20 @@ class FocalTverskyLossWith2d3d(nn.Module):
         self.intermediate_loss = FocalTverskyLoss(alpha, beta, gamma, device)
         self.final_loss = FocalTverskyLoss(alpha, beta, gamma, device)
     
-    def forward(self, preds_2d, preds_3d, targets, width=512, height=512):
+    def forward(self, preds_2d, preds_3d, targets):
         loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss
         loss_3d = self.final_loss(preds_3d, targets) # final 3D class predictions
         return loss_3d + self.c_2d * loss_2d
     
 
 class FocalLossWith2d3d(nn.Module):
-    def __init__(self, alpha, beta, gamma=2, device=torch.device("cpu")):
+    def __init__(self, alpha=0.8, beta=0.2, gamma=2, device=torch.device("cpu")):
         super(FocalLossWith2d3d, self).__init__()
         self.c_2d = 0.33 # constant that weighs importance of intermediate 2D class predictions in the loss function
         self.intermediate_loss = FocalLoss(alpha, beta, gamma, device)
         self.final_loss = FocalLoss(alpha, beta, gamma, device)
     
-    def forward(self, preds_2d, preds_3d, targets, width=512, height=512):
+    def forward(self, preds_2d, preds_3d, targets):
         loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss
         loss_3d = self.final_loss(preds_3d, targets)
         return loss_3d + self.c_2d * loss_2d

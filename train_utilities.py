@@ -103,7 +103,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
                 continue
             optimizer.zero_grad() # zero gradients (otherwise they accumulate)
-            pred = model(inputs)
+            intermediate_pred, pred = model(inputs)
             loss = criterion(pred, labels)
             loss.backward() # calculate gradients
             optimizer.step() # update weights based on calculated gradients
@@ -165,4 +165,109 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
     wandb.log({"Table" : total_table})
     wandb.finish()
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
+
+
+def train_with_intermediate_pred(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, num_predictions_to_log:int=5) -> None:
+    """ 
+    Train the model and log predictions to wandb.
+    
+    Args:
+        model (torch.nn.Module): model to train
+        train_loader (torch.utils.data.DataLoader): DataLoader for training data
+        valid_loader (torch.utils.data.DataLoader): DataLoader for validation data
+        criterion (torch.nn.Module): loss function
+        optimizer (torch.optim.Optimizer): optimizer
+        epochs (int): number of epochs to train for
+        batch_size (int): batch size for training
+        lr (float): learning rate
+        model_folder (str): directory to save model checkpoints
+        model_name (str): name of the model to save
+        num_predictions_to_log (int): number of predictions to log per epoch
+    """
+    depth, height, width = 5, 256, 256
+    total_table = wandb.Table(columns=['Epoch', 'Image'])
+    total_train_table = wandb.Table(columns=['Epoch', 'train_image'])
+    start = time.time()
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    for epoch in range(epochs):
+
+        train_artifact = wandb.Artifact(f"train" + str(wandb.run.id), type="predictions")
+        train_table = wandb.Table(columns=['Epoch', 'Image'])
+        num_train_logged = 0
+        for i, data in enumerate(train_loader):
+            print("Progress: {:.2%}".format(i/len(train_loader)))
+            inputs, labels = data
+            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            if (i == 0):
+                print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
+                print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
+                _, _, depth, height, width = inputs.shape # initialize depth, height, width
+            
+            if inputs.shape[2:] != (depth, height, width):
+                print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
+                continue
+            optimizer.zero_grad() # zero gradients (otherwise they accumulate)
+            intermediate_pred, pred = model(inputs)
+            loss = criterion(intermediate_pred, pred, labels)
+            loss.backward() # calculate gradients
+            optimizer.step() # update weights based on calculated gradients
+            print(f"Step: {i}, Loss: {loss}")
+            wandb.log({"loss": loss})
+
+            # Save predictions for each epoch
+            if num_train_logged < num_predictions_to_log:
+                print(f"Saving predictions for epoch {epoch} step {i}")
+                input_img = inputs.squeeze(0).squeeze(0).cpu().numpy()
+                label_img = labels[0][1].cpu().numpy()
+                pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
+                # pred_img = pred[0].detach().cpu().numpy()
+                
+                log_predictions(input_img, label_img, pred_img, epoch, i, train_table)
+                log_predictions(input_img, label_img, pred_img, epoch, i, total_train_table)
+                num_train_logged += 1
+            plt.close("all")
+        train_artifact.add(train_table, "train_predictions")
+        wandb.run.log_artifact(train_artifact)
+
+
+            
+        # one artifact per epoch
+        valid_artifact = wandb.Artifact(f"valid" + str(wandb.run.id), type="predictions")
+        valid_table = wandb.Table(columns=['Epoch', 'Image'])
+        num_logged = 0
+        for i, data in enumerate(valid_loader):
+            valid_inputs, valid_labels = data
+            valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
+            if valid_inputs.shape[2:] != (depth, height, width):
+                print(f"Skipping batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
+                continue
+            
+            valid_pred = model(valid_inputs)
+            valid_loss = criterion(valid_pred, valid_labels)
+            print(f"Validation Step: {i}, input size: {valid_inputs.shape}, Loss: {valid_loss}")
+            
+            # Save predictions for each epoch
+            if num_logged < num_predictions_to_log:
+                print(f"Saving predictions for epoch {epoch} step {i}")
+                input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
+                label_img = valid_labels[0][1].cpu().numpy()
+                pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
+                # pred_img = valid_pred[0].detach().cpu().numpy()
+                
+                log_predictions(input_img, label_img, pred_img, epoch, i, valid_table) # adds row to valid table
+                log_predictions(input_img, label_img, pred_img, epoch, i, total_table) # adds row to total table
+                num_logged += 1
+                
+            wandb.log({"valid_loss": valid_loss})
+            plt.close("all")
+        valid_artifact.add(valid_table, "predictions")
+        wandb.run.log_artifact(valid_artifact)
+
+        print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
+        print(f"Time elapsed: {time.time() - start} seconds")
+        checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(criterion.gamma, criterion.alpha), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
+    wandb.log({"Table" : total_table})
+    wandb.finish()
+    print(f"Training complete. Time elapsed: {time.time() - start} seconds")
+
 

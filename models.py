@@ -195,6 +195,10 @@ class UNet(nn.Module):
         Args:
             x (torch.Tensor): 5D input tensor (batch_size, channel=1, depth, height, width)
                 - note: in pytorch docs, (N, C, D, H, W) is used
+        
+        Returns:
+            intermediate (torch.Tensor): 5D tensor representing intermediate class predictions
+            final (torch.Tensor): 5D tensor representing final class predictions
         """
         # Encoder-Decoder Path (depth doesn't change)
         x, skip1_out = self.down_conv1(x) # x: (1, 64, 5, 150, 150)
