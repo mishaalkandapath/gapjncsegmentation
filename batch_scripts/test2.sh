@@ -13,4 +13,4 @@ module load scipy-stack gcc cuda opencv
 MODEL_PATH=/home/hluo/scratch/models/model_job20/model_job20_epoch_99.pth
 DATA_DIR=/home/hluo/scratch/small_data_256
 RESULTS_DIR=/home/hluo/scratch/results/test2a
-python test.py --model_path $MODEL_PATH --data_dir $DATA_DIR --results_dir $RESULTS_DIR
+python ~/gapjncsegmentation/test.py --model_path $MODEL_PATH --data_dir $DATA_DIR --results_dir $RESULTS_DIRtest.py --model_path $MODEL_PATH --data_dir $DATA_DIR --results_dir $RESULTS_DIR
