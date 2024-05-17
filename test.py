@@ -44,11 +44,16 @@ total_fn = 0
 # num_samples = 3
 num_samples = len(valid_dataset)
 
-for i in range(num_samples):
+for i in range(len(valid_dataset)):
     # get prediction
     image, mask = valid_dataset[i] # (channels, depth, height, width)
     image, mask = image.to(DEVICE), mask.to(DEVICE)
-    intermediate_pred, pred = model(image)
+    try:
+        intermediate_pred, pred = model(image)
+    except:
+        print(f"Error in sample {i}")
+        num_samples -= 1
+        continue
     pred = torch.argmax(pred[0], dim=0) # (depth, height, width)
     
     # calculate the metrics
@@ -59,6 +64,7 @@ for i in range(num_samples):
     tp, fp, fn, tn = get_confusion_matrix(pred=pred, target=mask[1])
     total_accuracy += accuracy
     total_precision += precision
+    if 
     total_recall += recall
     total_iou += iou
     total_tp += tp
@@ -75,9 +81,9 @@ for i in range(num_samples):
     
     print(f"TP = {tp}, FP = {fp}, TN = {tn}, FN = {fn}")
     print(f"Valid {i}: accuracy={accuracy:.4f}, precision={precision:.4f}, recall={recall:.4f}, iou={iou:.4f} | progress: {100*(i+1)/num_samples:.2f}%")
-avg_accuracy = total_accuracy / num_samples
-avg_precision = total_precision / num_samples
-avg_recall = total_recall / num_samples
-avg_iou = total_iou / num_samples
-print(f"AVERAGE accuracy: {avg_accuracy:.4f}, precision: {avg_precision:.4f}, recall: {avg_recall:.4f}, iou: {avg_iou:.4f}")
-print(f"TOTAL TP = {total_tp}, FP = {total_fp}, TN = {total_tn}, FN = {total_fn}")
+    avg_accuracy = total_accuracy / num_samples
+    avg_precision = total_precision / num_samples
+    avg_recall = total_recall / num_samples
+    avg_iou = total_iou / num_samples
+    print(f"AVERAGE accuracy: {avg_accuracy:.4f}, precision: {avg_precision:.4f}, recall: {avg_recall:.4f}, iou: {avg_iou:.4f}")
+    print(f"TOTAL TP = {total_tp}, FP = {total_fp}, TN = {total_tn}, FN = {total_fn}")
