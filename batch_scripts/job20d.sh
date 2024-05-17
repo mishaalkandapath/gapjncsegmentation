@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job20b
+#SBATCH --job-name=job20d
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=v100l:1
@@ -13,10 +13,10 @@ module load scipy-stack gcc cuda opencv
 EPOCHS=100
 BATCH_SIZE=1
 NUM_WORKERS=4
-LR=0.001
+LR=0.0001
 DATA_DIR=/home/hluo/scratch/select_data_512
 MODEL_DIR=/home/hluo/scratch/models
-MODEL_NAME="model_job20c"
+MODEL_NAME="model_job20d"
 LOAD_MODEL_PATH=/home/hluo/scratch/models/model_job20/model_job20_epoch_99.pth
 AUGMENT=True
 ALPHA=0.98
