@@ -52,11 +52,11 @@ if __name__ == "__main__":
     lr = args.lr
     epochs = args.epochs
     model = UNet()
+    model = model.to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     load_model_path = args.load_model_path
     if load_model_path is not None:
         model, optimizer, start_epoch, loss, batch_size, lr, focal_loss_weights = load_checkpoint(model, optimizer, load_model_path)
-    model = model.to(DEVICE)
     print(f"Model is on device {next(model.parameters()).device}")
 
     # Initialize loss function
