@@ -69,8 +69,9 @@ if __name__ == "__main__":
     else:
         alpha = args.alpha
         beta = args.alpha
+    gamma = args.gamma
 
-    criterion = FocalTverskyLoss(alpha =alpha, beta= beta, gamma=args.gamma, device=DEVICE)
+    criterion = FocalTverskyLoss(alpha =alpha, beta= beta, gamma=gamma, device=DEVICE)
 
     print("Loss function initialized.")
     
