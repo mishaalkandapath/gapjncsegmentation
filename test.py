@@ -67,8 +67,8 @@ for i in range(num_samples):
     
     # save the results
     fig, ax = plt.subplots(3, 5, figsize=(15, 5), num=f"valid_{i}")
-    visualize_3d_slice(image[0], ax[0], "Input")
-    visualize_3d_slice(mask[0], ax[1], "Label")
+    visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")
+    visualize_3d_slice(mask[0].cpu().numpy(), ax[1], "Label")
     visualize_3d_slice(pred, ax[2], "Prediction")
     plt.savefig(f"{results_dir}/valid_{i}.png")
     plt.close("all")
