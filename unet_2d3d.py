@@ -62,16 +62,14 @@ if __name__ == "__main__":
     # Initialize loss function
     print("Calculating alpha values for focal loss...")
     if args.alpha is None:
-        class_frequencies = get_class_frequencies(train_dataset)
-        print(f"Class frequencies are {class_frequencies}")
-        alpha = torch.tensor(class_frequencies[0])
-        beta = torch.tensor(class_frequencies[1])
+        inverse_class_freq = get_inverse_class_frequencies(train_dataset)
+        alpha = torch.Tensor(inverse_class_freq)
+        alpha = scale_to_sum_to_one(alpha).to(DEVICE)
     else:
-        alpha = args.alpha
-        beta = args.alpha
+        alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
     gamma = args.gamma
-
-    criterion = FocalLossWith2d3d(alpha =alpha, beta= beta, gamma=gamma, device=DEVICE)
+    print(f"Alpha: {alpha},  Gamma: {gamma}")
+    criterion = FocalLossWith2d3d(alpha =alpha,amma=gamma, device=DEVICE)
 
     print("Loss function initialized.")
     
