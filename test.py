@@ -18,10 +18,13 @@ results_dir = args.results_dir
 if not os.path.exists(results_dir):
     os.makedirs(results_dir)
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 model = UNet()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights = load_checkpoint(model, optimizer, model_path)
 model = model.eval()
+model = model.to(DEVICE)
 print(f"Model loaded from {model_path}")
 
 x_valid_dir = os.path.join(data_dir, "original", "valid")
@@ -30,7 +33,6 @@ valid_dataset = SliceDataset(x_valid_dir, y_valid_dir)
 valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
 print(f"Validation dataset loaded from {x_valid_dir} and {y_valid_dir}")
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 total_accuracy = 0
 total_precision = 0
 total_recall = 0
