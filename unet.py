@@ -38,6 +38,36 @@ DATASETS = {
     "erased": (r"/home/mishaalk/scratch/gapjunc/train_datasets/erased_neurons/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/erased_neurons/gts"), 
     "tiny": (r"/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_mask/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_mask/gts")
 }
+
+def make_dataset_3d(x_new_dir, y_new_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=3):
+
+    height, width = 512, 512
+
+    # Get train and val dataset instances
+    augmentation = v2.Compose([
+        v2.RandomHorizontalFlip(p=0.5),
+        v2.RandomVerticalFlip(p=0.5),
+        v2.RandomApply([v2.RandomRotation(degrees=(0, 180))], p=0.4)
+    ])
+
+    if "tiny" in x_new_dir:
+        mask_neurons = "/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_mask/masks" if neuron_mask else None
+        mask_mito = "/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_mask/mito_masks" if mito_mask else None
+    else:
+        mask_neurons = "/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/masks" if neuron_mask else None
+        mask_mito = "/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/mito_masks" if mito_mask else None
+
+    dataset = SectionsDataset(
+        x_new_dir, y_new_dir, 
+        preprocessing=None,
+        image_dim = (width, height), augmentation=augmentation if aug else None,
+        chain_length=chain_length,
+        mask_neurons= mask_neurons,
+        mask_mito = mask_mito
+    )
+ 
+    train, valid = torch.utils.data.random_split(dataset, [len(dataset)*80//100, len(dataset)- len(dataset)*80//100])
+    return train, valid
                 
 def make_dataset_new(x_new_dir, y_new_dir, aug=False, neuron_mask=False, mito_mask=False):
     height, width = cv2.imread(os.path.join(x_new_dir, os.listdir(x_new_dir)[0])).shape[:2]
@@ -424,6 +454,7 @@ if __name__ == "__main__":
     parser.add_argument("--split", action="store_true")
     parser.add_argument("--mask_mito", action="store_true")
     parser.add_argument("--special", action="store_true")
+    parser.add_argument("--td", action="store_true")
 
 
     args = parser.parse_args()
@@ -451,8 +482,8 @@ if __name__ == "__main__":
         if args.dataset is None: print("----WARNING: RUNNING OLD DATASET----")
 
         #set the model and results path
-        model_folder += args.dataset+"/"
-        sample_preds_folder += args.dataset + "/"
+        model_folder += args.dataset+"/" if not args.td else args.dataset+"3d/"
+        sample_preds_folder += args.dataset + "/" if not args.td else args.dataset+"3d/"
 
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
         valid_loader = DataLoader(valid_dataset, batch_size=16, shuffle=False, num_workers=4)
@@ -460,7 +491,7 @@ if __name__ == "__main__":
 
         DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
 
-        if args.model_name is None: model = UNet().to(DEVICE) if not args.split else SplitUNet().to(DEVICE)
+        if args.model_name is None: model = UNet(three=args.td).to(DEVICE) if not args.split else SplitUNet(three=args.td).to(DEVICE)
         else: model = joblib.load(os.path.join(model_folder, args.model_name)) # load model
 
         if not args.infer:
@@ -521,13 +552,13 @@ if __name__ == "__main__":
                 inference_save_split(model, train_dataset, valid_dataset)
 
     else:
-        model_folder += "new_mito"
-        sample_preds_folder = sample_preds_folder+"/new_mask_mito/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch15.pk1"))
+        model_folder += "tiny"
+        sample_preds_folder = sample_preds_folder+"/tiny_mask_preds/"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch115.pk1"))
         model = model.to("cuda")
         model.eval()
 
-        x_dir, y_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/imgs", "/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/gts"
+        x_dir, y_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/imgs", "/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/gts"
 
         dataset = CaImagesDataset(x_dir, y_dir, preprocessing=None, augmentation=None, image_dim=(512, 512))
         imgs_files, gt_files = sorted(os.listdir(x_dir)), sorted(os.listdir(y_dir))
@@ -541,7 +572,7 @@ if __name__ == "__main__":
 
                 #infer:
                 x_tensor = image.to("cuda")
-                pred_mask = model(x_tensor) # [1, 2, 512, 512]
+                pred_mask, clss = model(x_tensor) # [1, 2, 512, 512]
                 # print(pred_mask.shape)
                 # pred_mask_binary = pred_mask.squeeze(0).detach()
                 pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
@@ -549,6 +580,9 @@ if __name__ == "__main__":
                 pred_mask_binary = pred_mask_binary.to("cpu")
                 for j in range(pred_mask_binary.shape[0]):
                     file_name = imgs_files[i]
+                    prfed_og = cv2.cvtColor(cv2.imread(sample_preds_folder+file_name), cv2.COLOR_BGR2GRAY)
+                    print(np.count_nonzero(prfed_og == pred_mask_binary[j].squeeze(0).numpy()))
+                    raise Exception
                     cv2.imwrite(sample_preds_folder+file_name, pred_mask_binary[j].squeeze(0).numpy())
                     i+=1
                     # class_list.append([file_name, classified[j].item()])

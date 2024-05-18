@@ -6,6 +6,7 @@ import re
 import csv
 from PIL import Image
 import matplotlib.pyplot as plt
+import threading, random
 
 BASE = "E:\Mishaal\sem_dauer_2\\"
 def only_junc_images_datast():
@@ -98,30 +99,73 @@ def shorten_pics():
             cv2.imwrite(BASE+"tiny_jnc_only\\mito_masks\\{}.png".format(img_files[i][:-4] + "_"+str(counter)), mito_masks[j])
             counter+=1
 
-def stitch_short(tiny_dir,key):
-    files = os.listdir(tiny_dir)
-    os.mkdir(tiny_dir+"stitched\\")
+def stitch_short(train_dir, preds_dir, s_dir):
+    pred_files = os.listdir(preds_dir)
+    pred_files.remove("classes.csv")
+    img_files = sorted(os.listdir(train_dir+"imgs/"), key=lambda x: (x.replace(re.findall(r"_\d+\.", x)[0], ""), int(re.findall(r"_\d+\.", x)[0][1:-1])))
+    seg_files = sorted(os.listdir(train_dir + "gts/"), key=lambda x: (x.replace(re.findall(r"_\d+\.", x)[0], ""), int(re.findall(r"_\d+\.", x)[0][1:-1])))
+    pred_files = sorted(pred_files, key=lambda x: (x.replace(re.findall(r"_\d+\.", x)[0], ""), int(re.findall(r"_\d+\.", x)[0][1:-1])))
 
-    assert len(files) % 3 == 0
+    all_saves_list = ThreadSafeList()
 
-    img_acc = []
-    base_count = None
-    for i in range(0, len(files)//3):
-        if key not in files[i]: continue
-        if i % 16 == 0 and i != 0:
-            #np.array(img_acc).reshape((512, 512))
-            np.concatenate([np.concatenate([img_acc[:4]], axis=1), np.concatenate([img_acc[4:8]], axis=1), np.concatenate([img_acc[8:12]], axis=1), np.concatenate([img_acc[12:16]], axis=1)], axis=0) 
-            cv2.imwrite(tiny_dir+"stitched\\{}.png".format(base_count[:-5]+".png"), img_acc)
-            img_acc = []
+    def helper_inside(img_files, seg_files, pred_files, save_dir):
+        img_acc, seg_acc, pred_acc = [], [], []
+        base_count = None
+        for i in tqdm(range(0, len(img_files))):
+            if i % 16 == 0 and i != 0:
+                #np.array(img_acc).reshape((512, 512))
+                img_acc = np.concatenate([np.concatenate(img_acc[:4], axis=1), np.concatenate(img_acc[4:8], axis=1), np.concatenate(img_acc[8:12], axis=1), np.concatenate(img_acc[12:16], axis=1)], axis=0) 
+                # assert not os.path.isfile(base_count.replace(re.findall(r"_\d+\.", base_count)[0], "_img."))
+                #all_saves_list.append((img_acc, save_dir+"{}".format(base_count.replace(re.findall(r"_\d+\.", base_count)[0], "_img."))))
+                cv2.imwrite(save_dir+"{}".format(base_count.replace(re.findall(r"_\d+\.", base_count)[0], "_img.")), img_acc)
+                img_acc = []
 
-        img = cv2.cvtColor(cv2.imread(tiny_dir+files[i]), cv2.COLOR_BGR2GRAY)
-        img_acc.append(img)
-        base_count = files[i]
+                # assert not os.path.isfile(base_count.replace(re.findall(r"_\d+\.", base_count)[0], "_sef."))
+                seg_acc = np.concatenate([np.concatenate(seg_acc[:4], axis=1), np.concatenate(seg_acc[4:8], axis=1), np.concatenate(seg_acc[8:12], axis=1), np.concatenate(seg_acc[12:16], axis=1)], axis=0) 
+                cv2.imwrite(save_dir+"{}".format(base_count.replace(re.findall(r"_\d+\.", base_count)[0], "_seg.")), seg_acc)
+                #all_saves_list.append((seg_acc, save_dir+"{}".format(base_count.replace(re.findall(r"_\d+\.", base_count)[0], "_seg."))))
+                seg_acc = []
+
+                # assert not os.path.isfile(base_count.replace(re.findall(r"_\d+\.", base_count)[0], "_pred."))
+                pred_acc = np.concatenate([np.concatenate(pred_acc[:4], axis=1), np.concatenate(pred_acc[4:8], axis=1), np.concatenate(pred_acc[8:12], axis=1), np.concatenate(pred_acc[12:16], axis=1)], axis=0) 
+                #all_saves_list.append((pred_acc, save_dir+"{}".format(base_count.replace(re.findall(r"_\d+\.", base_count)[0], "_pred."))))
+                cv2.imwrite(save_dir+"{}".format(base_count.replace(re.findall(r"_\d+\.", base_count)[0], "_pred.")), pred_acc)
+                pred_acc = []
+
+            img = cv2.cvtColor(cv2.imread(train_dir+"imgs/"+img_files[i]), cv2.COLOR_BGR2GRAY)
+            img_acc.append(img)
+            base_count = img_files[i]
+
+            seg = cv2.cvtColor(cv2.imread(train_dir+"gts/"+seg_files[i]), cv2.COLOR_BGR2GRAY)
+            seg_acc.append(seg)
+
+            pred = cv2.cvtColor(cv2.imread(preds_dir+pred_files[i]), cv2.COLOR_BGR2GRAY)
+            pred_acc.append(pred)
+        print("I did {} files".format(len(img_files)))
+
+    offsets = len(img_files)//16
+    threads = []
+    for j in range(11):
+        t = threading.Thread(target=helper_inside, args=(img_files[j*245*16 : (j+1)*245*16], seg_files[j*245*16 : (j+1)*245*16], pred_files[j*245*16 : (j+1)*245*16], s_dir))
+        threads.append(t)
+
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    print(all_saves_list.length())
 
 
 
 def mask_acc(gt, pred):
     return np.sum(gt == pred) / (gt.shape[0] * gt.shape[1])
+
+def mask_precision(gt, pred):
+    return np.sum(np.logical_and(gt == 255, pred == 255)) / np.sum(pred == 255)
+
+def mask_precision_generous(gt, pred):
+    new_gt = np.pad(gt, ((50, 50), (50, 50)), 'constant', constant_values=(0, 0))
+    new_gt = np.roll(new_gt, (50, -50, 50, -50), axis=(0, 0, 1, 1))
+    new_gt = new_gt[50:-50, 50:-50]
+    return np.sum((np.logical_and(gt == 255, pred == 255) + np.logical_and(new_gt == 255, pred == 255)) >= 1)/ (gt.shape[0] * gt.shape[1])
 
 def mask_acc_generous(gt, pred):
     new_gt = np.pad(gt, ((50, 50), (50, 50)), 'constant', constant_values=(0, 0))
@@ -136,52 +180,28 @@ def mask_recall(gt, pred):
     return np.sum(np.logical_and(gt == 255, pred == 255)) / np.sum(gt == 255)
 
 
-def mask_acc_split(results_dir, classes=False):
-    val_res = sorted(os.listdir(results_dir + "valid_res\\"))
-    train_res = sorted(os.listdir(results_dir + "train_res\\"))
-
-    val_classes, val_preds, val_gt, val_gcls = [], [], [], []
+def mask_acc_split(data_dir, results_dir, classes=False):
+    segs = sorted(os.listdir(data_dir))
+    train_res = sorted(os.listdir(results_dir))
     train_classes, train_preds, train_gt, train_gcls = [], [], [], []
 
     if classes:
-        v_cls_file, t_cls_file = open(results_dir + "val_classes.txt", "r"), open(results_dir + "train_classes.txt", "r")
-        v_cls, t_cls = csv.reader(v_cls_file), csv.reader(t_cls_file)
+        t_cls_file = open(results_dir + "classes.txt", "r")
+        t_cls = csv.reader(t_cls_file)
 
-    val_acc, val_recall, t_recall, t_acc = [], [], [], []
-    val_acc_gen, val_acc_iou, t_acc_gen, t_acc_iou = [], [], [], []
+    t_recall, t_acc = [], []
+    t_acc_gen, t_acc_iou = [], []
+    t_prec, t_prec_gen = [], []
 
-    for i, file in enumerate(val_res):
-        #find the _no
-        if "pred" in file: continue
-        try:
-            gt = plt.imread(results_dir + "valid_res\\" + file)
-            no = re.findall(r'_\d+', file)[0]
-            pred = plt.imread(results_dir + "valid_res\\" + file.replace("sample_gt__", "sample_pred_binary__"))
-
-            gt = gt >= 0.5
-        except: continue
-        if classes: 
-            cls = 1 if "True" in v_cls[no] else 0
-            true_cls = np.any(gt == 255).item()
-
-        val_acc.append(mask_acc(gt, pred))
-        val_recall.append(mask_recall(gt, pred))
-        val_acc_gen.append(mask_acc_generous(gt, pred))
-        val_acc_iou.append(iou_accuracy(gt, pred))
-        
-        val_preds.append(pred)
-        val_gt.append(gt)
-        if classes:
-            val_classes.append(cls)
-            val_gcls.append(true_cls)
-    
-    for i, file in enumerate(train_res):
-        if "pred" in file: continue
-        try:
-            gt = cv2.cvtColor(cv2.imread(results_dir + "train_res\\" + file), cv2.COLOR_BGR2GRAY)
-            no = re.findall(r'_\d+', file)[0]
-            pred = cv2.cvtColor(cv2.imread(results_dir + "train_res\\" + file.replace("sample_gt__", "sample_pred_binary__")), cv2.COLOR_BGR2GRAY)
-        except: continue
+    for i, file in tqdm(enumerate(train_res), total=len(train_res)):
+        if "classes" in file: continue
+        # try:
+        gt = cv2.cvtColor(cv2.imread(data_dir + segs[i]), cv2.COLOR_BGR2GRAY)
+        no = re.findall(r'_\d+', file)[0]
+        pred = cv2.cvtColor(cv2.imread(results_dir + file), cv2.COLOR_BGR2GRAY)
+    # except: 
+            
+        #     continue
         if classes:
             cls = 1 if "True" in t_cls[no] else 0
             true_cls = np.any(gt == 255).item()
@@ -190,6 +210,8 @@ def mask_acc_split(results_dir, classes=False):
         t_recall.append(mask_recall(gt, pred))
         t_acc_gen.append(mask_acc_generous(gt, pred))
         t_acc_iou.append(iou_accuracy(gt, pred))
+        t_prec_gen.append(mask_precision_generous(gt, pred))
+        t_prec.append(mask_precision(gt, pred))
 
         
         train_preds.append(pred)
@@ -199,25 +221,54 @@ def mask_acc_split(results_dir, classes=False):
             train_gcls.append(true_cls)
     
 
-    print("Validation set classifier accuracy {}".format(np.mean((np.array(val_classes) == np.array(val_gcls)))))
-    print("Training set classifier accuracy {}".format(np.mean((np.array(train_classes) == np.array(train_gcls)))))
-    print("Validation set mask accuracy {}".format(np.mean(val_acc)))
-    print("Training set mask accuracy {}".format(np.mean(t_acc)))
-    print("Validation set mask recall {}".format(np.mean(val_recall)))
-    print("Training set mask recall {}".format(np.mean(t_recall)))
-    print("Validation set mask accuracy generous {}".format(np.mean(val_acc_gen)))
-    print("Training set mask accuracy generous {}".format(np.mean(t_acc_gen)))
-    print("Validation set mask accuracy iou {}".format(np.mean(val_acc_iou)))
-    print("Training set mask accuracy iou {}".format(np.mean(t_acc_iou)))
+    print("Training set classifier accuracy {}".format(np.nanmean((np.array(train_classes) == np.array(train_gcls)))))
+    print("Training set mask accuracy {}".format(np.nanmean(t_acc)))
+    print("Training set mask recall {}".format(np.nanmean(t_recall)))
+    print("Training set mask accuracy generous {}".format(np.nanmean(t_acc_gen)))
+    print("Training set mask accuracy iou {}".format(np.nanmean(t_acc_iou)))
+    print("Training set mask prec {}".format(np.nanmean(t_prec)))
+    print("Training set mask prec generous {}".format(np.nanmean(t_prec_gen)))
+
 
 
 if __name__ == "__main__":
+    # save_dir = "/home/mishaalk/scratch/gapjunc/results/stitched_mito_preds/"
+    # left = {'SEM_dauer_2_image_export_s023_Y7_X13_img.png', 'SEM_dauer_2_image_export_s033_Y11_X6_img.png', 'SEM_dauer_2_image_export_s042_Y9_X11_img.png', 'SEM_dauer_2_image_export_s009_Y7_X15_img.png', 'SEM_dauer_2_image_export_s047_Y10_X8_img.png', 'SEM_dauer_2_image_export_s050_Y9_X7_img.png', 'SEM_dauer_2_image_export_s038_Y4_X10_img.png', 'SEM_dauer_2_image_export_s014_Y10_X11_img.png', 'SEM_dauer_2_image_export_s004_Y8_X5_img.png', 'SEM_dauer_2_image_export_s028_Y5_X11_img.png', 'SEM_dauer_2_image_export_s018_Y6_X15_img.png'}
 
-    # mask_acc_split("E:\\Mishaal\\GapJunction\\results\\tiny\\", classes=False)
+    # for file in tqdm(left):
+    #     img_acc, pred_acc, seg_acc = [], [], []
+    #     for i in range(16):
+    #         im = cv2.cvtColor(cv2.imread("/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/imgs/"+file[:-8]+"_{}.png".format(i)), cv2.COLOR_BGR2GRAY)
+    #         pred = cv2.cvtColor(cv2.imread("/home/mishaalk/scratch/gapjunc/results/tiny_mito_preds/"+file[:-8]+"_{}.png".format(i)), cv2.COLOR_BGR2GRAY)
+    #         seg = cv2.cvtColor(cv2.imread("/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/gts/"+file[:-8].replace("SEM_dauer_2_image_export_", "sem2dauer_gj_2d_training.vsseg_export_")+"_{}.png".format(i)), cv2.COLOR_BGR2GRAY)
+    #         img_acc.append(im)
+    #         pred_acc.append(pred)
+    #         seg_acc.append(seg)
+    #     img_acc = np.concatenate([np.concatenate(img_acc[:4], axis=1), np.concatenate(img_acc[4:8], axis=1), np.concatenate(img_acc[8:12], axis=1), np.concatenate(img_acc[12:16], axis=1)], axis=0) 
+    #     seg_acc = np.concatenate([np.concatenate(seg_acc[:4], axis=1), np.concatenate(seg_acc[4:8], axis=1), np.concatenate(seg_acc[8:12], axis=1), np.concatenate(seg_acc[12:16], axis=1)], axis=0) 
+    #     pred_acc = np.concatenate([np.concatenate(pred_acc[:4], axis=1), np.concatenate(pred_acc[4:8], axis=1), np.concatenate(pred_acc[8:12], axis=1), np.concatenate(pred_acc[12:16], axis=1)], axis=0) 
+
+    #     assert not os.path.isfile(save_dir+"{}".format(file[:-8] + "_pred.png")), file
+    #     assert not os.path.isfile(save_dir+"{}".format(file[:-8] + "_img.png")), file
+    #     assert not os.path.isfile(save_dir+"{}".format(file[:-8] + "_seg.png")), file
+
+        
+    #     cv2.imwrite(save_dir+"{}".format(file[:-8] + "_pred.png"), pred_acc)
+    #     cv2.imwrite(save_dir+"{}".format(file[:-8] + "_seg.png"), seg_acc)
+    #     cv2.imwrite(save_dir+"{}".format(file[:-8] + "_img.png"), img_acc)
+
+
+
+    mask_acc_split("/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/gts/", "/home/mishaalk/scratch/gapjunc/results/tiny_mito_preds/", classes=False)
+    print("-------")
+    mask_acc_split("/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/gts/", "/home/mishaalk/scratch/gapjunc/results/tiny_mask_preds/", classes=False)
+    # stitch_short("/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/",\
+    #               "/home/mishaalk/scratch/gapjunc/results/tiny_mito_preds/",\
+    #               "/home/mishaalk/scratch/gapjunc/results/stitched_mito_preds/")
 
 
     # erase_neurons()
-    shorten_pics()
+    # shorten_pics()
     # import shutil
 
     # os.mkdir(BASE+"tiny_jnc_only\\gts1\\")

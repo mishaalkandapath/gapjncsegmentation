@@ -51,23 +51,6 @@ class CaImagesDataset(torch.utils.data.Dataset):
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
 
-        # if "tiny" in images_dir:
-        #     print("---Class Balancing--")
-        #     #class balancing (65-35)
-        #     empty_segs, present_segs = [], []
-        #     for i in tqdm(range(len(self.image_paths))):
-        #         im = cv2.imread(self.mask_paths[i], cv2.COLOR_BGR2GRAY)
-        #         if len(np.unique(im)) == 2: present_segs.append(i)
-        #         else: empty_segs.append(i)
-        #     n_present = len(present_segs)
-        #     total = (n_present *100)//65
-        #     empty_segs = np.random.choices(np.array(empty_segs), k=total - n_present)
-        #     all_segs = empty_segs + present_segs
-        #     self.image_paths = [f for i, f in enumerate(self.image_path) if i in all_segs]
-        #     self.mask_paths = [f for i, f in enumerate(self.mask_paths) if i in all_segs]
-
-        #     print("Class balanced tiny has {} empty and {} present with a total of {} points".format(empty_segs, present_segs, len(self.image_paths)))
-
         if mask_neurons:
             assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "well shet"
             self.neuron_paths = [os.path.join(mask_neurons, neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_")) for neuron_id in sorted(os.listdir(images_dir))]
@@ -143,16 +126,157 @@ class CaImagesDataset(torch.utils.data.Dataset):
         # return length of 
         return len(self.image_paths)
 
+class SectionsDataset(torch.utils.data.Dataset):
+    
+    def __init__(
+            self, 
+            images_dir, 
+            masks_dir, 
+            augmentation=None, 
+            preprocessing=None,
+            image_dim = (512, 512),
+            chain_length=3,
+            mask_neurons=None,
+            mask_mito=None
+    ):    
+        
+        self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
+        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
+
+        if mask_neurons:
+            assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "illegal naming, feds on the way"
+            self.neuron_paths = [os.path.join(mask_neurons, neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_")) for neuron_id in sorted(os.listdir(images_dir))]
+        else: self.neuron_paths = None
+
+        if mask_mito:
+            self.mito_mask = [os.path.join(mask_mito, neuron_id) for neuron_id in sorted(os.listdir(images_dir))]
+        else:
+            self.mito_mask=None
+            
+        self.augmentation = augmentation 
+        self.preprocessing = preprocessing
+        self.image_dim = image_dim
+        self.chain_length = chain_length
+
+    def make_chain_paths(self):
+        
+        chain_img_paths, chain_seg_paths, chain_neuron_paths, chain_mito_paths = [], [], [] if self.neuron_paths else None, [] if self.neuron_paths else None
+        for i in range(len(chain_img_paths)):
+            imgs, segs, neurons, mitos = [self.image_paths[i]], [self.mask_paths[i]], [], []
+            img_path, seg_path = self.image_paths[i], self.mask_paths[i]
+            layer = re.findall(r's\d\d\d_', img_path)[0]
+
+            skip = False
+            for j in range(self.chain_length):
+                next_layer_1 = "s" + ("0" if int(layer[1:-1]) < 9-j else "00") + str(int(layer[1:-1])) + "_"
+                img_f_1 = img_path.replace(layer, next_layer_1)
+                seg_f_1 = seg_path.replace(layer, next_layer_1)
+                if self.neuron_paths:
+                    neuron_path = self.neuron_paths[i]
+                    neurons_f_1 = neuron_path.replace(layer, next_layer_1)
+                if self.mito_mask:
+                    mito_path = self.mito_mask[i]
+                    mito_f_1 = mito_path.replace(layer, next_layer_1)
+
+                if not os.path.isfile(img_f_1) or not os.path.isfile(seg_f_1) or (self.neuron_paths is None or os.path.isfile(neurons_f_1)) \
+                    or (self.mito_mask is None or os.path.isfile(mito_f_1)) : 
+                    skip = True
+                    break
+                imgs.append(img_f_1)
+                segs.append(seg_f_1)
+                if self.neuron_paths: neurons.append(neurons_f_1)
+                if self.mito_mask: mitos.append(mito_f_1)
+
+            if skip: continue
+
+            chain_img_paths.append(imgs)
+            chain_seg_paths.append(segs)
+
+            if self.neuron_paths: chain_neuron_paths.append(neurons)
+            if self.mito_mask: chain_mito_paths.append(mitos)  
+
+        self.image_paths, self.mask_paths = chain_img_paths, chain_seg_paths
+        if self.neuron_paths: self.neuron_paths = chain_neuron_paths
+        if self.mito_mask: self.mito_mask = chain_mito_paths
+
+    def __getitem__(self, i):
+        images = self.image_paths[i]
+        masks = self.mask_paths[i]
+        
+
+        img, m = [], []
+        if self.neuron_paths: neurons = []
+        if self.mito_mask: mitos = []
+        for j in range(self.chain_length):
+            # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
+            image = cv2.cvtColor(cv2.imread(images[j]), cv2.COLOR_BGR2GRAY) # each pixel is 
+            mask = cv2.cvtColor(cv2.imread(masks[j]), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
+            if self.neuron_paths: 
+                n = cv2.cvtColor(cv2.imread(self.neuron_paths[i][j]), cv2.COLOR_BGR2GRAY)
+                neurons.append(n)
+            if self.mito_mask: 
+                mi = np.array(Image.open(self.mito_mask[i][j]))
+                mitos.append(mi)
+            img.append(image)
+            m.append(mask)
+        
+        image, mask = np.stack(img, axis=0), np.stack(m, axis=0)
+        if self.neuron_paths: neurons = np.stack(neurons, axis=0)
+        if self.mito_maks: mitos = np.stack(mitos, axis=0)
+
+        # make sure each pixel is 0 or 255
+        
+        mask_labels = np.unique(mask)
+        mask[mask == 0] = 0
+        mask[mask == 255] = 1
+        
+        
+        # apply augmentations
+        flippant = random.random()
+        if self.augmentation and flippant < 0.25:
+            if flippant < 0.55:
+                #random rotation plus gaussian blur
+                sample = self.transform1(image=image, mask=mask)
+                image, mask = sample['image'], sample['mask']
+            elif flippant < 0.85:
+                #horizontal and vertical flip + gaussian blur
+                sample = self.transform2(image=image, mask=mask)
+                image, mask = sample['image'], sample['mask']
+            else:
+                #everything
+                sample = self.transform3(image=image, mask=mask)
+                image, mask = sample['image'], sample['mask']
+        
+        # apply preprocessing
+        _transform = []
+        _transform.append(v2.ToTensor())
+
+        mask = v2.Compose(_transform)(mask)
+        if len(mask_labels) == 1:
+            mask[:] = 0
+        else:
+            mask[mask != 0] = 1
+        ont_hot_mask = mask
+
+        _transform_img = _transform.copy()
+        image = v2.Compose(_transform_img)(image)
+            
+        return image, ont_hot_mask, neurons == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
+        
+    def __len__(self):
+        # return length of 
+        return len(self.image_paths)
+
 class DoubleConv(nn.Module):
     """(Conv2d -> BN -> ReLU) * 2"""
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, three=False):
         super(DoubleConv, self).__init__()
         self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1) if not three else nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels) if not three else nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1) if not three else nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels) if not three else nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True),
         )
 
@@ -161,10 +285,10 @@ class DoubleConv(nn.Module):
     
 class DownBlock(nn.Module):
     """Double Convolution followed by Max Pooling"""
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, three=False):
         super(DownBlock, self).__init__()
-        self.double_conv = DoubleConv(in_channels, out_channels)
-        self.down_sample = nn.MaxPool2d(2, stride=2)
+        self.double_conv = DoubleConv(in_channels, out_channels, three=three)
+        self.down_sample = nn.MaxPool2d(2, stride=2) if not three else nn.MaxPool3d(2, stride=2)
 
     def forward(self, x):
         skip_out = self.double_conv(x)
@@ -173,15 +297,16 @@ class DownBlock(nn.Module):
 
 class UpBlock(nn.Module):
     """Up Convolution (Upsampling followed by Double Convolution)"""
-    def __init__(self, in_channels, out_channels, up_sample_mode):
+    def __init__(self, in_channels, out_channels, up_sample_mode, three=False):
         super(UpBlock, self).__init__()
         if up_sample_mode == 'conv_transpose':
-            self.up_sample = nn.ConvTranspose2d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2)        
+            if three: self.up_sample = nn.ConvTranspose3d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2)        
+            else: self.up_sample = nn.ConvTranspose2d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2)        
         elif up_sample_mode == 'bilinear':
-            self.up_sample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            self.up_sample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True, three=three)
         else:
             raise ValueError("Unsupported `up_sample_mode` (can take one of `conv_transpose` or `bilinear`)")
-        self.double_conv = DoubleConv(in_channels, out_channels)
+        self.double_conv = DoubleConv(in_channels, out_channels, three=three)
 
     def forward(self, down_input, skip_input):
         x = self.up_sample(down_input)
@@ -190,24 +315,24 @@ class UpBlock(nn.Module):
 
 class UNet(nn.Module):
     """UNet Architecture"""
-    def __init__(self, out_classes=2, up_sample_mode='conv_transpose'):
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False):
         """Initialize the UNet model"""
         super(UNet, self).__init__()
         self.up_sample_mode = up_sample_mode
         # Downsampling Path
-        self.down_conv1 = DownBlock(1, 64) # 3 input channels --> 64 output channels
-        self.down_conv2 = DownBlock(64, 128) # 64 input channels --> 128 output channels
-        self.down_conv3 = DownBlock(128, 256) # 128 input channels --> 256 output channels
-        self.down_conv4 = DownBlock(256, 512) # 256 input channels --> 512 output channels
+        self.down_conv1 = DownBlock(1, 64, three=three) # 3 input channels --> 64 output channels
+        self.down_conv2 = DownBlock(64, 128, three=three) # 64 input channels --> 128 output channels
+        self.down_conv3 = DownBlock(128, 256, three=three) # 128 input channels --> 256 output channels
+        self.down_conv4 = DownBlock(256, 512, three=three) # 256 input channels --> 512 output channels
         # Bottleneck
-        self.double_conv = DoubleConv(512, 1024)
+        self.double_conv = DoubleConv(512, 1024, three=three)
         # Upsampling Path
-        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode) # 512 + 1024 input channels --> 512 output channels
-        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode)
-        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode)
-        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
+        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode, three=three) # 512 + 1024 input channels --> 512 output channels
+        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode, three=three)
+        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode, three=three)
+        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode, three=three)
         # Final Convolution
-        self.conv_last = nn.Conv2d(64, 1, kernel_size=1) 
+        self.conv_last = nn.Conv2d(64, 1, kernel_size=1) if not three else nn.Conv3d(64, 1, kernel_size=1)
 
     def forward(self, x):
         """Forward pass of the UNet model
@@ -227,29 +352,29 @@ class UNet(nn.Module):
 
 class SplitUNet(nn.Module):
     """UNet Architecture"""
-    def __init__(self, out_classes=2, up_sample_mode='conv_transpose'):
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False):
         """Initialize the UNet model"""
         super(SplitUNet, self).__init__()
         self.up_sample_mode = up_sample_mode
         # Downsampling Path
-        self.down_conv1 = DownBlock(1, 64) # 3 input channels --> 64 output channels
-        self.down_conv2 = DownBlock(64, 128) # 64 input channels --> 128 output channels
-        self.down_conv3 = DownBlock(128, 256) # 128 input channels --> 256 output channels
-        self.down_conv4 = DownBlock(256, 512) # 256 input channels --> 512 output channels
-        self.down_conv5 = DownBlock(1024, 1024)
-        self.down_conv6 = DownBlock(1024, 1024)
+        self.down_conv1 = DownBlock(1, 64, three=three) # 3 input channels --> 64 output channels
+        self.down_conv2 = DownBlock(64, 128, three=three) # 64 input channels --> 128 output channels
+        self.down_conv3 = DownBlock(128, 256, three=three) # 128 input channels --> 256 output channels
+        self.down_conv4 = DownBlock(256, 512, three=three) # 256 input channels --> 512 output channels
+        self.down_conv5 = DownBlock(1024, 1024, three=three)
+        self.down_conv6 = DownBlock(1024, 1024, three=three)
         # Bottleneck
-        self.double_conv = DoubleConv(512, 1024)
+        self.double_conv = DoubleConv(512, 1024, three=three)
         # Upsampling Path
-        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode) # 512 + 1024 input channels --> 512 output channels
-        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode)
-        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode)
-        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
+        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode, three=three) # 512 + 1024 input channels --> 512 output channels
+        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode, three=three)
+        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode, three=three)
+        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode, three=three)
         # Final Convolution
-        self.conv_last = nn.Conv2d(64, 1, kernel_size=1) 
+        self.conv_last = nn.Conv2d(64, 1, kernel_size=1) if not three else nn.Conv3d(64, 1, kernel_size=1)
 
         self.flats = nn.Sequential(OrderedDict([
-            ('flat1', nn.Linear(4096, 1024)),
+            ('flat1', nn.Linear((3 if three else 1) * 4096, 1024)),
             ('relu1', nn.ReLU()),
             ('flat2', nn.Linear(1024, 64)),
             ('relu2', nn.ReLU()),
