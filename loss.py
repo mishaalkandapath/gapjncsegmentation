@@ -65,6 +65,8 @@ class FocalLossWith2d3d(nn.Module):
         super(FocalLossWith2d3d, self).__init__()
         self.c_2d = 0.33 # constant that weighs importance of intermediate 2D class predictions in the loss function
         self.c_2d = torch.Tensor([self.c_2d]).to(device)
+        self.alpha = alpha
+        self.gamma = gamma
         self.intermediate_loss = FocalLoss(alpha, gamma, device)
         self.final_loss = FocalLoss(alpha, gamma, device)
     
