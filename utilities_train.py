@@ -231,8 +231,6 @@ def train_with_intermediate_pred(model: torch.nn.Module, train_loader: torch.uti
             plt.close("all")
         train_artifact.add(train_table, "train_predictions")
         wandb.run.log_artifact(train_artifact)
-
-
             
         # one artifact per epoch
         valid_artifact = wandb.Artifact(f"valid" + str(wandb.run.id), type="predictions")
@@ -245,8 +243,8 @@ def train_with_intermediate_pred(model: torch.nn.Module, train_loader: torch.uti
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
                 continue
             
-            valid_pred = model(valid_inputs)
-            valid_loss = criterion(valid_pred, valid_labels)
+            valid_intermediate_pred, valid_pred = model(valid_inputs)
+            valid_loss = criterion(valid_intermediate_pred, valid_pred, valid_labels)
             print(f"Validation Step: {i}, input size: {valid_inputs.shape}, Loss: {valid_loss}")
             
             # Save predictions for each epoch
