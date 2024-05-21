@@ -266,7 +266,7 @@ def train_with_intermediate_pred(model: torch.nn.Module, train_loader: torch.uti
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
-        checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(criterion.gamma, criterion.alpha), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
+        checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=criterion.alpha, path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
     wandb.log({"Table" : total_table})
     wandb.finish()
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")

@@ -64,7 +64,6 @@ for i in range(len(valid_dataset)):
     tp, fp, fn, tn = get_confusion_matrix(pred=pred, target=mask[1])
     total_accuracy += accuracy
     total_precision += precision
-    if 
     total_recall += recall
     total_iou += iou
     total_tp += tp
