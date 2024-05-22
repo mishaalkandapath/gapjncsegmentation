@@ -92,7 +92,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
     for epoch in range(epochs):
 
         train_artifact = wandb.Artifact(f"train" + str(wandb.run.id), type="predictions")
-        train_table = wand``b.Table(columns=['Epoch', 'Image'])
+        train_table = wandb.Table(columns=['Epoch', 'Image'])
         num_train_logged = 0
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)))
