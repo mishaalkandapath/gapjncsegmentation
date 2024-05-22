@@ -76,6 +76,7 @@ class SliceDataset(torch.utils.data.Dataset):
         # one-hot encode the mask (depth, height, width) --> (depth, height, width, num_classes=2)
         print("mask shape", mask.shape)
         print(np.unique(mask, return_counts=True))
+        mask[mask!=0]=1
         one_hot_mask = torch.nn.functional.one_hot(mask.squeeze(0).long(), num_classes=2)
         one_hot_mask = one_hot_mask.permute(3, 0, 1, 2).float() # (num_classes, depth, height, width)
         return image, one_hot_mask
