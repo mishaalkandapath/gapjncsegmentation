@@ -84,24 +84,24 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
         model_name (str): name of the model to save
         num_predictions_to_log (int): number of predictions to log per epoch
     """
-    depth, height, width = 5, 256, 256
     total_table = wandb.Table(columns=['Epoch', 'Image'])
     total_train_table = wandb.Table(columns=['Epoch', 'train_image'])
     start = time.time()
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     for epoch in range(epochs):
-
         train_artifact = wandb.Artifact(f"train" + str(wandb.run.id), type="predictions")
         train_table = wandb.Table(columns=['Epoch', 'Image'])
         num_train_logged = 0
         for i, data in enumerate(train_loader):
-            print("Progress: {:.2%}".format(i/len(train_loader)))
+            print("Progress: {:.2%}".format(i/len(train_loader)), end="\r")
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             if (i == 0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
+                print(f"Unique labels: {np.unique(labels.detach().numpy(), return_counts=True)}")
                 _, _, depth, height, width = inputs.shape # initialize depth, height, width
+                print(f"depth {depth}, height {height}, width {width}")
             
             if inputs.shape[2:] != (depth, height, width):
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
@@ -111,12 +111,11 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             loss = criterion(pred, labels)
             loss.backward() # calculate gradients
             optimizer.step() # update weights based on calculated gradients
-            print(f"Step: {i}, Loss: {loss}")
+            # print(f"Step: {i}, Loss: {loss}")
             wandb.log({"loss": loss})
 
             # Save predictions for each epoch
             if num_train_logged < num_predictions_to_log:
-                print(f"Saving predictions for epoch {epoch} step {i}")
                 input_img = inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = labels[0][1].cpu().numpy()
                 pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
@@ -126,10 +125,9 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
                 log_predictions(input_img, label_img, pred_img, epoch, i, total_train_table)
                 num_train_logged += 1
             plt.close("all")
+        print(f"Epoch: {epoch}, Loss: {loss}")
         train_artifact.add(train_table, "train_predictions")
         wandb.run.log_artifact(train_artifact)
-
-
             
         # one artifact per epoch
         valid_artifact = wandb.Artifact(f"valid" + str(wandb.run.id), type="predictions")
@@ -144,11 +142,10 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             
             valid_interm_pred, valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
-            print(f"Validation Step: {i}, input size: {valid_inputs.shape}, Loss: {valid_loss}")
             
             # Save predictions for each epoch
             if num_logged < num_predictions_to_log:
-                print(f"Saving predictions for epoch {epoch} step {i}")
+                # print(f"Saving predictions for epoch {epoch} step {i}")
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
                 pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
