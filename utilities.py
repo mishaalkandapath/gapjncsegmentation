@@ -20,6 +20,7 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from collections import OrderedDict
 from PIL import Image
+import re
 
 # import segmentation_models_pytorch.utils.metrics
 
@@ -53,7 +54,7 @@ class CaImagesDataset(torch.utils.data.Dataset):
 
         if mask_neurons:
             assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "well shet"
-            self.neuron_paths = [os.path.join(mask_neurons, neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_")) for neuron_id in sorted(os.listdir(images_dir))]
+            self.neuron_paths = [os.path.join(mask_neurons, neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_"))[:-4] for neuron_id in sorted(os.listdir(images_dir))]
         else: self.neuron_paths = None
 
         if mask_mito:
@@ -135,7 +136,7 @@ class SectionsDataset(torch.utils.data.Dataset):
             augmentation=None, 
             preprocessing=None,
             image_dim = (512, 512),
-            chain_length=3,
+            chain_length=4,
             mask_neurons=None,
             mask_mito=None
     ):    
@@ -145,7 +146,7 @@ class SectionsDataset(torch.utils.data.Dataset):
 
         if mask_neurons:
             assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "illegal naming, feds on the way"
-            self.neuron_paths = [os.path.join(mask_neurons, neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_")) for neuron_id in sorted(os.listdir(images_dir))]
+            self.neuron_paths = [path.replace("imgs", "masks") for path in self.image_paths]
         else: self.neuron_paths = None
 
         if mask_mito:
@@ -158,17 +159,19 @@ class SectionsDataset(torch.utils.data.Dataset):
         self.image_dim = image_dim
         self.chain_length = chain_length
 
+        # self.make_chain_paths()
+        print("Dataset has {} samples".format(len(self.image_paths)))
+
     def make_chain_paths(self):
-        
         chain_img_paths, chain_seg_paths, chain_neuron_paths, chain_mito_paths = [], [], [] if self.neuron_paths else None, [] if self.neuron_paths else None
-        for i in range(len(chain_img_paths)):
-            imgs, segs, neurons, mitos = [self.image_paths[i]], [self.mask_paths[i]], [], []
+        for i in range(len(self.image_paths)):
+            imgs, segs, neurons, mitos = [], [], [], []
             img_path, seg_path = self.image_paths[i], self.mask_paths[i]
             layer = re.findall(r's\d\d\d_', img_path)[0]
 
             skip = False
             for j in range(self.chain_length):
-                next_layer_1 = "s" + ("0" if int(layer[1:-1]) < 9-j else "00") + str(int(layer[1:-1])) + "_"
+                next_layer_1 = "s" + ("00" if int(layer[1:-1]) < 9-j else "0") + str(int(layer[1:-1])+j) + "_"
                 img_f_1 = img_path.replace(layer, next_layer_1)
                 seg_f_1 = seg_path.replace(layer, next_layer_1)
                 if self.neuron_paths:
@@ -178,10 +181,11 @@ class SectionsDataset(torch.utils.data.Dataset):
                     mito_path = self.mito_mask[i]
                     mito_f_1 = mito_path.replace(layer, next_layer_1)
 
-                if not os.path.isfile(img_f_1) or not os.path.isfile(seg_f_1) or (self.neuron_paths is None or os.path.isfile(neurons_f_1)) \
-                    or (self.mito_mask is None or os.path.isfile(mito_f_1)) : 
+                if not os.path.isfile(img_f_1) or not os.path.isfile(seg_f_1) or (self.neuron_paths is not None and not os.path.isfile(neurons_f_1)) \
+                    or (self.mito_mask is not None and not os.path.isfile(mito_f_1)) : 
                     skip = True
                     break
+                # print("Not skip!")
                 imgs.append(img_f_1)
                 segs.append(seg_f_1)
                 if self.neuron_paths: neurons.append(neurons_f_1)
@@ -194,35 +198,33 @@ class SectionsDataset(torch.utils.data.Dataset):
 
             if self.neuron_paths: chain_neuron_paths.append(neurons)
             if self.mito_mask: chain_mito_paths.append(mitos)  
+            # assert len(sum(chain_img_paths, start=[]))%3 == 0
 
         self.image_paths, self.mask_paths = chain_img_paths, chain_seg_paths
         if self.neuron_paths: self.neuron_paths = chain_neuron_paths
         if self.mito_mask: self.mito_mask = chain_mito_paths
 
     def __getitem__(self, i):
-        images = self.image_paths[i]
-        masks = self.mask_paths[i]
+        images = sorted(os.listdir(self.image_paths[i]))
+        masks = sorted(os.listdir(self.mask_paths[i]))
         
 
-        img, m = [], []
-        if self.neuron_paths: neurons = []
+        img = []
+        if self.neuron_paths: neurons = sorted(os.listdir(self.neuron_paths[i]))
         if self.mito_mask: mitos = []
+
+        mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], masks[1])), cv2.COLOR_BGR2GRAY)
         for j in range(self.chain_length):
-            # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
-            image = cv2.cvtColor(cv2.imread(images[j]), cv2.COLOR_BGR2GRAY) # each pixel is 
-            mask = cv2.cvtColor(cv2.imread(masks[j]), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
-            if self.neuron_paths: 
-                n = cv2.cvtColor(cv2.imread(self.neuron_paths[i][j]), cv2.COLOR_BGR2GRAY)
-                neurons.append(n)
-            if self.mito_mask: 
-                mi = np.array(Image.open(self.mito_mask[i][j]))
-                mitos.append(mi)
-            img.append(image)
-            m.append(mask)
+            im = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], images[j])), cv2.COLOR_BGR2GRAY)
+            img.append(im)
+            if self.neuron_paths:
+                neuron = cv2.cvtColor(cv2.imread(os.path.join(self.neuron_paths[i], neurons[j])), cv2.COLOR_BGR2GRAY)
+                neurons.append(neuron)
         
-        image, mask = np.stack(img, axis=0), np.stack(m, axis=0)
+        image = np.stack(img, axis=0)
         if self.neuron_paths: neurons = np.stack(neurons, axis=0)
-        if self.mito_maks: mitos = np.stack(mitos, axis=0)
+        mitos=[]
+        
 
         # make sure each pixel is 0 or 255
         
@@ -249,9 +251,9 @@ class SectionsDataset(torch.utils.data.Dataset):
         
         # apply preprocessing
         _transform = []
-        _transform.append(v2.ToTensor())
+        _transform.append(transforms.ToTensor())
 
-        mask = v2.Compose(_transform)(mask)
+        mask = transforms.Compose(_transform)(mask)
         if len(mask_labels) == 1:
             mask[:] = 0
         else:
@@ -259,9 +261,13 @@ class SectionsDataset(torch.utils.data.Dataset):
         ont_hot_mask = mask
 
         _transform_img = _transform.copy()
-        image = v2.Compose(_transform_img)(image)
+        image = transforms.Compose(_transform_img)(image)
+
+        image = torch.permute(image, (1, 2, 0))  
+
+        # ont_hot_mask = torch.permute(ont_hot_mask, (1, 2, 0))    
             
-        return image, ont_hot_mask, neurons == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
+        return image.unsqueeze(0), ont_hot_mask, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], torch.from_numpy(mitos[np.newaxis, :]) if self.mito_mask else []
         
     def __len__(self):
         # return length of 
@@ -318,33 +324,39 @@ class UNet(nn.Module):
     def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False):
         """Initialize the UNet model"""
         super(UNet, self).__init__()
+        self.three = three
         self.up_sample_mode = up_sample_mode
         # Downsampling Path
         self.down_conv1 = DownBlock(1, 64, three=three) # 3 input channels --> 64 output channels
         self.down_conv2 = DownBlock(64, 128, three=three) # 64 input channels --> 128 output channels
-        self.down_conv3 = DownBlock(128, 256, three=three) # 128 input channels --> 256 output channels
-        self.down_conv4 = DownBlock(256, 512, three=three) # 256 input channels --> 512 output channels
+        self.down_conv3 = DownBlock(128, 256) # 128 input channels --> 256 output channels
+        self.down_conv4 = DownBlock(256, 512) # 256 input channels --> 512 output channels
         # Bottleneck
-        self.double_conv = DoubleConv(512, 1024, three=three)
+        self.double_conv = DoubleConv(512, 1024)
         # Upsampling Path
-        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode, three=three) # 512 + 1024 input channels --> 512 output channels
-        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode, three=three)
-        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode, three=three)
-        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode, three=three)
+        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode) # 512 + 1024 input channels --> 512 output channels
+        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode)
+        self.up_conv2 = UpBlock(128+ 256, 128, self.up_sample_mode)
+        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
         # Final Convolution
-        self.conv_last = nn.Conv2d(64, 1, kernel_size=1) if not three else nn.Conv3d(64, 1, kernel_size=1)
+        self.conv_last = nn.Conv2d(64, 1, kernel_size=1)
 
     def forward(self, x):
         """Forward pass of the UNet model
         x: (16, 1, 512, 512)
         """
-        x, skip1_out = self.down_conv1(x) # x: (16, 64, 256, 256), skip1_out: (16, 64, 512, 512) (batch_size, channels, height, width)
+        # print(x.shape)
+        x, skip1_out = self.down_conv1(x) # x: (16, 64, 256, 256), skip1_out: (16, 64, 512, 512) (batch_size, channels, height, width)    
         x, skip2_out = self.down_conv2(x) # x: (16, 128, 128, 128), skip2_out: (16, 128, 256, 256)
+        if self.three: x = x.squeeze(-3)   
         x, skip3_out = self.down_conv3(x) # x: (16, 256, 64, 64), skip3_out: (16, 256, 128, 128)
         x, skip4_out = self.down_conv4(x) # x: (16, 512, 32, 32), skip4_out: (16, 512, 64, 64)
         x = self.double_conv(x) # x: (16, 1024, 32, 32)
         x = self.up_conv4(x, skip4_out) # x: (16, 512, 64, 64)
         x = self.up_conv3(x, skip3_out) # x: (16, 256, 128, 128)
+        if self.three: 
+            skip1_out = torch.mean(skip1_out, dim=2)
+            skip2_out = torch.mean(skip2_out, dim=2)
         x = self.up_conv2(x, skip2_out) # x: (16, 128, 256, 256)
         x = self.up_conv1(x, skip1_out) # x: (16, 64, 512, 512)
         x = self.conv_last(x) # x: (16, 1, 512, 512)
@@ -359,17 +371,17 @@ class SplitUNet(nn.Module):
         # Downsampling Path
         self.down_conv1 = DownBlock(1, 64, three=three) # 3 input channels --> 64 output channels
         self.down_conv2 = DownBlock(64, 128, three=three) # 64 input channels --> 128 output channels
-        self.down_conv3 = DownBlock(128, 256, three=three) # 128 input channels --> 256 output channels
-        self.down_conv4 = DownBlock(256, 512, three=three) # 256 input channels --> 512 output channels
-        self.down_conv5 = DownBlock(1024, 1024, three=three)
-        self.down_conv6 = DownBlock(1024, 1024, three=three)
+        self.down_conv3 = DownBlock(128, 256) # 128 input channels --> 256 output channels
+        self.down_conv4 = DownBlock(256, 512) # 256 input channels --> 512 output channels
+        self.down_conv5 = DownBlock(1024, 1024)
+        self.down_conv6 = DownBlock(1024, 1024)
         # Bottleneck
-        self.double_conv = DoubleConv(512, 1024, three=three)
+        self.double_conv = DoubleConv(512, 1024)
         # Upsampling Path
-        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode, three=three) # 512 + 1024 input channels --> 512 output channels
-        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode, three=three)
-        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode, three=three)
-        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode, three=three)
+        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode) # 512 + 1024 input channels --> 512 output channels
+        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode)
+        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode)
+        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
         # Final Convolution
         self.conv_last = nn.Conv2d(64, 1, kernel_size=1) if not three else nn.Conv3d(64, 1, kernel_size=1)
 
@@ -435,10 +447,89 @@ class FocalLoss(nn.Module):
             # loss = loss * (1 + (mito_mask * factor))#weight this a bit more. 
         if loss_mask != []: 
             #better way? TODO: get rid of this if statement
-            if len(loss.shape) > len(loss_mask): loss = loss * loss_mask.unsqueeze(-1)
+            if len(loss.shape) > len(loss_mask.shape): loss = loss * loss_mask.unsqueeze(-1)
             else: loss = loss * loss_mask # remove everything that is a neuron body, except ofc if the mito_mask was on. 
 
         return loss.mean() 
+
+class DiceLoss(nn.Module):
+    def __init__(self, eps=1e-6):
+        super(DiceLoss, self).__init__()
+        self.eps = eps
+    
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
+        #get the probabilities:
+        probs = nn.Sigmoid()(inputs)
+        n1 = probs * targets
+        inv_targets = 1 - targets
+
+        d = probs + targets
+
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
+        
+        if loss_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            inv_targets[loss_mask] = 0
+            d[loss_mask] = -2
+
+        n2 = (1-probs) * inv_targets
+    
+        # no need to use masks for balancing, coz of the loss fn here
+
+        n1 = n1.view(n1.shape[0], -1)
+        n2 = n2.view(n2.shape[0], -1)
+        d =  d.view(d.shape[0], -1)
+
+        return torch.mean(1 - (torch.sum(n1, dim=-1) + self.eps)/(torch.sum(d, dim=-1) + self.eps)
+                           - (torch.sum(n2, dim=-1) + self.eps)/(torch.sum(2-d, dim=-1) + self.eps))
+
+class SSLoss(nn.Module):
+    def __init__(self, eps=1e-6, lamda=0.05):
+        super(SSLoss, self).__init__()
+        self.eps = eps
+        self.lamda = 0.05
+
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
+        inputs = nn.Sigmoid()(inputs)
+        targets, inputs = targets.view(targets.shape[0], -1), inputs.view(inputs.shape[0], -1)
+        inv_targets = 1-targets
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
+        
+        if loss_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            inv_targets[loss_mask] = 0
+
+        return torch.mean(self.lmda * torch.sum(torch.pow((targets - inputs), 2) * targets, dim=-1)/(torch.sum(targets, dim=-1) + self.eps) +
+                           (1-self.lamda) * torch.sum(torch.pow((targets - inputs), 2) * inv_targets, dim=-1)/ (torch.sum(inv_targets, dim=-1) + self.eps))
+
+class GenDLoss(nn.Module):
+    def __init__(self):
+        super(GenDLoss, self).__init__()
+    
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
+        inputs = nn.Sigmoid()(inputs)
+        targets, inputs = targets.view(targets.shape[0], -1), inputs.view(inputs.shape[0], -1)
+
+        inputs = torch.stack([inputs, 1-inputs], dim=-1)
+        targets = torch.stack([targets, 1-targets], dim=-1)
+
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
+        
+        if loss_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            targets[loss_mask], inputs[loss_mask] = 0, 0 #0 them out in both masks
+
+        weights = 1 / torch.sum(torch.permute(targets, (0, 2, 1)), dim=-1).pow(2)
+        targets, inputs = torch.permute(targets, (0, 2, 1)), torch.permute(inputs, (0, 2, 1))
+
+        return torch.nanmean(1 - 2 * torch.nansum(weights * torch.nansum(targets * inputs, dim=-1), dim=-1)/\
+                          torch.nansum(weights * torch.nansum(targets + inputs, dim=-1), dim=-1))
 
 def get_training_augmentation():
     """ Add augmentation to the training data. Crop it to 256, 256 and flip it horizontally, vertically or rotate it by 90 degrees.

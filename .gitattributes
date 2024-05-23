@@ -1,0 +1,2 @@
+*.ps1 filter=lfs diff=lfs merge=lfs -text
+model5_epoch115.pk1 filter=lfs diff=lfs merge=lfs -text

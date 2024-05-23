@@ -36,10 +36,11 @@ table, class_labels = None, None #wandb stuff
 DATASETS = {
     "new": (r"/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/gts"), 
     "erased": (r"/home/mishaalk/scratch/gapjunc/train_datasets/erased_neurons/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/erased_neurons/gts"), 
-    "tiny": (r"/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_mask/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_mask/gts")
+    "tiny": (r"/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_mask/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_mask/gts"),
+    "new3d": (r"/home/mishaalk/scratch/gapjunc/train_datasets/3d_jnc_only/imgs", r"/home/mishaalk/scratch/gapjunc/train_datasets/3d_jnc_only/gts")
 }
 
-def make_dataset_3d(x_new_dir, y_new_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=3):
+def make_dataset_3d(x_new_dir, y_new_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=4):
 
     height, width = 512, 512
 
@@ -133,7 +134,7 @@ def make_dataset_old(aug=False):
     return train_dataset, valid_dataset
 
 def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epochs=30, decay=None):
-    global table, class_labels, model_folder, DEVICE
+    global table, class_labels, model_folder, DEVICE, args
     
     print(f"Using device: {DEVICE}")
     model_name = "model5"
@@ -157,14 +158,16 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
             if neuron_mask != []: neuron_mask = neuron_mask.to(DEVICE)
             if mito_mask != []: mito_mask = mito_mask.to(DEVICE)
             pred = model(inputs)
-            loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask, mito_mask)
+            loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] else [], mito_mask.squeeze(1) if mito_mask != [] else [])
             loss.backward() # calculate gradients (backpropagation)
+            if args.gendice and neuron_mask != []: torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
             optimizer.step() # update model weights (values for kernels)
             pbar.set_postfix(step = f"Step: {i}", loss = f"Loss: {loss}")
             loss_list.append(loss)
             wandb.log({"loss": loss})
             pbar.update(1)
             pbar.refresh()
+            break
 
         with torch.no_grad():
                     
@@ -176,8 +179,8 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
                 if valid_neuron_mask != []: valid_neuron_mask = valid_neuron_mask.to(DEVICE)
                 if valid_mito_mask != []: valid_mito_mask = valid_mito_mask.to(DEVICE)
                 valid_pred = model(valid_inputs)
-                valid_loss = criterion(valid_pred, valid_labels, valid_neuron_mask, valid_mito_mask)
-                mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy(), 
+                valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] else [], valid_mito_mask if valid_mito_mask !=[] else [])
+                mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy()[0] if args.td else valid_inputs[0].squeeze(0).cpu().numpy(), 
                                         masks = {
                                             "predictions" : {
                                 "mask_data" : (torch.round(nn.Sigmoid()(valid_pred[0].squeeze(0))) * 255).cpu().detach().numpy(),
@@ -455,7 +458,10 @@ if __name__ == "__main__":
     parser.add_argument("--mask_mito", action="store_true")
     parser.add_argument("--special", action="store_true")
     parser.add_argument("--td", action="store_true")
-
+    parser.add_argument("--focal", action="store_true")
+    parser.add_argument("--dice", action="store_true")
+    parser.add_argument("--gendice", action="store_true")
+    parser.add_argument("--ss", action="store_true")
 
     args = parser.parse_args()
 
@@ -474,7 +480,10 @@ if __name__ == "__main__":
         
         if args.dataset is not None:
             train_dir, train_segs = (DATASETS[args.dataset])
-            train_dataset, valid_dataset =  make_dataset_new(train_dir, train_segs, aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito)
+            if args.td:
+                train_dataset, valid_dataset =  make_dataset_3d(train_dir, train_segs, aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito)
+            else:
+                train_dataset, valid_dataset =  make_dataset_new(train_dir, train_segs, aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito)
         else: make_dataset_old(args.aug)
 
 
@@ -485,20 +494,20 @@ if __name__ == "__main__":
         model_folder += args.dataset+"/" if not args.td else args.dataset+"3d/"
         sample_preds_folder += args.dataset + "/" if not args.td else args.dataset+"3d/"
 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
-        valid_loader = DataLoader(valid_dataset, batch_size=16, shuffle=False, num_workers=4)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+        valid_loader = DataLoader(valid_dataset, batch_size=min(batch_size, 16), shuffle=False, num_workers=4)
         print("Data loaders created.")
 
         DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
 
         if args.model_name is None: model = UNet(three=args.td).to(DEVICE) if not args.split else SplitUNet(three=args.td).to(DEVICE)
-        else: model = joblib.load(os.path.join(model_folder, args.model_name)) # load model
+        else: model = joblib.load(os.path.join("/home/mishaalk/scratch/gapjunc/models/", args.model_name)) # load model
 
         if not args.infer:
 
             print("Current dataset {}".format(args.dataset))
 
-            if args.dataset != "tiny" and args.dataset != "erased" and args.dataset != "new":
+            if args.dataset != "tiny" and args.dataset != "erased" and args.dataset != "new" and args.dataset != "new3d":
                 print("MASKING NEURONS IS SET TO {}".format(args.mask_neurons))
 
                 #calc focal weighting:
@@ -522,11 +531,23 @@ if __name__ == "__main__":
             elif args.dataset == "erased":
                 cls_weights = torch.Tensor([1, 15])
             else:
-                cls_weights = torch.Tensor([1, 70])
+                cls_weights = torch.Tensor([1, 24])
 
             #init oprtimizers
-            criterion = FocalLoss(alpha=cls_weights, device=DEVICE)#torch.nn.BCEWithLogitsLoss()
-            optimizer = torch.optim.Adam(model.parameters(),lr=1e-4)
+            if args.gendice:
+                criterion = GenDLoss()
+                model_folder= model_folder[:-1] + "gendice"
+            elif args.dice:
+                criterion = DiceLoss()
+                model_folder = model_folder[:-1] + "dice"
+            elif args.ss:
+                criterion = SSLoss()
+                model_folder =model_folder[:-1] +"ssloss"
+            else:
+                criterion = FocalLoss(alpha=cls_weights, device=DEVICE)#torch.nn.BCEWithLogitsLoss()
+                model_folder= model_folder[:-1] +"focal"
+
+            optimizer = torch.optim.Adam(model.parameters(),lr=1e-5)
             decayed_lr = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
             loss_list = [] 
 
@@ -540,7 +561,7 @@ if __name__ == "__main__":
             start = time.time()
 
             if not args.split:
-                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=30)
+                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=100)
             else:
                 train_loop_split(model, train_loader, classifier_criterion, criterion, optimizer, valid_loader, epochs=200)
                 
@@ -552,13 +573,15 @@ if __name__ == "__main__":
                 inference_save_split(model, train_dataset, valid_dataset)
 
     else:
-        model_folder += "tiny"
-        sample_preds_folder = sample_preds_folder+"/tiny_mask_preds/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch115.pk1"))
+        #--- Personal debug area ---
+
+        model_folder += "new3d"
+        sample_preds_folder = sample_preds_folder+"/new3d_preds/"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch83.pk1"))
         model = model.to("cuda")
         model.eval()
 
-        x_dir, y_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/imgs", "/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/gts"
+        x_dir, y_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/imgs", "/home/mishaalk/scratch/gapjunc/train_datasets/tiny_jnc_only_full/gts"
 
         dataset = CaImagesDataset(x_dir, y_dir, preprocessing=None, augmentation=None, image_dim=(512, 512))
         imgs_files, gt_files = sorted(os.listdir(x_dir)), sorted(os.listdir(y_dir))
