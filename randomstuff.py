@@ -7,6 +7,7 @@ import csv
 from PIL import Image
 import matplotlib.pyplot as plt
 import threading, random
+import torch
 
 BASE = "E:\Mishaal\sem_dauer_2\\"
 def only_junc_images_datast():
@@ -161,11 +162,33 @@ def mask_acc(gt, pred):
 def mask_precision(gt, pred):
     return np.sum(np.logical_and(gt == 255, pred == 255)) / np.sum(pred == 255)
 
+# def mask_precision_generous(gt, pred):
+#     new_gt = np.pad(gt, ((50, 50), (50, 50)), 'constant', constant_values=(0, 0))
+#     new_gt = np.roll(new_gt, (50, -50, 50, -50), axis=(0, 0, 1, 1))
+#     new_gt = new_gt[50:-50, 50:-50]
+#     return np.sum((np.logical_and(gt == 255, pred == 255) + np.logical_and(new_gt == 255, pred == 255)) >= 1)/ (gt.shape[0] * gt.shape[1])
+
+
 def mask_precision_generous(gt, pred):
-    new_gt = np.pad(gt, ((50, 50), (50, 50)), 'constant', constant_values=(0, 0))
-    new_gt = np.roll(new_gt, (50, -50, 50, -50), axis=(0, 0, 1, 1))
+    # Padding the ground truth tensor
+    new_gt = torch.nn.functional.pad(gt, (50, 50, 50, 50), mode='constant', value=0)
+    
+    # Rolling the tensor 
+    new_gt = torch.roll(new_gt, shifts=(50, -50, 50, -50), dims=(0, 0, 1, 1))
+    
+    # Removing the padding
     new_gt = new_gt[50:-50, 50:-50]
-    return np.sum((np.logical_and(gt == 255, pred == 255) + np.logical_and(new_gt == 255, pred == 255)) >= 1)/ (gt.shape[0] * gt.shape[1])
+    
+    # Calculating the mask precision
+    gt_255 = gt == 255
+    pred_255 = pred == 255
+    new_gt_255 = new_gt == 255
+
+    intersection = (torch.logical_and(gt_255, pred_255) + torch.logical_and(new_gt_255, pred_255)) >= 1
+    precision = torch.sum(intersection).item() / (gt.shape[0] * gt.shape[1])
+    
+    return precision
+
 
 def mask_acc_generous(gt, pred):
     new_gt = np.pad(gt, ((50, 50), (50, 50)), 'constant', constant_values=(0, 0))
