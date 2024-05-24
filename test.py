@@ -66,10 +66,10 @@ for i in range(len(valid_dataset)):
     accuracy = get_accuracy(pred=pred, target=mask[1])
     precision = get_precision(pred=pred, target=mask[1])
     recall = get_recall(pred=pred, target=mask[1])
+    tp, fp, fn, tn = get_confusion_matrix(pred=pred, target=mask[1])
     mask[mask!=0] = 255
     precision_generous = mask_precision_generous(gt=mask[1], pred=pred)
     # recall_generous = recall_generous(gt=mask[1], pred=pred)
-    tp, fp, fn, tn = get_confusion_matrix(pred=pred, target=mask[1])
     total_accuracy += accuracy
     total_precision += precision
     total_recall += recall
@@ -93,6 +93,7 @@ for i in range(len(valid_dataset)):
     avg_precision = total_precision / num_samples
     avg_recall = total_recall / num_samples
     avg_iou = total_iou / num_samples
+    print("total pregen", total_precision_generous)
     avg_precision_generous = total_precision_generous / num_samples
     print(f"AVERAGE accuracy: {avg_accuracy:.4f}, precision: {avg_precision:.4f}, recall: {avg_recall:.4f}, iou: {avg_iou:.4f}")
     print(f"average precision gen: {avg_precision_generous}")
