@@ -45,6 +45,7 @@ total_tp = 0
 total_fp = 0
 total_tn = 0
 total_fn = 0
+total_precision_generous = 0
 # num_samples = 3
 num_samples = len(valid_dataset)
 
@@ -67,7 +68,7 @@ for i in range(len(valid_dataset)):
     recall = get_recall(pred=pred, target=mask[1])
     mask[mask!=0] = 255
     precision_generous = mask_precision_generous(gt=mask[1], pred=pred)
-    recall_generous = recall_generous(gt=mask[1], pred=pred)
+    # recall_generous = recall_generous(gt=mask[1], pred=pred)
     tp, fp, fn, tn = get_confusion_matrix(pred=pred, target=mask[1])
     total_accuracy += accuracy
     total_precision += precision
@@ -76,6 +77,7 @@ for i in range(len(valid_dataset)):
     total_tp += tp
     total_fp += fp
     total_tn += tn
+    total_precision_generous += precision_generous
     
     # save the results
     fig, ax = plt.subplots(3, 5, figsize=(15, 5), num=f"valid_{i}")
@@ -91,5 +93,7 @@ for i in range(len(valid_dataset)):
     avg_precision = total_precision / num_samples
     avg_recall = total_recall / num_samples
     avg_iou = total_iou / num_samples
+    avg_precision_generous = total_precision_generous / num_samples
     print(f"AVERAGE accuracy: {avg_accuracy:.4f}, precision: {avg_precision:.4f}, recall: {avg_recall:.4f}, iou: {avg_iou:.4f}")
+    print(f"average precision gen: {avg_precision_generous}")
     print(f"TOTAL TP = {total_tp}, FP = {total_fp}, TN = {total_tn}, FN = {total_fn}")

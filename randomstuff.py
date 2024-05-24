@@ -170,14 +170,13 @@ def mask_precision(gt, pred):
 
 
 def mask_precision_generous(gt, pred):
+    # (depth, height, width)
     # Padding the ground truth tensor
     new_gt = torch.nn.functional.pad(gt, (50, 50, 50, 50), mode='constant', value=0)
-    
     # Rolling the tensor 
-    new_gt = torch.roll(new_gt, shifts=(50, -50, 50, -50), dims=(0, 0, 1, 1))
-    
+    new_gt = torch.roll(new_gt, shifts=(50, -50, 50, -50), dims=(1, 1, 2, 2))
     # Removing the padding
-    new_gt = new_gt[50:-50, 50:-50]
+    new_gt = new_gt[:, 50:-50, 50:-50]
     
     # Calculating the mask precision
     gt_255 = gt == 255
