@@ -68,7 +68,9 @@ for i in range(len(valid_dataset)):
     recall = get_recall(pred=pred, target=mask[1])
     tp, fp, fn, tn = get_confusion_matrix(pred=pred, target=mask[1])
     mask[mask!=0] = 255
+    pred[pred!=0] = 255
     precision_generous = mask_precision_generous(gt=mask[1], pred=pred)
+    print("pregen", precision_generous)
     # recall_generous = recall_generous(gt=mask[1], pred=pred)
     total_accuracy += accuracy
     total_precision += precision
@@ -87,14 +89,27 @@ for i in range(len(valid_dataset)):
     plt.savefig(f"{results_dir}/valid_{i}.png")
     plt.close("all")
     
+    print("NUM SAMPLES SO FAR:", i+1)
     print(f"TP = {tp}, FP = {fp}, TN = {tn}, FN = {fn}")
     print(f"Valid {i}: accuracy={accuracy:.4f}, precision={precision:.4f}, recall={recall:.4f}, iou={iou:.4f} | progress: {100*(i+1)/num_samples:.2f}%")
-    avg_accuracy = total_accuracy / num_samples
-    avg_precision = total_precision / num_samples
-    avg_recall = total_recall / num_samples
-    avg_iou = total_iou / num_samples
+    avg_accuracy = total_accuracy / (i + 1)
+    avg_precision = total_precision / (i + 1)
+    avg_recall = total_recall / (i + 1)
+    avg_iou = total_iou /(i + 1)
     print("total pregen", total_precision_generous)
-    avg_precision_generous = total_precision_generous / num_samples
+    avg_precision_generous = total_precision_generous / (i + 1)
     print(f"AVERAGE accuracy: {avg_accuracy:.4f}, precision: {avg_precision:.4f}, recall: {avg_recall:.4f}, iou: {avg_iou:.4f}")
     print(f"average precision gen: {avg_precision_generous}")
     print(f"TOTAL TP = {total_tp}, FP = {total_fp}, TN = {total_tn}, FN = {total_fn}")
+    
+print(f"TP = {tp}, FP = {fp}, TN = {tn}, FN = {fn}")
+print(f"Valid {i}: accuracy={accuracy:.4f}, precision={precision:.4f}, recall={recall:.4f}, iou={iou:.4f} | progress: {100*(i+1)/num_samples:.2f}%")
+avg_accuracy = total_accuracy / num_samples
+avg_precision = total_precision / num_samples
+avg_recall = total_recall / num_samples
+avg_iou = total_iou / num_samples
+print("total pregen", total_precision_generous)
+avg_precision_generous = total_precision_generous / num_samples
+print(f"AVERAGE accuracy: {avg_accuracy:.4f}, precision: {avg_precision:.4f}, recall: {avg_recall:.4f}, iou: {avg_iou:.4f}")
+print(f"average precision gen: {avg_precision_generous}")
+print(f"TOTAL TP = {total_tp}, FP = {total_fp}, TN = {total_tn}, FN = {total_fn}")

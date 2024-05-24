@@ -2,11 +2,11 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
 #SBATCH --job-name=test7
-#SBATCH --output=%x-%j.out
-#SBATCH --error=%x-%j.out
+#SBATCH --output=hello%x-%j.out
+#SBATCH --error=what%x-%j.out
 #SBATCH --gpus-per-node=v100l:1
 #SBATCH --mem=64G
-#SBATCH --time=2:0:0
+#SBATCH --time=10:0:0
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
