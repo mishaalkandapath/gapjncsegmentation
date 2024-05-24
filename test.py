@@ -6,6 +6,7 @@ from models import *
 from utilities_train import *
 from utilities import *
 
+print("starting test")
 parser = argparse.ArgumentParser(description="Get evaluation metrics for the model")
 parser.add_argument("--model_path", type=str, required=True, help="Path to the model file")
 parser.add_argument("--data_dir", type=str, required=True, help="Path to the data directory")
