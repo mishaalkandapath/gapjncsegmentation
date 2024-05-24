@@ -62,8 +62,9 @@ if __name__ == "__main__":
 
     # Initialize loss function
     print("Calculating alpha values for focal loss...")
+    inverse_class_freq = get_inverse_class_frequencies(train_dataset)
+    print("note: inverse class freq", inverse_class_freq)
     if args.alpha is None:
-        inverse_class_freq = get_inverse_class_frequencies(train_dataset)
         alpha = torch.Tensor(inverse_class_freq)
         alpha = scale_to_sum_to_one(alpha).to(DEVICE)
     else:
