@@ -5,6 +5,7 @@ from dataset import *
 from models import *
 from utilities_train import *
 from utilities import *
+from randomstuff import *
 
 print("starting test")
 parser = argparse.ArgumentParser(description="Get evaluation metrics for the model")
@@ -35,7 +36,7 @@ y_valid_dir = os.path.join(data_dir, "ground_truth", folder_type)
 valid_dataset = SliceDataset(x_valid_dir, y_valid_dir)
 valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
 print(f"Validation dataset loaded from {x_valid_dir} and {y_valid_dir}")
-
+print(len(os.listdir(x_valid_dir)))
 total_accuracy = 0
 total_precision = 0
 total_recall = 0
@@ -64,6 +65,9 @@ for i in range(len(valid_dataset)):
     accuracy = get_accuracy(pred=pred, target=mask[1])
     precision = get_precision(pred=pred, target=mask[1])
     recall = get_recall(pred=pred, target=mask[1])
+    mask[mask!=0] = 255
+    precision_generous = mask_precision_generous(gt=mask[1], pred=pred)
+    recall_generous = recall_generous(gt=mask[1], pred=pred)
     tp, fp, fn, tn = get_confusion_matrix(pred=pred, target=mask[1])
     total_accuracy += accuracy
     total_precision += precision
