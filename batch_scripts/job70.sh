@@ -4,12 +4,13 @@
 #SBATCH --job-name=job70
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
-#SBATCH --gpus-per-node=1
+#SBATCH --gpus-per-node=a100l:1
 #SBATCH --mem=64G
 #SBATCH --time=22:0:0
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
+echo "starting"
 EPOCHS=20
 BATCH_SIZE=1
 NUM_WORKERS=4
