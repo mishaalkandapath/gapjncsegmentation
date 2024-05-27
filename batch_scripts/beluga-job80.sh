@@ -14,6 +14,7 @@ while [ ! -z "$(dcgmi -v | grep 'Hostengine build info:')" ]; do
   sleep 5;
 done
 
+echo "starting..."
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
@@ -28,4 +29,5 @@ LOAD_MODEL_PATH=/home/hluo/scratch/models/model_job20c/model_job20c_epoch_99.pth
 ALPHA=0.96
 GAMMA=2
 NUM_PREDICTIONS_TO_LOG=10
+echo "running script..."
 python /home/hluo/gapjncsegmentation/unet_3d.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --alpha $ALPHA --gamma $GAMMA --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG --load_model_path $LOAD_MODEL_PATH

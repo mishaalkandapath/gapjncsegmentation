@@ -10,7 +10,7 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-EPOCHS=2
+EPOCHS=25
 BATCH_SIZE=1
 NUM_WORKERS=4
 LR=0.001
