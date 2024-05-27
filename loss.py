@@ -26,7 +26,6 @@ class FocalLoss(nn.Module):
         focal_loss = self.alpha[targets] * (1-pt)**self.gamma * bce_loss
         return focal_loss.mean()
 
-
 class FocalTverskyLoss(nn.Module):
     def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu")):
         super(FocalTverskyLoss, self).__init__()
@@ -74,6 +73,24 @@ class FocalLossWith2d3d(nn.Module):
         loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss
         loss_3d = self.final_loss(preds_3d, targets)
         return loss_3d + self.c_2d * loss_2d
+
+
+class DiceLoss(nn.Module):
+    def __init__(self, alpha, gamma=3, device=torch.device("cpu")):
+        super(DiceLoss, self).__init__()
+        self.device = device
+        self.gamma = torch.tensor(gamma).to(device)
+        self.alpha = torch.tensor(alpha).to(device)
+    
+    def forward(self, inputs, targets):
+        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none") # (batch_size, class=2, depth, height, width)
+        pt = torch.exp(-bce_loss)
+        targets = targets.to(torch.int64) # convert to int64 for indexing
+        focal_loss = self.alpha[targets] * (1-pt)**self.gamma * bce_loss
+        return focal_loss.mean()
+
+
+
 
 def calculate_alpha(train_dataset):
     """ 

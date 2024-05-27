@@ -49,6 +49,7 @@ class SliceDataset(torch.utils.data.Dataset):
         # convert to tensor
         image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
+        mask[mask!=0]=1
         image = tio.ZNormalization()(image)
     
         # apply augmentations, if any
@@ -74,7 +75,6 @@ class SliceDataset(torch.utils.data.Dataset):
             image = additional_transforms(image)
             
         # one-hot encode the mask (depth, height, width) --> (depth, height, width, num_classes=2)
-        mask[mask!=0]=1
         one_hot_mask = torch.nn.functional.one_hot(mask.squeeze(0).long(), num_classes=2)
         one_hot_mask = one_hot_mask.permute(3, 0, 1, 2).float() # (num_classes, depth, height, width)
         return image, one_hot_mask

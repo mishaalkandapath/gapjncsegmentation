@@ -98,7 +98,7 @@ def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, val
             if (i == 0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
-                print(f"Unique labels: {np.unique(labels.detach().numpy(), return_counts=True)}")
+                # print(f"Unique labels: {np.unique(labels.detach().numpy(), return_counts=True)}")
                 _, _, depth, height, width = inputs.shape # initialize depth, height, width
                 print(f"depth {depth}, height {height}, width {width}")
             
