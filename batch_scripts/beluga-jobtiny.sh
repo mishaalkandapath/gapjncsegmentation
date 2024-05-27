@@ -10,9 +10,11 @@
 #SBATCH --gpus-per-node=1
 
 # Wait until DCGM is disabled on the node
+echo "before dcgmi..."
 while [ ! -z "$(dcgmi -v | grep 'Hostengine build info:')" ]; do
   sleep 5;
 done
+echo "dcgmi done!"
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
