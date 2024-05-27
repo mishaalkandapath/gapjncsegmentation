@@ -421,6 +421,8 @@ if __name__ == "__main__":
     parser.add_argument("--dice", action="store_true")
     parser.add_argument("--gendice", action="store_true")
     parser.add_argument("--ss", action="store_true")
+    parser.add_argument("--dicefocal", action="store_true")
+    parser.add_argument("--focalweight", default=0.5, type=int)
 
     args = parser.parse_args()
 
@@ -502,6 +504,10 @@ if __name__ == "__main__":
             elif args.ss:
                 criterion = SSLoss()
                 model_folder =model_folder[:-1] +"ssloss"
+            elif args.dicefocal:
+                floss, GenDLoss =  FocalLoss(alpha=cls_weights, device=DEVICE), GenDLoss()
+                criterion = lambda a,b,c,d: args.focalweight * floss(a, b, c, d) + (1 - args.focalweight) *gloss(a, b, c, d)
+                model_folder =model_folder[:-1] +"dicefocalloss"
             else:
                 criterion = FocalLoss(alpha=cls_weights, device=DEVICE)#torch.nn.BCEWithLogitsLoss()
                 model_folder= model_folder[:-1] +"focal"
