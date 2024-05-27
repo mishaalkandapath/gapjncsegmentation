@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=jobtiny
+#SBATCH --job-name=job80
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=v100l:1
@@ -10,13 +10,13 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-EPOCHS=2
+EPOCHS=30
 BATCH_SIZE=1
 NUM_WORKERS=4
 LR=0.001
-DATA_DIR=/home/hluo/scratch/tiny_dauer_data_128
+DATA_DIR=/home/hluo/scratch/select_dauer_data_128
 MODEL_DIR=/home/hluo/scratch/models
-MODEL_NAME="model_jobtinytmp"
+MODEL_NAME="model_job80"
 LOAD_MODEL_PATH=/home/hluo/scratch/models/model_job20c/model_job20c_epoch_99.pth
 ALPHA=0.96
 GAMMA=2

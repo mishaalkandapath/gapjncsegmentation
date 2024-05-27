@@ -148,7 +148,12 @@ def get_img_by_coords(z, y, x, img_files, img_pattern) -> np.array:
     """
     for i in range(len(img_files)):
         img_file = img_files[i]
-        z_, y_, x_ = get_z_y_x(img_file, img_pattern)
+        result = get_z_y_x(img_file, img_pattern)
+        if len(result) != 3:
+            print("result", result)
+            return None
+        else:
+            z_, y_, x_ = result
         if z == z_ and y == y_ and x == x_:
             return cv2.imread(img_file, cv2.IMREAD_GRAYSCALE)
     return None

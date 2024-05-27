@@ -4,9 +4,15 @@
 #SBATCH --job-name=jobtiny
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
-#SBATCH --gpus-per-node=v100l:1
-#SBATCH --mem=64G
+#SBATCH --mem=16G
 #SBATCH --time=11:0:0
+#SBATCH --export=ALL,DISABLE_DCGM=1
+#SBATCH --gpus-per-node=1
+
+# Wait until DCGM is disabled on the node
+while [ ! -z "$(dcgmi -v | grep 'Hostengine build info:')" ]; do
+  sleep 5;
+done
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
