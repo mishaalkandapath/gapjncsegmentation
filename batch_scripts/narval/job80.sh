@@ -10,11 +10,11 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-EPOCHS=2
+EPOCHS=50
 BATCH_SIZE=1
 NUM_WORKERS=4
-LR=0.01
-DATA_DIR=/home/hluo/scratch/select_dauer_data_128
+LR=0.001
+DATA_DIR=/home/hluo/scratch/select_dauer_data_512
 LOAD_MODEL_PATH=/home/hluo/scratch/models/model_job20c/model_job20c_epoch_99.pth
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
