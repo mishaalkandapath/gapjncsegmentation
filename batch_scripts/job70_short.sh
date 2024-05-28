@@ -6,17 +6,17 @@
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=v100l:1
 #SBATCH --mem=64G
-#SBATCH --time=10:0:0
+#SBATCH --time=11:0:0
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-EPOCHS=25
+EPOCHS=2
 BATCH_SIZE=1
 NUM_WORKERS=4
-LR=0.001
+LR=0.01
 DATA_DIR=/home/hluo/scratch/select_dauer_data_512
 MODEL_DIR=/home/hluo/scratch/models
-MODEL_NAME="model_job70short"
+MODEL_NAME="model_job70"
 AUGMENT=True
 ALPHA=0.96
 GAMMA=3
