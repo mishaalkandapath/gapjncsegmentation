@@ -109,7 +109,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             loss.backward() # calculate gradients
             optimizer.step() # update weights based on calculated gradients
             # print(f"Step: {i}, Loss: {loss}")
-            train_losses.append(loss)
+            train_losses.append(loss.detach().cpu().item())
 
             # Save predictions for each epoch
             if num_train_logged < num_predictions_to_log:
@@ -126,7 +126,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 ax[0, 0].set_ylabel("Input")
                 ax[1, 0].set_ylabel("Ground Truth")
                 ax[2, 0].set_ylabel("Prediction")
-                plt.savefig(os.path.join(results_folder, "train", f"epoch{epoch}_num{num_train_logged}.png"))
+                plt.savefig(os.path.join(results_folder, "train", f"num{num_train_logged}_epoch{epoch}.png"))
                 num_train_logged += 1
             plt.close("all")
         print(f"Epoch: {epoch}, Loss: {loss}")
@@ -158,7 +158,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 plt.savefig(os.path.join(results_folder, "valid", f"epoch{epoch}_num{num_train_logged}.png"))
                 num_logged += 1
                 
-            valid_losses.append(valid_loss)
+            valid_losses.append(valid_loss.detach().cpu().item())
             plt.close("all")
         try:
             print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
@@ -171,7 +171,6 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             'valid_losses': valid_losses
         }, os.path.join(results_folder, "losses.pth"))
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
-
 
 
 def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, num_predictions_to_log:int=5) -> None:
