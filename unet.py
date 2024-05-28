@@ -440,11 +440,11 @@ if __name__ == "__main__":
 
         
         if args.dataset is not None:
-            train_dir, train_segs = (DATASETS[args.dataset])
+            train_dir = (DATASETS[args.dataset])
             if args.td:
-                train_dataset, valid_dataset =  make_dataset_3d(train_dir, train_segs, aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito)
+                train_dataset, valid_dataset =  make_dataset_3d(train_dir aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito)
             else:
-                train_dataset, valid_dataset =  make_dataset_new(train_dir, train_segs, aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito)
+                train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito)
         else: make_dataset_old(args.aug)
 
 

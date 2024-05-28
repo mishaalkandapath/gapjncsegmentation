@@ -60,7 +60,7 @@ class CaImagesDataset(torch.utils.data.Dataset):
         else: self.neuron_paths = None
 
         if mask_mito:
-            self.mito_mask = [os.path.join(os.path.join(dataset_dir, f"{prefix}_mito"), neuron_id) for neuron_id.replace("png", "tiff") in sorted(os.path.join(dataset_dir, f"{prefix}_imgs"))]
+            self.mito_mask = [os.path.join(os.path.join(dataset_dir, f"{prefix}_mito"), neuron_id.replace("png", "tiff")) for neuron_id in sorted(os.path.join(dataset_dir, f"{prefix}_imgs"))]
         else:
             self.mito_mask=None
             
@@ -133,7 +133,7 @@ class SectionsDataset(torch.utils.data.Dataset):
     
     def __init__(
             self, 
-            dataset_dir 
+            dataset_dir ,
             augmentation=None, 
             preprocessing=None,
             image_dim = (512, 512),
