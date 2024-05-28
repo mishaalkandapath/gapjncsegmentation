@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job89
+#SBATCH --job-name=job90
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -17,7 +17,7 @@ LR=0.001
 DATA_DIR=/home/hluo/scratch/select_dauer_data_512
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
-MODEL_NAME="model_job89"
+MODEL_NAME="model_job90"
 ALPHA=0.992
 GAMMA=3
 NUM_PREDICTIONS_TO_LOG=10
