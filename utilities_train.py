@@ -84,10 +84,6 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         model_name (str): name of the model to save
         num_predictions_to_log (int): number of predictions to log per epoch
     """
-    if not os.path.exists(results_folder):
-        print("making results folders...")
-        os.makedirs(os.path.join(results_folder), "train")
-        os.makedirs(os.path.join(results_folder), "valid")
     start = time.time()
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_losses = []

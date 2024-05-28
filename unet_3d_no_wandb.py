@@ -41,7 +41,10 @@ if __name__ == "__main__":
     
     # Define results directory
     results_folder = os.path.join(args.results_dir, args.model_name)
-
+    if not os.path.exists(results_folder):
+        os.makedirs(results_folder)
+        os.makedirs(os.path.join(results_folder, "train"))
+        os.makedirs(os.path.join(results_folder, "valid"))
     # ----- Load data -----
     batch_size = args.batch_size
     num_workers = args.num_workers
