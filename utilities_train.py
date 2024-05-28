@@ -166,7 +166,10 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         except:
             print(f"Epoch: {epoch} | Loss: {loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
-        checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(criterion.gamma, criterion.alpha), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
+        try:
+            checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(criterion.gamma, criterion.alpha), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
+        except:
+            checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(0, 0), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
         torch.save({
             'train_losses': train_losses,
             'valid_losses': valid_losses
