@@ -40,7 +40,7 @@ DATASETS = {
     "new3d": r"/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split3d"
 }
                 
-def make_dataset_new(x_new_dir, y_new_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=False):
+def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=False):
     try:
         height, width = cv2.imread(os.path.join(x_new_dir, os.listdir(x_new_dir)[0])).shape[:2]
     except:
@@ -441,10 +441,7 @@ if __name__ == "__main__":
         
         if args.dataset is not None:
             train_dir = (DATASETS[args.dataset])
-            if args.td:
-                train_dataset, valid_dataset =  make_dataset_3d(train_dir aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito)
-            else:
-                train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito)
+            train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito, chain_length=args.td)
         else: make_dataset_old(args.aug)
 
 
@@ -528,7 +525,7 @@ if __name__ == "__main__":
             print("SAVING MODELS TO {}".format(model_folder))
 
             if not args.split:
-                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=90)
+                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=150)
             else:
                 train_loop_split(model, train_loader, classifier_criterion, criterion, optimizer, valid_loader, epochs=200)
                 

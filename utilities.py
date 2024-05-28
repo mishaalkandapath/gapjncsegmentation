@@ -50,7 +50,8 @@ class CaImagesDataset(torch.utils.data.Dataset):
     ):
         
         prefix = "train" if not split else "valid"
-        
+        images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
+        masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_imgs"))) if "DS" not in image_id]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts"))) if "DS" not in image_id]
 
@@ -223,7 +224,7 @@ class SectionsDataset(torch.utils.data.Dataset):
 
         mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], masks[1])), cv2.COLOR_BGR2GRAY)
 
-        for j in range(self.chain_length):
+        for j in range(4):
             im = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], images[j])), cv2.COLOR_BGR2GRAY)
             img.append(im)
             if self.neuron_paths:
