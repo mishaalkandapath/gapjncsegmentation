@@ -66,18 +66,23 @@ if __name__ == "__main__":
     print(f"Model is on device {next(model.parameters()).device}")
 
     # Initialize loss function
-    if args.alpha is None:
-        print("Calculating alpha values for focal loss...")
-        inverse_class_freq = get_inverse_class_frequencies(train_dataset)
-        print("note: inverse class freq", inverse_class_freq)
-        alpha = torch.Tensor(inverse_class_freq)
-        alpha = scale_to_sum_to_one(alpha).to(DEVICE)
+    if args.use_dice:
+        print("Using Dice Loss")
+        criterion = DiceLoss()
     else:
-        alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
-    print(f"Alpha values: {alpha}")
-    gamma = args.gamma
-    criterion = FocalLoss(alpha=alpha, gamma=gamma, device=DEVICE)
-    print("Loss function initialized.")
+        print("Using Focal Loss")
+        if args.alpha is None:
+            print("Calculating alpha values for focal loss...")
+            inverse_class_freq = get_inverse_class_frequencies(train_dataset)
+            print("note: inverse class freq", inverse_class_freq)
+            alpha = torch.Tensor(inverse_class_freq)
+            alpha = scale_to_sum_to_one(alpha).to(DEVICE)
+        else:
+            alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
+        print(f"Alpha values: {alpha}")
+        gamma = args.gamma
+        criterion = FocalLoss(alpha=alpha, gamma=gamma, device=DEVICE)
+        print("Loss function initialized.")
 
     # ----- Train model -----
     train_log_local(model=model, 

@@ -76,21 +76,16 @@ class FocalLossWith2d3d(nn.Module):
 
 
 class DiceLoss(nn.Module):
-    def __init__(self, alpha, gamma=3, device=torch.device("cpu")):
+    def __init__(self):
         super(DiceLoss, self).__init__()
-        self.device = device
-        self.gamma = torch.tensor(gamma).to(device)
-        self.alpha = torch.tensor(alpha).to(device)
     
-    def forward(self, inputs, targets):
-        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none") # (batch_size, class=2, depth, height, width)
-        pt = torch.exp(-bce_loss)
-        targets = targets.to(torch.int64) # convert to int64 for indexing
-        focal_loss = self.alpha[targets] * (1-pt)**self.gamma * bce_loss
-        return focal_loss.mean()
-
-
-
+    def forward(self, inputs, targets, smooth=1e-6):
+        inputs = inputs.view(-1) # flatten
+        targets = targets.view(-1) # flatten
+        intersection = (inputs * targets).sum() # (pred * target) is 1 if both are 1, 0 otherwise
+        dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+        dice_loss = 1 - dice
+        return dice_loss
 
 def calculate_alpha(train_dataset):
     """ 

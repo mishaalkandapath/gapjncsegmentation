@@ -32,6 +32,7 @@ def parse_arguments():
     parser.add_argument("--num_predictions_to_log", type=int, default=5, help="Number of predictions to log per epoch")
     parser.add_argument("--augment", type=bool, default=False, help="Whether to augment the data")
     parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
+    parser.add_argument("--use_dice", type=bool, default=False, help="Type of loss function to use")
     args = parser.parse_args()
     return args
 

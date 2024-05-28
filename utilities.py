@@ -203,9 +203,9 @@ def dice_coefficient(pred, target, smooth=1e-6):
     Returns:
         dice (torch.Tensor): dice coefficient
     """
-    pred = pred.view(-1)
-    target = target.view(-1)
-    intersection = (pred * target).sum()
+    pred = pred.view(-1) # flatten
+    target = target.view(-1) # flatten
+    intersection = (pred * target).sum() # (pred * target) is 1 if both are 1, 0 otherwise
     dice = (2. * intersection + smooth) / (pred.sum() + target.sum() + smooth)
     return dice
 
