@@ -89,17 +89,22 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_losses = []
     valid_losses = []
+    first_img=True
     for epoch in range(epochs):
         num_train_logged = 0
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)), end="\r")
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-            if (i == 0):
+            if (first_img):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
                 _, _, depth, height, width = inputs.shape # initialize depth, height, width
-                print(f"depth {depth}, height {height}, width {width}")
+                if height != width:
+                    continue
+                else:
+                    first_img=False
+                    print(f"depth {depth}, height {height}, width {width}")
             
             if inputs.shape[2:] != (depth, height, width):
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
