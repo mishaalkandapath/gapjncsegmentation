@@ -156,7 +156,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 ax[0, 0].set_ylabel("Input")
                 ax[1, 0].set_ylabel("Ground Truth")
                 ax[2, 0].set_ylabel("Prediction")
-                plt.savefig(os.path.join(results_folder, "valid", f"epoch{epoch}_num{num_train_logged}.png"))
+                plt.savefig(os.path.join(results_folder, "valid", f"epoch{epoch}_num{num_logged}.png"))
                 num_logged += 1
                 
             valid_losses.append(valid_loss.detach().cpu().item())
