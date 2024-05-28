@@ -33,6 +33,7 @@ def parse_arguments():
     parser.add_argument("--augment", type=bool, default=False, help="Whether to augment the data")
     parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
     parser.add_argument("--use_dice", type=bool, default=False, help="Type of loss function to use")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     args = parser.parse_args()
     return args
 
@@ -67,7 +68,6 @@ def setup_datasets_and_dataloaders(data_dir: str, batch_size: int, num_workers: 
     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
     return train_dataset, valid_dataset, train_loader, valid_loader
 
- 
 def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, num_predictions_to_log:int=5) -> None:
     """ 
     Train the model and log predictions locally.
@@ -180,7 +180,6 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             'valid_losses': valid_losses
         }, os.path.join(results_folder, "losses.pth"))
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
-
 
 def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, num_predictions_to_log:int=5) -> None:
     """ 

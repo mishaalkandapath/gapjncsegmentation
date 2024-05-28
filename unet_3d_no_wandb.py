@@ -15,14 +15,15 @@ if __name__ == "__main__":
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
     
-    # Setup random seed
-    seed = 42
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
     # Parse arguments
     args = parse_arguments()
-    
+   
+    # Setup random seed
+    seed = args.seed
+    print("seed:", seed)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+ 
     # ----- Define class labels and directories -----
     # Define class labels
     class_labels = {
