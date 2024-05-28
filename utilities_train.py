@@ -108,7 +108,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             loss = criterion(pred, labels)
             loss.backward() # calculate gradients
             optimizer.step() # update weights based on calculated gradients
-            print(f"Step: {i}, Loss: {loss}")
+            # print(f"Step: {i}, Loss: {loss}")
             train_losses.append(loss)
 
             # Save predictions for each epoch
