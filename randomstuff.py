@@ -346,10 +346,9 @@ def assemble_predictions(images_dir, preds_dir, gt_dir, overlay=True):
         # new_img = assemble(s_acc_img, 17, 19)
         # new_pred = assemble(s_acc_pred, 17, 19)
         # new_gt = assemble(s_acc_gt, 17, 19)
-        if overlay:
-            new_img = np.concatenate(s_acc_img, axis=0)
-            new_pred = np.concatenate(s_acc_pred, axis=0)
-            new_gt = np.concatenate(s_acc_gt, axis=0)
+        new_img = np.concatenate(s_acc_img, axis=0)
+        new_pred = np.concatenate(s_acc_pred, axis=0)
+        new_gt = np.concatenate(s_acc_gt, axis=0)
 
         def write_legend(text, color, img, org):
             # font 
@@ -369,9 +368,9 @@ def assemble_predictions(images_dir, preds_dir, gt_dir, overlay=True):
         #write them all in
         save_dir = "/Volumes/Normal/gapjnc/resuklts/assembledpredsnew512focal/"
         save_dir += "SEM_dauer_2_image_export_" + suffix + "/"
-
-        new_pred = cv2.addWeighted(new_img, 0.5, new_pred, 0.1, 0)
-        new_gt = cv2.addWeighted(new_img, 0.5, new_gt, 0.1, 0)
+        if overlay:
+            new_pred = cv2.addWeighted(new_img, 0.5, new_pred, 0.1, 0)
+            new_gt = cv2.addWeighted(new_img, 0.5, new_gt, 0.1, 0)
 
         for color in gt_colors:
             new_gt = write_legend(f"Confidence {gt_colors.index(color)}", color, new_gt, (450, 450+250*gt_colors.index(color)))
