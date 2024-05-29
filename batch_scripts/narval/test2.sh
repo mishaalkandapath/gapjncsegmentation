@@ -4,7 +4,7 @@
 #SBATCH --job-name=test2
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
-#SBATCH --gpus-per-node=a100l:1
+#SBATCH --gpus-per-node=a100:1
 #SBATCH --mem=64G
 #SBATCH --time=2:0:0
 module purge
