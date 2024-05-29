@@ -384,6 +384,44 @@ def assemble_predictions(images_dir, preds_dir, gt_dir, overlay=True):
         assert cv2.imwrite(save_dir + "SEM_dauer_2_image_export_" + suffix + "_pred.png", new_pred)
         assert cv2.imwrite(save_dir + "SEM_dauer_2_image_export_" + suffix + "_gt.png", new_gt)
 
+def centered_dataset(imgs_dir, gt_dir, mito_dir=None, neuron_dir=None, save_dir=None):
+    img_imgs, gt_imgs, mito_imgs, neuron_imgs =[], [], [], []
+
+    all_centers =[]
+
+    imgs = sorted(os.listdir(imgs_dir))
+    gts = sorted(os.listdir(gt_dir))
+    if mito_dir: mitos = sorted(os.listdir(mito_dir))
+    if neuron_dir: neurons = sorted(os.listdir(neuron_dir))
+
+    for i in range(len(imgs)):
+        im = cv2.cvtColor(cv2.imread(imgs[i]), cv2.COLOR_BGR2GRAY)
+        gts = cv2.imread(gts[i]) # in color
+        centers = center_img(gts)
+
+        gts = cv2.cvtColor(gts, cv2.COLOR_BGR2GRAY)
+        s = int(re.findall(r's\d\d\d', imgs[i])[0][1:])
+
+        for cx, cy in centers:
+            all_centers.append((cx, cy))
+            gt_imgs.append(deepcopy(gts[cy-256: cy+256, cx-256:cx+256]))
+            img_imgs.append(deepcopy(imgs[cy-256: cy+256, cx-256:cx+256]))
+            if mito_dir: mito_imgs.append(deepcopy(mitos[cy-256: cy+256, cx-256:cx+256]))
+            if neuron_dir: neuron_imgs.append(deepcopy(neurons[cy-256: cy+256, cx-256:cx+256]))
+    
+    os.mkdir(save_dir)
+    os.mkdir(os.path.join(save_dir, "imgs"))
+    os.mkdir(os.path.join(save_dir, "gts"))
+    if mito_dir: os.mkdir(os.path.join(save_dir, "mitos"))
+    if neuron_dir: os.mkdir(os.path.join(save_dir, "neurons"))
+
+    for i in range(len(img_imgs)):
+        s, cx, cy = all_centers[i]
+        cv2.imwrite(os.path.join(save_dir, f"imgs/s{s}_{cx}_{cy}.png"), img_imgs[i])
+        cv2.imwrite(os.path.join(save_dir, f"gts/{cx}_{cy}.png"), gt_imgs[i])
+        if mito_dir: cv2.imwrite(os.path.join(save_dir, f"mitos/{cx}_{cy}.png"), mito_imgs[i])
+        if neuron_dir: cv2.imwrite(os.path.join(save_dir, f"neurons/{cx}_{cy}.png"), neuron_imgs[i])
+
 if __name__ == "__main__":
     # save_dir = "/home/mishaalk/scratch/gapjunc/results/stitched_mito_preds/"
     # left = {'SEM_dauer_2_image_export_s023_Y7_X13_img.png', 'SEM_dauer_2_image_export_s033_Y11_X6_img.png', 'SEM_dauer_2_image_export_s042_Y9_X11_img.png', 'SEM_dauer_2_image_export_s009_Y7_X15_img.png', 'SEM_dauer_2_image_export_s047_Y10_X8_img.png', 'SEM_dauer_2_image_export_s050_Y9_X7_img.png', 'SEM_dauer_2_image_export_s038_Y4_X10_img.png', 'SEM_dauer_2_image_export_s014_Y10_X11_img.png', 'SEM_dauer_2_image_export_s004_Y8_X5_img.png', 'SEM_dauer_2_image_export_s028_Y5_X11_img.png', 'SEM_dauer_2_image_export_s018_Y6_X15_img.png'}
