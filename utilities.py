@@ -1,4 +1,4 @@
-""" 
+"""
 Utility functions for visualization, processing data, and saving/loading models
 """
 import os
@@ -6,7 +6,7 @@ import cv2
 import random
 import re
 import numpy as np
-import torch 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -16,7 +16,7 @@ from matplotlib import pyplot as plt
 # --- saving and loading models ---
 def checkpoint(model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights, path):
     """ Save model checkpoint
-    
+
     Args:
         model (nn.Module): model to save
         optimizer (torch.optim): optimizer to save
@@ -39,12 +39,12 @@ def checkpoint(model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights
 
 def load_checkpoint(model, optimizer, path):
     """ Load model checkpoint
-    
+
     Args:
         model (nn.Module): model to load checkpoint
         optimizer (torch.optim): optimizer to load checkpoint
         path (str): path to load the checkpoint
-        
+
     Returns:
         model (nn.Module): loaded model
         optimizer (torch.optim): loaded optimizer
@@ -63,13 +63,13 @@ def load_checkpoint(model, optimizer, path):
     batch_size = checkpoint['batch_size']
     lr = checkpoint['lr']
     focal_loss_weights = checkpoint['focal_loss_weights']
-    
-    
+
+
     return model, optimizer, epoch, loss, batch_size, lr, focal_loss_weights
 
 # --- data processing ---
 def create_train_valid_test_dir(data_dir):
-    """ 
+    """
     Create folders for train, valid, and test data for ground truth and original images in data_dir
     """
     img_dir = os.path.join(data_dir, "original")
@@ -83,32 +83,32 @@ def create_train_valid_test_dir(data_dir):
     if not os.path.exists(os.path.join(img_dir, "valid")):
         os.makedirs(os.path.join(img_dir, "valid"))
     if not os.path.exists(os.path.join(img_dir, "test")):
-        os.makedirs(os.path.join(img_dir, "test"))   
+        os.makedirs(os.path.join(img_dir, "test"))
     if not os.path.exists(os.path.join(mask_dir, "train")):
         os.makedirs(os.path.join(mask_dir, "train"))
     if not os.path.exists(os.path.join(mask_dir, "valid")):
         os.makedirs(os.path.join(mask_dir, "valid"))
     if not os.path.exists(os.path.join(mask_dir, "test")):
         os.makedirs(os.path.join(mask_dir, "test"))
-        
-def visualize_3d_slice(img: np.array, fig_ax: plt.Axes, title: str = ""):
-    """ 
+
+def visualize_3d_slice(img: np.array, fig_ax: plt.Axes, title: str = "", cmap="gray"):
+    """
     Takes in a 3d image of shape (depth, height, width) and plots each z-slice as a row of 2D images on the given axis.
-    
+
     Args:
         img (np.array): 3D image to visualize (depth, height, width)
         fig_ax (plt.Axes): matplotlib axis to plot on
         title (str): title of the plot
-        
+
     Sample Usage:
         fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
         visualize_3d_slice(input_img, ax[0], "Input")
         visualize_3d_slice(label_img, ax[1], "Ground Truth")
         visualize_3d_slice(pred_img, ax[2], "Prediction")
     """
-    depth, width, height = img.shape
+    depth = img.shape[0]
     for i in range(depth):
-        fig_ax[i].imshow(img[i], cmap="gray")
+        fig_ax[i].imshow(img[i], cmap=cmap)
     fig_ax[0].set_ylabel(title)
 
 def get_z_y_x(file_name, pattern) -> Tuple[int, int, int]:
@@ -117,7 +117,7 @@ def get_z_y_x(file_name, pattern) -> Tuple[int, int, int]:
     Args:
         file_name (str): file name (can be full path)
         pattern (str): pattern to extract z, y, x from file name
-        
+
     Returns:
         z: int, z coordinate
         y: int, y coordinate
@@ -132,17 +132,17 @@ def get_z_y_x(file_name, pattern) -> Tuple[int, int, int]:
         return int(z), int(y), int(x)
     else:
         return None
-    
+
 def get_img_by_coords(z, y, x, img_files, img_pattern) -> np.array:
     """ Get image from img_files by z, y, x
-    
+
     Args:
         z: int, z coordinate
         y: int, y coordinate
         x: int, x coordinate
         img_files: list of str, paths to images
         img_pattern: str, pattern to extract z, y, x from image file name
-        
+
     Returns:
         img: np.array, image whose file path contains z, y, x (ie. slice at z, y, x)
     """
@@ -159,11 +159,11 @@ def get_img_by_coords(z, y, x, img_files, img_pattern) -> np.array:
     return None
 
 def get_3d_slice(z,y,x, img_files, mask_files, img_pattern, mask_pattern, depth=1, width=512, height=512) -> Tuple[np.array, np.array]:
-    """ get 3d slice by z, y, x 
-    
+    """ get 3d slice by z, y, x
+
     -think of the original image as 3d volume, and each slice is a pixel
     -so we want a column of pixels, with the center pixel being the pixel at z, y, x, and sliding up and down along the z axis
-    
+
     Args:
         z: int, z coordinate
         y: int, y coordinate
@@ -175,7 +175,7 @@ def get_3d_slice(z,y,x, img_files, mask_files, img_pattern, mask_pattern, depth=
         depth: int, how many slices to include above and below the center slice
         width: int, width of each slice
         height: int, height of each slice
-        
+
     Returns:
         img_3d: np.array, 3d image volume (2*depth+1, width, height)
         mask_3d: np.array, 3d mask volume (2*depth+1, width, height)
@@ -191,15 +191,88 @@ def get_3d_slice(z,y,x, img_files, mask_files, img_pattern, mask_pattern, depth=
             mask_3d[i+depth] = mask
     return img_3d, mask_3d
 
+
+# --- expand/shrink 3D blobs ---
+def shrink_binary_mask_3d(mask, kernel_size=(3,3,3)):
+    """
+    Shrinks the 3D binary mask by eroding it by a padding of 1.
+
+    Parameters:
+    - mask: torch.Tensor of shape (D, H, W) containing binary values (0 and 1)
+
+    Returns:
+    - shrunk_mask: torch.Tensor of the same shape as mask with shrunk blobs
+    """
+    # Create a 3D structuring element (kernel)
+    depth_kernel, height_kernel, width_kernel = kernel_size
+    if depth_kernel % 2 == 0: depth_kernel += 1 # Ensure the kernel size is odd (if not, add 1)
+    if height_kernel % 2 == 0: height_kernel += 1
+    if width_kernel % 2 == 0: width_kernel += 1
+    structuring_element = torch.ones((1, 1, depth_kernel, height_kernel, width_kernel), dtype=torch.float32)
+
+    # Apply dilation on the inverted mask (equivalent to erosion on the original mask)
+    inverted_mask = 1 - mask.unsqueeze(0).unsqueeze(0).float() # Invert the mask for erosion (1s become 0s and 0s become 1s)
+    eroded_mask = F.conv3d(inverted_mask, structuring_element, padding=(depth_kernel//2, height_kernel//2, width_kernel//2))
+    eroded_mask = (eroded_mask < structuring_element.sum()).float() # Threshold the result to obtain a binary mask again
+    shrunk_mask = 1 - eroded_mask # Invert back to get the eroded original mask
+    shrunk_mask = shrunk_mask.squeeze(0).squeeze(0) # Remove batch and channel dimensions
+
+    return shrunk_mask
+
+def expand_binary_mask_3d(mask, kernel_size=(3,3,3)):
+    """
+    Expands the 3D binary mask using morphological dilation.
+
+    Parameters:
+    - mask: torch.Tensor of shape (D, H, W) containing binary values (0 and 1)
+    - kernel_size: (int,int, int) size of the structuring element (must be odd)
+
+    Returns:
+    - expanded_mask: torch.Tensor of the same shape as mask with expanded blobs
+    """
+    # Create a 3D structuring element (kernel)
+    depth_kernel, height_kernel, width_kernel = kernel_size
+    if depth_kernel % 2 == 0: depth_kernel += 1 # Ensure the kernel size is odd (if not, add 1)
+    if height_kernel % 2 == 0: height_kernel += 1
+    if width_kernel % 2 == 0: width_kernel += 1
+    structuring_element = torch.ones((1, 1, depth_kernel, height_kernel, width_kernel), dtype=torch.float32)
+
+    # Apply dilation using 3D convolution
+    mask = mask.unsqueeze(0).unsqueeze(0).float() # Add batch and channel dimensions to the mask
+    expanded_mask = F.conv3d(mask, structuring_element, padding=(depth_kernel//2, height_kernel//2, width_kernel//2))
+    expanded_mask = (expanded_mask > 0).float() # Threshold the result to obtain a binary mask again
+    expanded_mask = expanded_mask.squeeze(0).squeeze(0) # Remove batch and channel dimensions
+
+    return expanded_mask
+
+def get_colored_image(image, color_map=None):
+    # Define the default color map
+    if color_map is None:
+        color_map = {
+            0: [0, 0, 0],  # Red (TN)
+            1: [1, 0, 0],  # Green (FP) (pred only)
+            2: [0, 0, 1],  # Blue (FN) (double_mask only)
+            3: [1, 1, 1],  # Black (TP)
+        }
+    # Create an empty RGB image
+    depth, height, width = image.shape
+    colored_image = np.zeros((depth, height, width, 3), dtype=np.float32) 
+    
+    # Map the pixel values to the corresponding colors
+    for value, color in color_map.items():
+        colored_image[image == value] = color
+    return colored_image
+
+
 # --- evaluation metrics ---
 def dice_coefficient(pred, target, smooth=1e-6):
     """ Calculate dice coefficient for binary segmentation
-    
+
     Args:
         pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
         target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
         smooth (float): smoothing factor to prevent division by zero
-        
+
     Returns:
         dice (torch.Tensor): dice coefficient
     """
@@ -211,19 +284,19 @@ def dice_coefficient(pred, target, smooth=1e-6):
 
 def get_confusion_matrix(pred, target):
     """ Calculate confusion matrix for binary segmentation
-    
+
     [[true_positives, false_positives], [false_negatives, true_negatives]]
-    
+
     Args:
         pred (torch.Tensor): predicted mask, shape (depth, height, width)
         target (torch.Tensor): target mask, shape (depth, height, width)
-        
+
     Returns:
         confusion_matrix (torch.Tensor): confusion matrix
     """
     pred = pred.view(-1) # flatten
     target = target.view(-1) # flatten
-    true_positives = torch.sum(pred * target) # pred and target are both 1  
+    true_positives = torch.sum(pred * target) # pred and target are both 1
     false_positives = torch.sum(pred * (1 - target)) # pred is 1, target is 0
     false_negatives = torch.sum((1 - pred) * target) # pred is 0, target is 1
     true_negatives = torch.sum((1 - pred) * (1 - target)) # pred and target are both 0
@@ -231,12 +304,12 @@ def get_confusion_matrix(pred, target):
 
 def get_iou(pred, target, smooth=1e-6):
     """ Calculate intersection over union for binary segmentation
-    
+
     Args:
         pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
         target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
         smooth (float): smoothing factor to prevent division by zero
-        
+
     Returns:
         iou (torch.Tensor): intersection over union
     """
@@ -249,12 +322,12 @@ def get_iou(pred, target, smooth=1e-6):
 
 def get_precision(pred, target, smooth=1e-6):
     """ Calculate precision for binary segmentation
-    
+
     Args:
         pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
         target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
         smooth (float): smoothing factor to prevent division by zero
-        
+
     Returns:
         precision (torch.Tensor): precision
     """
@@ -267,12 +340,12 @@ def get_precision(pred, target, smooth=1e-6):
 
 def get_recall(pred, target, smooth=1e-6):
     """ Calculate recall for binary segmentation
-    
+
     Args:
         pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
         target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
         smooth (float): smoothing factor to prevent division by zero
-        
+
     Returns:
         recall (torch.Tensor): recall
     """
@@ -285,12 +358,12 @@ def get_recall(pred, target, smooth=1e-6):
 
 def get_f1_score(pred, target, smooth=1e-6):
     """ Calculate f1 score for binary segmentation
-    
+
     Args:
         pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
         target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
         smooth (float): smoothing factor to prevent division by zero
-        
+
     Returns:
         f1 (torch.Tensor): f1 score
     """
@@ -301,11 +374,11 @@ def get_f1_score(pred, target, smooth=1e-6):
 
 def get_accuracy(pred, target):
     """ Calculate accuracy for binary segmentation
-    
+
     Args:
         pred (torch.Tensor): predicted mask, shape (batch_size, 1, depth, height, width)
         target (torch.Tensor): target mask, shape (batch_size, 1, depth, height, width)
-        
+
     Returns:
         accuracy (torch.Tensor): accuracy
     """

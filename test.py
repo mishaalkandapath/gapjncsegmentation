@@ -6,6 +6,7 @@ from models import *
 from utilities_train import *
 from utilities import *
 from randomstuff import *
+from matplotlib.colors import ListedColormap
 
 print("starting test")
 parser = argparse.ArgumentParser(description="Get evaluation metrics for the model")
@@ -20,6 +21,12 @@ data_dir = args.data_dir
 results_dir = args.results_dir
 if not os.path.exists(results_dir):
     os.makedirs(results_dir)
+if not os.path.exists(os.path.join(results_dir, "original")):
+    os.makedirs(os.path.join(results_dir, "original"))
+if not os.path.exists(os.path.join(results_dir, "expanded_gt")):
+    os.makedirs(os.path.join(results_dir, "expanded_gt"))
+if not os.path.exists(os.path.join(results_dir, "expanded_pred")):
+    os.makedirs(os.path.join(results_dir, "expanded_pred"))
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -46,6 +53,7 @@ total_fp = 0
 total_tn = 0
 total_fn = 0
 total_precision_generous = 0
+total_recall_generous = 0
 # num_samples = 3
 num_samples = len(valid_dataset)
 
@@ -60,6 +68,9 @@ for i in range(len(valid_dataset)):
         num_samples -= 1
         continue
     pred = torch.argmax(pred[0], dim=0) # (depth, height, width)
+    expanded_mask = expand_binary_mask_3d(mask[1], kernel_size=(3,3,3))
+    expanded_pred = expand_binary_mask_3d(pred, kernel_size=(3,3,3))
+    depth = expanded_pred.shape[0]
     
     # calculate the metrics
     iou = get_iou(pred=pred, target=mask[1])
@@ -67,11 +78,11 @@ for i in range(len(valid_dataset)):
     precision = get_precision(pred=pred, target=mask[1])
     recall = get_recall(pred=pred, target=mask[1])
     tp, fp, fn, tn = get_confusion_matrix(pred=pred, target=mask[1])
-    mask[mask!=0] = 255
-    pred[pred!=0] = 255
-    precision_generous = mask_precision_generous(gt=mask[1], pred=pred)
-    print("pregen", precision_generous)
-    # recall_generous = recall_generous(gt=mask[1], pred=pred)
+    precision_generous = get_precision(pred=pred, target=expanded_mask)
+    recall_generous = get_recall(pred=expanded_pred, target=mask[1])
+    
+    total_precision_generous += precision_generous
+    total_recall_generous += recall_generous
     total_accuracy += accuracy
     total_precision += precision
     total_recall += recall
@@ -79,14 +90,40 @@ for i in range(len(valid_dataset)):
     total_tp += tp
     total_fp += fp
     total_tn += tn
-    total_precision_generous += precision_generous
+
     
     # save the results
-    fig, ax = plt.subplots(3, 5, figsize=(15, 5), num=f"valid_{i}")
+    ## original
+    combined_volume = np.asarray((mask[1] * 2 + pred).detach())
+    colored_combined_volume = get_colored_image(combined_volume)
+    fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
     visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")
-    visualize_3d_slice(mask[0].cpu().numpy(), ax[1], "Label")
-    visualize_3d_slice(pred.cpu().numpy(), ax[2], "Prediction")
-    plt.savefig(f"{results_dir}/valid_{i}.png")
+    visualize_3d_slice(colored_combined_volume, ax[1], "Combined")
+    visualize_3d_slice(mask[1].cpu().numpy(), ax[2], "Label")
+    visualize_3d_slice(pred.cpu().numpy(), ax[3], "Prediction")
+    plt.savefig(os.path.join(results_dir, "original", f"valid_{i}.png"))
+    plt.close("all")
+    
+    ## expanded mask
+    combined_volume = np.asarray((expanded_mask * 2 + pred).detach())
+    colored_combined_volume = get_colored_image(combined_volume)
+    fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
+    visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")
+    visualize_3d_slice(colored_combined_volume, ax[1], "Combined")
+    visualize_3d_slice(expanded_mask.cpu().numpy(), ax[2], "Expanded Label")
+    visualize_3d_slice(pred.cpu().numpy(), ax[3], "Prediction")
+    plt.savefig(os.path.join(results_dir, "expanded_gt", f"valid_{i}.png"))
+    plt.close("all")
+    
+    ## expanded pred
+    combined_volume = np.asarray((mask[1] * 2 + expanded_pred).detach())
+    colored_combined_volume = get_colored_image(combined_volume)
+    fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
+    visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")
+    visualize_3d_slice(colored_combined_volume, ax[1], "Combined")
+    visualize_3d_slice(mask[1].cpu().numpy(), ax[2], "Label")
+    visualize_3d_slice(expanded_pred.cpu().numpy(), ax[3], "Expanded Prediction")
+    plt.savefig(os.path.join(results_dir, "expanded_pred", f"valid_{i}.png"))
     plt.close("all")
     
     print("NUM SAMPLES SO FAR:", i+1)
@@ -96,10 +133,10 @@ for i in range(len(valid_dataset)):
     avg_precision = total_precision / (i + 1)
     avg_recall = total_recall / (i + 1)
     avg_iou = total_iou /(i + 1)
-    print("total pregen", total_precision_generous)
+    avg_recall_generous = total_recall_generous / (i + 1)
     avg_precision_generous = total_precision_generous / (i + 1)
     print(f"AVERAGE accuracy: {avg_accuracy:.4f}, precision: {avg_precision:.4f}, recall: {avg_recall:.4f}, iou: {avg_iou:.4f}")
-    print(f"average precision gen: {avg_precision_generous}")
+    print(f"average precision gen: {avg_precision_generous}, average recall gen: {avg_recall_generous}")
     print(f"TOTAL TP = {total_tp}, FP = {total_fp}, TN = {total_tn}, FN = {total_fn}")
     
 print(f"TP = {tp}, FP = {fp}, TN = {tn}, FN = {fn}")
@@ -111,5 +148,5 @@ avg_iou = total_iou / num_samples
 print("total pregen", total_precision_generous)
 avg_precision_generous = total_precision_generous / num_samples
 print(f"AVERAGE accuracy: {avg_accuracy:.4f}, precision: {avg_precision:.4f}, recall: {avg_recall:.4f}, iou: {avg_iou:.4f}")
-print(f"average precision gen: {avg_precision_generous}")
+print(f"average precision gen: {avg_precision_generous}, average recall gen: {avg_recall_generous}")
 print(f"TOTAL TP = {total_tp}, FP = {total_fp}, TN = {total_tn}, FN = {total_fn}")
