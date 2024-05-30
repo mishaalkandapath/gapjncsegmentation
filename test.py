@@ -94,7 +94,7 @@ for i in range(len(valid_dataset)):
     
     # save the results
     ## original
-    combined_volume = np.asarray((mask[1] * 2 + pred).detach())
+    combined_volume = np.asarray((mask[1] * 2 + pred).detach().cpu())
     colored_combined_volume = get_colored_image(combined_volume)
     fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
     visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")
@@ -105,7 +105,7 @@ for i in range(len(valid_dataset)):
     plt.close("all")
     
     ## expanded mask
-    combined_volume = np.asarray((expanded_mask * 2 + pred).detach())
+    combined_volume = np.asarray((expanded_mask * 2 + pred).detach().cpu())
     colored_combined_volume = get_colored_image(combined_volume)
     fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
     visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")
@@ -116,7 +116,7 @@ for i in range(len(valid_dataset)):
     plt.close("all")
     
     ## expanded pred
-    combined_volume = np.asarray((mask[1] * 2 + expanded_pred).detach())
+    combined_volume = np.asarray((mask[1] * 2 + expanded_pred).detach().cpu())
     colored_combined_volume = get_colored_image(combined_volume)
     fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
     visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")
