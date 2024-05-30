@@ -13,14 +13,14 @@ module load scipy-stack gcc cuda opencv
 EPOCHS=50
 BATCH_SIZE=1
 NUM_WORKERS=4
-LR=0.001
+LR=0.0001
 DATA_DIR=/home/hluo/scratch/select_dauer_data_512
+LOAD_MODEL_PATH=/home/hluo/scratch/models/model_job84/model_job84_epoch_49.pth
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
 MODEL_NAME="model_job89"
-ALPHA=0.992
+ALPHA=0.965
 GAMMA=3
 NUM_PREDICTIONS_TO_LOG=10
 AUGMENT=True
-SEED=9
-python /home/hluo/gapjncsegmentation/unet_3d_no_wandb.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --alpha $ALPHA --gamma $GAMMA --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG --results_dir $RESULTS_DIR --augment $AUGMENT --seed $SEED
+python /home/hluo/gapjncsegmentation/unet_3d_no_wandb.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --alpha $ALPHA --gamma $GAMMA --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG --results_dir $RESULTS_DIR --augment $AUGMENT
