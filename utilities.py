@@ -191,6 +191,36 @@ def get_3d_slice(z,y,x, img_files, mask_files, img_pattern, mask_pattern, depth=
             mask_3d[i+depth] = mask
     return img_3d, mask_3d
 
+def get_z(file_name, pattern):
+    """ get z from file name (uses basename of file_name)"""
+    file_name = os.path.basename(file_name)
+    match = re.match(pattern, file_name)
+    if match:
+        z = match.groups()[0]
+        return int(z)
+    else:
+        return None
+def get_img_by_z(z, img_files, img_pattern):
+    """ get path of image by z, y, x """
+    for i in range(len(img_files)):
+        img_file = img_files[i]
+        try:
+            z_ = get_z(img_file, img_pattern)
+        except:
+            continue
+        if z == z_:
+            return cv2.imread(img_file, cv2.IMREAD_GRAYSCALE)
+    return None
+
+def get_3d_slice_by_z(z, img_files, img_pattern, depth_padding=1, width=512, height=512):
+    img_3d = np.zeros((2*depth_padding+1, width, height))
+    for i in range(-depth_padding, depth_padding+1):
+        z_coord = z+i
+        img = get_img_by_z(z_coord, img_files, img_pattern)
+        if img is not None:
+            img_3d[i+depth_padding] = img
+    return img_3d
+
 
 # --- expand/shrink 3D blobs ---
 def shrink_binary_mask_3d(mask, kernel_size=(3,3,3)):

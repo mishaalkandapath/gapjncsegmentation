@@ -6,16 +6,50 @@ import matplotlib.pyplot as plt
 import numpy as np
 import re
 import tqdm
+import argparse
 from models import *
 from utilities import *
 
+print("starting...")
+# Adding arguments with default values
+parser = argparse.ArgumentParser(description="save preds")
+parser.add_argument('--start_x', type=int, default=0, help='Starting X coordinate')
+parser.add_argument('--start_y', type=int, default=0, help='Starting Y coordinate')
+parser.add_argument('--start_z', type=int, default=100, help='Starting Z coordinate')
+parser.add_argument('--ending_depth', type=int, default=111, help='Ending depth')
+parser.add_argument('--ending_height', type=int, default=8328, help='Ending height')
+parser.add_argument('--ending_width', type=int, default=9360, help='Ending width')
+parser.add_argument('--subvol_depth', type=int, default=3, help='subvol depth')
+parser.add_argument('--subvol_height', type=int, default=256, help='subvol height')
+parser.add_argument('--subvol_width', type=int, default=256, help='subvol width')
+parser.add_argument('--mask_dir', type=str, default="/Volumes/LaCie/sem_dauer_2_gj_gt", help='Mask directory')
+parser.add_argument('--img_dir', type=str, default="/Volumes/LaCie/SEM_dauer_2_em", help='Image directory')
+parser.add_argument('--save_dir', type=str, default="", help='Save directory')
+parser.add_argument('--model_path', type=str, default="model_job84", help='Model name')
+parser.add_argument('--use_full_volume', type=bool, default=True, help='use full volume')
+args = parser.parse_args()
 
-mask_dir="/Volumes/LaCie/sem_dauer_2_gj_gt"
-img_dir="/Volumes/LaCie/SEM_dauer_2_em"
-model_name = "model_job84"
-epoch=49
-fp=f"/Volumes/LaCie/models/{model_name}_epoch_{epoch}.pth"
-
+# -- args
+start_x = args.start_x
+start_y = args.start_y
+start_z = args.start_z
+ending_depth = args.ending_depth
+ending_height = args.ending_height
+ending_width = args.ending_width
+subvol_depth = args.subvol_depth
+subvol_height = args.subvol_height
+subvol_width = args.subvol_width
+mask_dir= args.mask_dir
+img_dir= args.img_dir
+fp=args.model_path
+save_dir=args.save_dir
+if not os.path.exists(os.path.join(save_dir, "visualize")): 
+    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(os.path.join(save_dir, "original"), exist_ok=True)
+    os.makedirs(os.path.join(save_dir, "ground_truth"), exist_ok=True)
+    os.makedirs(os.path.join(save_dir, "pred"), exist_ok=True)
+    os.makedirs(os.path.join(save_dir, "visualize"), exist_ok=True)
+    
 # -- get imgs & mask fp
 img_files = os.listdir(img_dir)
 mask_files = os.listdir(mask_dir)
@@ -32,32 +66,38 @@ model = model.eval()
 print("model loaded")
 
 # -- get masks:
-z_indices = [101, 102, 103, 104, 105, 106, 107, 108, 109]
-width = 512
-height = 512
-depth = len(z_indices)
-new_height = 256 # new height of each tile
-new_width = 256 # new height of each tile
+i=0
+for z in range(start_z, ending_depth):
+    tmp_img = get_img_by_z(z, img_files, img_pattern)
+    tmp_mask = get_img_by_z(z, mask_files, mask_pattern)
+    if i == 0:
+        h, w = tmp_img.shape[0], tmp_img.shape[1]
+        full_volume_img = np.zeros((ending_depth-start_z, h, w))
+        full_volume_mask = np.zeros((ending_depth-start_z, h, w))
+        print("Created full img & mask", full_volume_img.shape, full_volume_mask.shape)
+    full_volume_img[i] = tmp_img
+    full_volume_mask[i] = tmp_mask
+    i+=1
+    print(f"done {z} z-slice")
+print("full volume shape:", full_volume_img.shape, full_volume_mask.shape)
 
 start_z = 0
-start_y = 0
-start_x = 0
 ending_depth = full_volume_img.shape[0]
-ending_height = full_volume_img.shape[1]
-ending_width = full_volume_img.shape[2]
-print(ending_depth, ending_height, ending_width)
-subvol_depth = 3
-subvol_height = 256
-subvol_width = 256
-
+if args.use_full_volume:
+    ending_height = full_volume_img.shape[1]
+    ending_width = full_volume_img.shape[2]
+print("subvolume shape:", subvol_depth, subvol_height, subvol_width)
+print("ending:", ending_depth, ending_height, ending_width)
 while start_z < ending_depth:
     end_z = start_z + subvol_depth
+    start_y = args.start_y
     while start_y < ending_height:
         end_y = start_y + subvol_height 
+        start_x = args.start_x
         while start_x < ending_width:
             end_x = start_x + subvol_width
             sub_volume_img = full_volume_img[start_z:end_z, start_y:end_y, start_x:end_x]
-            sub_volume_mask = full_volume_mask[start_z:end_z, start_y:end_y, start_x:end_x]
+            sub_volume_mask = full_volume_mask[start_z:end_z, start_y:end_y, start_x:end_x] # with confidence levels
             sub_vol_depth, sub_vol_height, sub_vol_width = sub_volume_img.shape
             image = torch.tensor(sub_volume_img).float().unsqueeze(0)
             if (sub_vol_height < subvol_height) or (sub_vol_width < subvol_width) or (sub_vol_depth < subvol_depth):
@@ -73,9 +113,9 @@ while start_z < ending_depth:
             visualize_3d_slice(sub_volume_img, ax[0], "Image")
             visualize_3d_slice(sub_volume_mask, ax[1], "Mask")
             visualize_3d_slice(binary_pred, ax[2], "Pred")
-            print(f"Saved z{start_z}-{end_z} y{start_y}-{end_y} x{start_x}-{end_x} subvolume")
             plt.savefig(os.path.join(save_dir, "visualize", f"z{start_z}_y{start_y}_x{start_x}.png"))
             plt.close("all")
+            print(f"Saved z{start_z}-{end_z} y{start_y}-{end_y} x{start_x}-{end_x} subvolume")
             start_x = end_x
         start_y = end_y
     start_z = end_z
