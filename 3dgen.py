@@ -1,62 +1,50 @@
-import os, numpy as np, cv2, re
-from tqdm import tqdm
+ base = "E:\\Mishaal\\sem_dauer_2"
+    def get_mask(imgname):
+         return base+"\\seg_export_full_volume\\"+imgname.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_")
 
-base = "E:\\Mishaal\\sem_dauer_2\\sem_dauer_0_50_overlap\\"
+    def get_seg(imgname):
+         return base+"\\seg_export0507_2\\"+imgname.replace("SEM_dauer_2_image_export_", "sem2dauer_gj_2d_training.vsseg_export_")
+    pattern = r's\d\d\d'
+    def get_another(filename, i):
+        i = int(re.findall(pattern, filename)[0][1:]) + i
+        assert i>=0
+        return filename.replace(re.findall(pattern, filename)[0], "s0"+("0" if i <=9 else 
+"") + str(i))
+    
+    imgs = os.listdir(base+"\\image_export")
 
-train_imgs, valid_imgs = [], []
-train_segs, valid_segs = [], []
-train_mito_mask, valid_mito_mask = [], []
-train_neuron_mask, valid_neuron_mask = [], []
+    flat_imgs, flat_segs, flat_masks = [], [], []
+    seq_imgs, seq_segs, seq_masks = [], [], []
 
-S = set(range(33, 43)) | set(range(3, 13)) | set(range(18, 28))
-X = set(range(3, 7)) | set(range(6, 9)) | set(range(6, 9))
-Y = set(range(7, 1)) | set(range(2, 5)) | set(range(7, 9))
+    for img in tqdm(imgs):
+        seg = cv2.cvtColor(cv2.imread(get_seg(img)), cv2.COLOR_BGR2GRAY)
+        depth = int(re.findall(pattern, img)[0][1:])
+        if depth == 0 or depth >48: continue
+        if len(np.unique(seg)) >= 2:
+            
+            flat_masks += [get_mask(img)]
+            flat_segs += [get_seg(img)]
+            
+            seq_masks.append([get_another(get_mask(img), -1), get_mask(img), get_another(get_mask(img), 1), get_another(get_mask(img), 2)])
+            seq_segs.append([get_another(get_seg(img), -1), get_seg(img), get_another(get_seg(img), 1), get_another(get_seg(img), 2)])
 
-for file in tqdm(os.listdir(base+"imgs\\")):
-    try:
-        x, y, s = int(re.findall(r"X\d+", file)[0][1:]), int(re.findall(r"Y\d+_", file)[0][1:-1]), int(re.findall(r"s\d+_", file)[0][1:-1])
-    except:
-        print(file)
-        raise Exception
-    if s in S and x in X and y in Y:
-        valid_imgs.append(file)
-        valid_segs.append(file)
-        # valid_mito_mask.append(file[:-4] + ".tiff")
-        valid_neuron_mask.append(file)
+            img = (base+"\\image_export\\"+img)
 
-        assert os.path.isdir(base+"gts\\"+file)
-        assert os.path.isdir(base+"masks\\"+file)
-        # assert os.path.isfile("E:\\Mishaal\\sem_dauer_2\\jnc_only_dataset\\mito_masks\\shoobedoo\\masks\\"+file[:-4]+".tiff")
-    else:
-        train_imgs.append(file)
-        train_segs.append(file)
-        # train_mito_mask.append(file[:-4] + ".tiff")
-        train_neuron_mask.append(file)
+            flat_imgs += [img]
+            seq_imgs.append([get_another(img, -1), img, get_another(img, 1), get_another(img, 2)])
 
-        assert os.path.isdir(base+"gts\\"+file)
-        assert os.path.isdir(base+"masks\\"+file), "E:\\Mishaal\\sem_dauer_2\\seg_export_full_volume\\"+file
-        # assert os.path.isfile("E:\\Mishaal\\sem_dauer_2\\jnc_only_dataset\\mito_masks\\shoobedoo\\masks\\"+file[:-4]+".tiff")
+    for i in tqdm(range(len(seq_imgs))):
+        os.mkdir(BASE+"3d_jnc_only\\masks\\"+os.path.split(seq_imgs[i][1])[-1][:-4])
+        os.mkdir(BASE+"3d_jnc_only\\gts\\"+os.path.split(seq_imgs[i][1])[-1][:-4])
+        os.mkdir(BASE+"3d_jnc_only\\imgs\\"+os.path.split(seq_imgs[i][1])[-1][:-4])
 
-print(len(valid_imgs), len(train_imgs))
+        for j in range(4):
+            shutil.copy(seq_imgs[i][j], BASE+"3d_jnc_only\\imgs\\"+os.path.split(seq_imgs[i][1])[-1][:-4]+"\\"+os.path.split(seq_imgs[i][j])[-1])
+            # shutil.copy(flat_segs[i], BASE+"3d_jnc_only\\imgs\\"+os.path.split(flat_segs[i]))
+            seg = cv2.cvtColor(cv2.imread(seq_segs[i][j]), cv2.COLOR_BGR2GRAY)
+            seg *= 255
+            cv2.imwrite(BASE+"3d_jnc_only\\gts\\"+os.path.split(seq_imgs[i][1])[-1][:-4]+"\\"+os.path.split(seq_segs[i][j])[-1], seg)
+            shutil.copy(seq_masks[i][j], BASE+"3d_jnc_only\\masks\\"+os.path.split(seq_imgs[i][1])[-1][:-4]+"\\"+os.path.split(seq_masks[i][j])[-1].replace(
+                "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_", "SEM_dauer_2_image_export_"
+            ))
 
-import shutil
-os.mkdir("E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\valid_gts")
-os.mkdir("E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\train_gts")
-os.mkdir("E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\valid_imgs")
-os.mkdir("E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\train_imgs")
-# os.mkdir("E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split\\valid_mito")
-# os.mkdir("E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split\\train_mito")
-os.mkdir("E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\valid_neuro")
-os.mkdir("E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\train_neuro")
-
-for i in range(len(train_imgs)):
-    shutil.copy(base+"imgs\\"+train_imgs[i], "E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\train_imgs\\"+train_imgs[i])
-    shutil.copy(base+"gts\\"+train_segs[i], "E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\train_gts\\"+train_segs[i])
-    # shutil.copy("E:\\Mishaal\\sem_dauer_2\\jnc_only_dataset\\mito_masks\\shoobedoo\\masks\\"+train_mito_mask[i], "E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split\\train_mito\\"+train_mito_mask[i])
-    shutil.copy(base+"masks\\"+train_neuron_mask[i], "E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\train_neuro\\"+train_neuron_mask[i])
-
-for i in range(len(valid_imgs)):
-    shutil.copy(base+"imgs\\"+valid_imgs[i], "E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\valid_imgs\\"+valid_imgs[i])
-    shutil.copy(base+"gts\\"+valid_segs[i], "E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\valid_gts\\"+valid_segs[i])
-    # shutil.copy("E:\\Mishaal\\sem_dauer_2\\jnc_only_dataset\\mito_masks\\shoobedoo\\masks\\"+valid_mito_mask[i], "E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split\\valid_mito\\"+valid_mito_mask[i])
-    shutil.copy(base+"masks\\"+valid_neuron_mask[i], "E:\\Mishaal\\sem_dauer_2\\final_jnc_only_split3d\\valid_neuro\\"+valid_neuron_mask[i])
