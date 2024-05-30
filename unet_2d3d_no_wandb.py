@@ -79,7 +79,7 @@ if __name__ == "__main__":
     criterion = FocalLossWith2d3d(alpha =alpha,gamma=gamma, device=DEVICE)
 
     # ----- Train model -----
-    train_log_local(model=model, 
+    train_log_local_2d3d(model=model, 
           train_loader=train_loader, 
           valid_loader=valid_loader, 
           criterion=criterion, 

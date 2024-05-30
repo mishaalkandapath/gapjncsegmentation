@@ -181,6 +181,120 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         }, os.path.join(results_folder, "losses.pth"))
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
 
+def train_log_local_2d3d(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, num_predictions_to_log:int=5) -> None:
+    """ 
+    Train the model and log predictions locally.
+    
+    Args:
+        model (torch.nn.Module): model to train
+        train_loader (torch.utils.data.DataLoader): DataLoader for training data
+        valid_loader (torch.utils.data.DataLoader): DataLoader for validation data
+        criterion (torch.nn.Module): loss function
+        optimizer (torch.optim.Optimizer): optimizer
+        epochs (int): number of epochs to train for
+        batch_size (int): batch size for training
+        lr (float): learning rate
+        model_folder (str): directory to save model checkpoints
+        model_name (str): name of the model to save
+        num_predictions_to_log (int): number of predictions to log per epoch
+    """
+    start = time.time()
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_losses = []
+    valid_losses = []
+    first_img=True
+    for epoch in range(epochs):
+        num_train_logged = 0
+        for i, data in enumerate(train_loader):
+            print("Progress: {:.2%}".format(i/len(train_loader)), end="\r")
+            inputs, labels = data
+            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            if (first_img):
+                print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
+                print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
+                _, _, depth, height, width = inputs.shape # initialize depth, height, width
+                if height != width:
+                    continue
+                else:
+                    first_img=False
+                    print(f"depth {depth}, height {height}, width {width}")
+            
+            if inputs.shape[2:] != (depth, height, width):
+                print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
+                continue
+            optimizer.zero_grad() # zero gradients (otherwise they accumulate)
+            intermediate_pred, pred = model(inputs)
+            loss = criterion(intermediate_pred, pred, labels)
+            loss.backward() # calculate gradients
+            optimizer.step() # update weights based on calculated gradients
+            # print(f"Step: {i}, Loss: {loss}")
+            train_losses.append(loss.detach().cpu().item())
+
+            # Save predictions for each epoch
+            if num_train_logged < num_predictions_to_log:
+                input_img = inputs.squeeze(0).squeeze(0).cpu().numpy()
+                label_img = labels[0][1].cpu().numpy()
+                pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
+                
+                # -- plot as 3 rows: input, ground truth, prediction
+                fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
+                for j in range(depth):
+                    ax[0, j].imshow(input_img[j], cmap="gray")
+                    ax[1, j].imshow(label_img[j], cmap="gray")
+                    ax[2, j].imshow(pred_img[j], cmap="gray")
+                ax[0, 0].set_ylabel("Input")
+                ax[1, 0].set_ylabel("Ground Truth")
+                ax[2, 0].set_ylabel("Prediction")
+                plt.savefig(os.path.join(results_folder, "train", f"num{num_train_logged}_epoch{epoch}.png"))
+                num_train_logged += 1
+            plt.close("all")
+        print(f"Epoch: {epoch}, Loss: {loss}")
+            
+        num_logged = 0
+        for i, data in enumerate(valid_loader):
+            valid_inputs, valid_labels = data
+            valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
+            if valid_inputs.shape[2:] != (depth, height, width):
+                print(f"Skipping batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
+                continue
+            
+            valid_interm_pred, valid_pred = model(valid_inputs)
+            valid_loss = criterion(valid_pred, valid_labels)
+            # Save predictions for each epoch
+            if num_logged < num_predictions_to_log:
+                input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
+                label_img = valid_labels[0][1].cpu().numpy()
+                pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
+                
+                fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
+                for j in range(depth):
+                    ax[0, j].imshow(input_img[j], cmap="gray")
+                    ax[1, j].imshow(label_img[j], cmap="gray")
+                    ax[2, j].imshow(pred_img[j], cmap="gray")
+                ax[0, 0].set_ylabel("Input")
+                ax[1, 0].set_ylabel("Ground Truth")
+                ax[2, 0].set_ylabel("Prediction")
+                plt.savefig(os.path.join(results_folder, "valid", f"epoch{epoch}_num{num_logged}.png"))
+                num_logged += 1
+                
+            valid_losses.append(valid_loss.detach().cpu().item())
+            plt.close("all")
+        try:
+            print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
+        except:
+            print(f"Epoch: {epoch} | Loss: {loss}")
+        print(f"Time elapsed: {time.time() - start} seconds")
+        try:
+            checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(criterion.gamma, criterion.alpha), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
+        except:
+            checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(0, 0), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
+        torch.save({
+            'train_losses': train_losses,
+            'valid_losses': valid_losses
+        }, os.path.join(results_folder, "losses.pth"))
+    print(f"Training complete. Time elapsed: {time.time() - start} seconds")
+
+
 def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, num_predictions_to_log:int=5) -> None:
     """ 
     Train the model and log predictions to wandb.
