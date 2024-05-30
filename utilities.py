@@ -231,11 +231,13 @@ def expand_binary_mask_3d(mask, kernel_size=(3,3,3)):
     - expanded_mask: torch.Tensor of the same shape as mask with expanded blobs
     """
     # Create a 3D structuring element (kernel)
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     depth_kernel, height_kernel, width_kernel = kernel_size
     if depth_kernel % 2 == 0: depth_kernel += 1 # Ensure the kernel size is odd (if not, add 1)
     if height_kernel % 2 == 0: height_kernel += 1
     if width_kernel % 2 == 0: width_kernel += 1
     structuring_element = torch.ones((1, 1, depth_kernel, height_kernel, width_kernel), dtype=torch.float32)
+    structuring_element = structuring_element.to(DEVICE)
 
     # Apply dilation using 3D convolution
     mask = mask.unsqueeze(0).unsqueeze(0).float() # Add batch and channel dimensions to the mask
