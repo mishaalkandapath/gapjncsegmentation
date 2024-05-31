@@ -229,7 +229,198 @@ def mask_acc_split(data_dir, results_dir, classes=False):
     print("Training set mask prec {}".format(np.nanmean(t_prec)))
     print("Training set mask prec generous {}".format(np.nanmean(t_prec_gen)))
 
+def assemble_predictions(images_dir, preds_dir, gt_dir, overlay=True):
+    # superimpose the predictions on the image 
+    red = (0, 0, 255) # FP
+    green = (0, 255, 0) #TP
+    blue = (255, 0, 0) #FN
 
+    preds_colors = [green, red, blue]
+
+    # magenta:
+    # magenta = (255, 0, 255) #conf 5
+    # cyan = (255, 255, 0) #conf 4
+    # brown = (0, 255, 255) #conf 3
+    # orange = (0, 165, 255) #conf 2
+    # light_blue = (255, 165, 0) #conf 1
+    conf5 = (255, 0, 255) #conf 5
+    conf4 = (255, 255, 0) #conf 4
+    conf3 = (0, 255, 255) #conf 3
+    conf2 = (0, 165, 255) #conf 2
+    conf1 = (255, 165, 0) #conf 1
+
+    gt_colors = [conf1, conf2, conf3, conf4, conf5]
+
+    def assemble(img, y, x):
+        ys = []
+        for i in range(0, x):
+            ys.append(np.concatenate(img[i*19:(i+1)*19], axis=1))
+        assert len(ys) == 17
+        img = np.concatenate(ys, axis=0)
+        return img
+
+    for s in range(100, 106):
+        s_acc_img, s_acc_pred, s_acc_gt = [], [], []
+        for y in tqdm(range(0, 17)):
+            y_acc_img, y_acc_pred, y_acc_gt = [], [], []
+            for x in range(0, 19):
+                suffix = r"s{}_Y{}_X{}".format(s, y, x)
+                img = cv2.cvtColor(cv2.imread(images_dir + "SEM_dauer_2_export_" + suffix + ".png", cv2.IMREAD_GRAYSCALE), cv2.COLOR_GRAY2BGR)
+                #color the borders yellow
+                img[0:2, :] = [0, 255, 255]
+                img[-1:-3, :] = [0, 255, 255]
+                img[:, 0:2] = [0, 255, 255]
+                img[:, -1:-3] = [0, 255, 255]
+                y_acc_img += [img]
+                try:
+                    pred = cv2.cvtColor(cv2.imread(preds_dir + "SEM_dauer_2_export_" + suffix + ".png"), cv2.COLOR_BGR2GRAY)
+                    gt = cv2.cvtColor(cv2.imread(gt_dir + "sem_dauer_2_gj_seg_" + suffix + ".png"), cv2.COLOR_BGR2GRAY)
+
+                    cond = np.logical_and(gt == 2, gt == 15)
+
+                    masked_gt = deepcopy(gt)
+                    masked_gt[cond] = 0
+                    masked_gt[masked_gt != 0] = 255
+
+                    #make preds color
+                    # masked_gt = np.repeat(masked_gt[:, :, np.newaxis], 3, axis=-1)
+                    pred_c= np.repeat(pred[:, :, np.newaxis], 3, axis=-1)
+                    for m in range(3):
+                        # print(np.count_nonzero(np.logical_and(pred[:, :, m] == 255, masked_gt[:, :, m] == 0)))
+                        # print(np.count_nonzero(np.logical_and(pred[:, :, m] == 0, masked_gt[:, :, m] == 255)))
+                        pred_c[(pred == 255) & (masked_gt == 255)] = green
+                        pred_c[np.logical_and(pred == 255, masked_gt == 0)] = red
+                        pred_c[np.logical_and(pred == 0, masked_gt == 255)] = blue
+                    pred = pred_c
+                    # if np.any(pred != 0):
+                    #     print(np.unique(pred))
+                    #     plt.imshow(pred)
+                    #     plt.show()
+                        
+                    #color borders
+                    pred[0:2, :] = [0, 255, 255]
+                    pred[-1:-3, :] = [0, 255, 255]
+                    pred[:, 0:2] = [0, 255, 255]
+                    pred[:, -1:-3] = [0, 255, 255]
+
+                    y_acc_pred += [pred]
+                    
+                    #make gt color based on confidence
+                    colored_gt = cv2.cvtColor(gt, cv2.COLOR_GRAY2BGR)
+                    for m in range(3):
+                        colored_gt[gt == 3] = conf1
+                        colored_gt[gt == 5] = conf2
+                        colored_gt[gt == 7] = conf3
+                        colored_gt[gt == 9] = conf4
+                        colored_gt[gt == 11] = conf5
+
+                    #color borders:
+                    colored_gt[0:2, :] = [0, 255, 255]
+                    colored_gt[-1:-3, :] = [0, 255, 255]
+                    colored_gt[:, 0:2] = [0, 255, 255]
+                    colored_gt[:, -1:-3] = [0, 255, 255]
+
+                    y_acc_gt += [colored_gt]
+
+                except:
+                    print(suffix)
+
+                    y_acc_pred += [np.zeros_like(img)]
+                    #paint borders
+                    y_acc_pred[-1][0:2, :] = [0, 255, 255]
+                    y_acc_pred[-1][-1:-3, :] = [0, 255, 255]
+                    y_acc_pred[-1][:, 0:2] = [0, 255, 255]
+                    y_acc_pred[-1][:, -1:-3] = [0, 255, 255]
+
+                    y_acc_gt += [np.zeros_like(img)]
+                    #paint borders
+                    y_acc_gt[-1][0:2, :] = [0, 255, 255]
+                    y_acc_gt[-1][-1:-3, :] = [0, 255, 255]
+                    y_acc_gt[-1][:, 0:2] = [0, 255, 255]
+                    y_acc_gt[-1][:, -1:-3] = [0, 255, 255]
+
+            s_acc_img += [np.concatenate(y_acc_img, axis=1)]
+            s_acc_pred += [np.concatenate(y_acc_pred, axis=1)]
+            s_acc_gt += [np.concatenate(y_acc_gt, axis=1)]
+        
+        # new_img = assemble(s_acc_img, 17, 19)
+        # new_pred = assemble(s_acc_pred, 17, 19)
+        # new_gt = assemble(s_acc_gt, 17, 19)
+        new_img = np.concatenate(s_acc_img, axis=0)
+        new_pred = np.concatenate(s_acc_pred, axis=0)
+        new_gt = np.concatenate(s_acc_gt, axis=0)
+
+        def write_legend(text, color, img, org):
+            # font 
+            font = cv2.FONT_HERSHEY_SIMPLEX 
+
+            
+            # fontScale 
+            fontScale = 10
+            
+            # Line thickness of 2 px 
+            thickness = 20
+
+            return cv2.putText(img, text, org, font,  
+                    fontScale, color, thickness, cv2.LINE_AA) 
+        
+
+        #write them all in
+        save_dir = "/Volumes/Normal/gapjnc/resuklts/assembledpredsnew512focal/"
+        save_dir += "SEM_dauer_2_image_export_" + suffix + "/"
+        if overlay:
+            new_pred = cv2.addWeighted(new_img, 0.5, new_pred, 0.1, 0)
+            new_gt = cv2.addWeighted(new_img, 0.5, new_gt, 0.1, 0)
+
+        for color in gt_colors:
+            new_gt = write_legend(f"Confidence {gt_colors.index(color)}", color, new_gt, (450, 450+250*gt_colors.index(color)))
+
+        for color in preds_colors:
+            new_pred = write_legend(f"{['TP', 'FP', 'FN'][preds_colors.index(color)]}", color, new_pred, (450, 450+250*preds_colors.index(color)))
+
+        if not os.path.isdir(save_dir):
+            os.mkdir(save_dir)
+        assert cv2.imwrite(save_dir + "SEM_dauer_2_image_export_" + suffix + "_img.png", new_img)
+        assert cv2.imwrite(save_dir + "SEM_dauer_2_image_export_" + suffix + "_pred.png", new_pred)
+        assert cv2.imwrite(save_dir + "SEM_dauer_2_image_export_" + suffix + "_gt.png", new_gt)
+
+def centered_dataset(imgs_dir, gt_dir, mito_dir=None, neuron_dir=None, save_dir=None):
+    img_imgs, gt_imgs, mito_imgs, neuron_imgs =[], [], [], []
+
+    all_centers =[]
+
+    imgs = sorted(os.listdir(imgs_dir))
+    gts = sorted(os.listdir(gt_dir))
+    if mito_dir: mitos = sorted(os.listdir(mito_dir))
+    if neuron_dir: neurons = sorted(os.listdir(neuron_dir))
+
+    for i in range(len(imgs)):
+        im = cv2.cvtColor(cv2.imread(imgs[i]), cv2.COLOR_BGR2GRAY)
+        gts = cv2.imread(gts[i]) # in color
+        centers = center_img(gts)
+
+        gts = cv2.cvtColor(gts, cv2.COLOR_BGR2GRAY)
+        s = int(re.findall(r's\d\d\d', imgs[i])[0][1:])
+
+        for cx, cy in centers:
+            all_centers.append((cx, cy))
+            gt_imgs.append(deepcopy(gts[cy-256: cy+256, cx-256:cx+256]))
+            img_imgs.append(deepcopy(imgs[cy-256: cy+256, cx-256:cx+256]))
+            if mito_dir: mito_imgs.append(deepcopy(mitos[cy-256: cy+256, cx-256:cx+256]))
+            if neuron_dir: neuron_imgs.append(deepcopy(neurons[cy-256: cy+256, cx-256:cx+256]))
+    
+    os.mkdir(save_dir)
+    os.mkdir(os.path.join(save_dir, "imgs"))
+    os.mkdir(os.path.join(save_dir, "gts"))
+    if mito_dir: os.mkdir(os.path.join(save_dir, "mitos"))
+    if neuron_dir: os.mkdir(os.path.join(save_dir, "neurons"))
+
+    for i in range(len(img_imgs)):
+        s, cx, cy = all_centers[i]
+        cv2.imwrite(os.path.join(save_dir, f"imgs/s{s}_{cx}_{cy}.png"), img_imgs[i])
+        cv2.imwrite(os.path.join(save_dir, f"gts/{cx}_{cy}.png"), gt_imgs[i])
+        if mito_dir: cv2.imwrite(os.path.join(save_dir, f"mitos/{cx}_{cy}.png"), mito_imgs[i])
+        if neuron_dir: cv2.imwrite(os.path.join(save_dir, f"neurons/{cx}_{cy}.png"), neuron_imgs[i])
 
 if __name__ == "__main__":
     # save_dir = "/home/mishaalk/scratch/gapjunc/results/stitched_mito_preds/"
