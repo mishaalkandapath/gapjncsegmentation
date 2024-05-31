@@ -102,20 +102,24 @@ while start_z < ending_depth:
             image = torch.tensor(sub_volume_img).float().unsqueeze(0)
             if (sub_vol_height < subvol_height) or (sub_vol_width < subvol_width) or (sub_vol_depth < subvol_depth):
                 image = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(image)
-            image = tio.ZNormalization()(image)
-            print(image.shape)
-            intermed_pred, sub_volume_pred = model(image)
-            binary_pred = torch.argmax(sub_volume_pred[0], dim=0) # (depth, height, width)
-            np.save(os.path.join(save_dir, "original", f"z{start_z}_y{start_y}_x{start_x}.npy"), sub_volume_img)
-            np.save(os.path.join(save_dir, "ground_truth", f"z{start_z}_y{start_y}_x{start_x}.npy"), sub_volume_mask)
-            np.save(os.path.join(save_dir, "pred", f"z{start_z}_y{start_y}_x{start_x}.npy"), sub_volume_pred.detach().cpu())            
-            fig, ax = plt.subplots(3, subvol_depth, figsize=(15,5), num=1)
-            visualize_3d_slice(sub_volume_img, ax[0], "Image")
-            visualize_3d_slice(sub_volume_mask, ax[1], "Mask")
-            visualize_3d_slice(binary_pred, ax[2], "Pred")
-            plt.savefig(os.path.join(save_dir, "visualize", f"z{start_z}_y{start_y}_x{start_x}.png"))
-            plt.close("all")
-            print(f"Saved z{start_z}-{end_z} y{start_y}-{end_y} x{start_x}-{end_x} subvolume")
+                
+            try:
+                image = tio.ZNormalization()(image)
+                print(image.shape)
+                intermed_pred, sub_volume_pred = model(image)
+                binary_pred = torch.argmax(sub_volume_pred[0], dim=0) # (depth, height, width)
+                np.save(os.path.join(save_dir, "original", f"z{start_z}_y{start_y}_x{start_x}.npy"), sub_volume_img)
+                np.save(os.path.join(save_dir, "ground_truth", f"z{start_z}_y{start_y}_x{start_x}.npy"), sub_volume_mask)
+                np.save(os.path.join(save_dir, "pred", f"z{start_z}_y{start_y}_x{start_x}.npy"), sub_volume_pred.detach().cpu())            
+                fig, ax = plt.subplots(3, subvol_depth, figsize=(15,5), num=1)
+                visualize_3d_slice(sub_volume_img, ax[0], "Image")
+                visualize_3d_slice(sub_volume_mask, ax[1], "Mask")
+                visualize_3d_slice(binary_pred, ax[2], "Pred")
+                plt.savefig(os.path.join(save_dir, "visualize", f"z{start_z}_y{start_y}_x{start_x}.png"))
+                plt.close("all")
+                print(f"Saved z{start_z}-{end_z} y{start_y}-{end_y} x{start_x}-{end_x} subvolume")
+            except:
+                print(f"Skipping z{start_z}-{end_z} y{start_y}-{end_y} x{start_x}-{end_x}")
             start_x = end_x
         start_y = end_y
     start_z = end_z
