@@ -259,7 +259,7 @@ def train_log_local_2d3d(model: torch.nn.Module, train_loader: torch.utils.data.
                 continue
             
             valid_interm_pred, valid_pred = model(valid_inputs)
-            valid_loss = criterion(valid_pred, valid_labels)
+            valid_loss = criterion(valid_interm_pred, valid_pred, valid_labels)
             # Save predictions for each epoch
             if num_logged < num_predictions_to_log:
                 input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
