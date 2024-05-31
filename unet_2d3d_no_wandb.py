@@ -76,7 +76,7 @@ if __name__ == "__main__":
         alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
     gamma = args.gamma
     print(f"Alpha: {alpha},  Gamma: {gamma}")
-    criterion = FocalLossWith2d3d(alpha =alpha,gamma=gamma, device=DEVICE)
+    criterion = FocalLossWith2d3d(alpha=alpha,gamma=gamma, device=DEVICE)
 
     # ----- Train model -----
     train_log_local_2d3d(model=model, 
