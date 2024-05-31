@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=savepred3
+#SBATCH --job-name=savepred5
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -19,10 +19,10 @@ ENDING_WIDTH=2600
 SUBVOL_DEPTH=3
 SUBVOL_HEIGHT=512
 SUBVOL_WIDTH=512
-SAVE_DIR=/home/hluo/scratch/results/savepred3
+SAVE_DIR=/home/hluo/scratch/results/savepred5
 IMG_DIR=/home/hluo/scratch/sem_dauer_2_em
 MASK_DIR=/home/hluo/scratch/sem_dauer_2_gj_gt
-MODEL_NAME=model_job92
+MODEL_NAME=model_job84
 EPOCH=49
 MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
 USE_FULL_VOLUME=True
