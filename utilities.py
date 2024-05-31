@@ -57,11 +57,12 @@ class CaImagesDataset(torch.utils.data.Dataset):
 
         if mask_neurons:
             assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "illegal naming, feds on the way"
-            self.neuron_paths = [os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_")) for neuron_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_imgs")))]
+            self.neuron_paths = [os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_").replace(".png.png", ".png")) for neuron_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_imgs")))]
         else: self.neuron_paths = None
 
         if mask_mito:
-            self.mito_mask = [os.path.join(os.path.join(dataset_dir, f"{prefix}_mito"), neuron_id.replace("png", "tiff")) for neuron_id in sorted(os.path.join(dataset_dir, f"{prefix}_imgs"))]
+            self.mito_mask = [os.path.join(os.path.join(dataset_dir, f"{prefix}_mito"), neuron_id.replace("png", "tiff") if not "tiny" in dataset_dir else neuron_id) for neuron_id in sorted(os.listdir(images_dir))]
+            assert len(self.mito_mask) == len(self.image_paths), f"{len(self.mito_mask)} {len(self.image_paths)}"
         else:
             self.mito_mask=None
             
@@ -283,6 +284,53 @@ class SectionsDataset(torch.utils.data.Dataset):
         # return length of 
         return len(self.image_paths)
 
+class TestDataset(torch.utils.data.Dataset):
+    def __init__(
+            self, 
+            dataset_dir ,
+            image_dim = (512, 512),
+            td=False
+    ):      
+        self.image_paths = [os.path.join(dataset_dir, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
+
+        self.td = td
+
+    def __getitem__(self, i):
+        # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
+        if not self.td:
+            try:
+                image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
+            except Exception as e:
+                print(self.image_paths[i])
+                raise Exception(self.image_paths[i])
+        else:
+            images = sorted(os.listdir(self.image_paths[i]))
+            img = []
+            for j in range(4):
+                im = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], images[j])), cv2.COLOR_BGR2GRAY)
+                img.append(im)
+            
+            image = np.stack(img, axis=0)
+
+        _transform = []
+        _transform.append(transforms.ToTensor()) 
+
+        _transform_img = _transform.copy()
+        # _transform_img.append(transforms.Normalize(mean=[0.5], std=[0.5]))
+        image = transforms.Compose(_transform_img)(image)
+        image = torch.permute(image, (1, 2, 0))  
+
+        if image.shape[-1] != 512: image = torch.zeros(image.shape[:-1]+(512,))
+        if image.shape[-2] != 512: image = torch.zeros(image.shape[:-2]+(512,512))
+
+        return image.unsqueeze(0), image.unsqueeze(0), image.unsqueeze(0), image.unsqueeze(0)
+    def __len__(self):
+        # return length of 
+        return len(self.image_paths)
+
+
+
+
 class DoubleConv(nn.Module):
     """(Conv2d -> BN -> ReLU) * 2"""
     def __init__(self, in_channels, out_channels, three=False):
@@ -331,7 +379,7 @@ class UpBlock(nn.Module):
 
 class UNet(nn.Module):
     """UNet Architecture"""
-    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False):
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, scale=False):
         """Initialize the UNet model"""
         super(UNet, self).__init__()
         self.three = three
@@ -350,6 +398,14 @@ class UNet(nn.Module):
         self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
         # Final Convolution
         self.conv_last = nn.Conv2d(64, 1, kernel_size=1)
+        self.attend = attend
+        if scale:
+            self.s1, self.s2 = torch.nn.Parameter(torch.ones(1), requires_grad=True), torch.nn.Parameter(torch.ones(1), requires_grad=True) # learn scaling
+        if attend:
+
+            self.attention1 = nn.MultiheadAttention(512*512, 4, dropout=0.2)
+            self.attention2 = nn.MultiheadAttention(256*256, 4, dropout=0.2)
+
 
     def forward(self, x):
         """Forward pass of the UNet model
@@ -365,6 +421,7 @@ class UNet(nn.Module):
         x = self.up_conv4(x, skip4_out) # x: (16, 512, 64, 64)
         x = self.up_conv3(x, skip3_out) # x: (16, 256, 128, 128)
         if self.three: 
+            #attention_mode???
             skip1_out = torch.mean(skip1_out, dim=2)
             skip2_out = torch.mean(skip2_out, dim=2)
         x = self.up_conv2(x, skip2_out) # x: (16, 128, 256, 256)

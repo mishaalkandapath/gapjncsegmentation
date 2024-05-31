@@ -114,7 +114,9 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
             if neuron_mask != []: neuron_mask = neuron_mask.to(DEVICE)
             if mito_mask != []: mito_mask = mito_mask.to(DEVICE)
             pred = model(inputs)
-            loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] else [], mito_mask.squeeze(1) if mito_mask != [] else [])
+            if args.focalweight == 0:
+                loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] else [], mito_mask.squeeze(1) if mito_mask != [] else [], model.s1, model.s2)
+            else: loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] else [], mito_mask.squeeze(1) if mito_mask != [] else [])
             loss.backward() # calculate gradients (backpropagation)
             # for name, param in model.named_parameters():
             #     print(name, torch.any(torch.isnan(param.grad)))
@@ -422,7 +424,8 @@ if __name__ == "__main__":
     parser.add_argument("--gendice", action="store_true")
     parser.add_argument("--ss", action="store_true")
     parser.add_argument("--dicefocal", action="store_true")
-    parser.add_argument("--focalweight", default=0.5, type=int)
+    parser.add_argument("--focalweight", default=0.5, type=float)
+    parser.add_argument("--epochs", default=0, type=int)
 
     args = parser.parse_args()
 
@@ -458,7 +461,7 @@ if __name__ == "__main__":
 
         DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
 
-        if args.model_name is None: model = UNet(three=args.td).to(DEVICE) if not args.split else SplitUNet(three=args.td).to(DEVICE)
+        if args.model_name is None: model = UNet(three=args.td, scale=args.focalweight == 0).to(DEVICE) if not args.split else SplitUNet(three=args.td).to(DEVICE)
         else: model = joblib.load(os.path.join("/home/mishaalk/scratch/gapjunc/models/", args.model_name)) # load model
 
         if not args.infer:
@@ -502,8 +505,10 @@ if __name__ == "__main__":
                 criterion = SSLoss()
                 model_folder =model_folder[:-1] +"ssloss"
             elif args.dicefocal:
-                floss, GenDLoss =  FocalLoss(alpha=cls_weights, device=DEVICE), GenDLoss()
-                criterion = lambda a,b,c,d: args.focalweight * floss(a, b, c, d) + (1 - args.focalweight) *gloss(a, b, c, d)
+                floss, gloss =  FocalLoss(alpha=cls_weights, device=DEVICE), GenDLoss()
+                if args.focalweight == 0:
+                    criterion = lambda a,b,c,d,s1, s2: floss(s1*a, b, c, d) + gloss(s2*a, b, c, d)
+                else: criterion = lambda a,b,c,d: args.focalweight * floss(a, b, c, d) + (1 - args.focalweight) *gloss(a, b, c, d)
                 model_folder =model_folder[:-1] +"dicefocalloss"
             else:
                 criterion = FocalLoss(alpha=cls_weights, device=DEVICE)#torch.nn.BCEWithLogitsLoss()
@@ -522,12 +527,24 @@ if __name__ == "__main__":
             print("Starting training...")
             start = time.time()
 
-            print("SAVING MODELS TO {}".format(model_folder))
+            #determine save folder
+            counter = 0
+            model_folder+="mito" if args.mask_mito else ""
+            model_folder += "neuro" if args.mask_neurons else ""
+            while (os.path.isdir(model_folder)):
+                model_folder += str(counter)
+                counter+=1
+                continue
+            os.mkdir(model_folder)
 
+            print("SAVING MODELS TO {}".format(model_folder))
+    
             if not args.split:
-                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=150)
+                print(f"running for {150 if not args.epochs else args.epochs} epochs")
+                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=150 if not args.epochs else args.epochs)
             else:
-                train_loop_split(model, train_loader, classifier_criterion, criterion, optimizer, valid_loader, epochs=200)
+                print(f"running for {200 if not args.epochs else args.epochs} epochs")
+                train_loop_split(model, train_loader, classifier_criterion, criterion, optimizer, valid_loader, epochs=200 if not args.epochs else args.epochs)
                 
         else:
 
@@ -539,18 +556,28 @@ if __name__ == "__main__":
     else:
         #--- Personal debug area ---
 
-        model_folder += "tinymitobest"
-        sample_preds_folder = sample_preds_folder+"/tinymitobesttest/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch114.pk1"))
+        model_folder += "new3dfocal0"
+        sample_preds_folder = sample_preds_folder+"/new3dfocaltest/"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch108.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115
         model = model.to("cuda")
         model.eval()
 
-        # x_dir, y_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/imgs", "/home/mishaalk/scratch/gapjunc/train_datasets/jnc_only_dataset/gts"
-        x_dir, y_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/tiny_test", "/home/mishaalk/scratch/gapjunc/test_datasets/tiny_test"
+        dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/3d_test/imgs/"
 
-        dataset = CaImagesDataset(x_dir, y_dir, preprocessing=None, augmentation=None, image_dim=(512, 512))
-        imgs_files, gt_files = sorted(os.listdir(x_dir)), sorted(os.listdir(y_dir))
-        dataloader = DataLoader(dataset, batch_size=100, shuffle=False, num_workers=8)
+        # dataset = CaImagesDataset(dataset_dir, preprocessing=None, augmentation=None, image_dim=(512, 512), split=1)
+        dataset = TestDataset(dataset_dir, td=True)
+        imgs_files, gt_files = [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i], [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i]
+        def collate_fn(batch):
+            return (
+                torch.stack([x[0] for x in batch]),
+                torch.stack([x[1] for x in batch]),
+                torch.stack([x[2] for x in batch]),
+                torch.stack([x[3] for x in batch]),
+            )
+        dataloader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=8, collate_fn=collate_fn)
+
+        if not os.path.isdir(sample_preds_folder):
+            os.mkdir(sample_preds_folder)
 
         # assert len(imgs_files) == 2695
 
@@ -562,7 +589,7 @@ if __name__ == "__main__":
 
                 #infer:
                 x_tensor = image.to("cuda")
-                pred_mask, _ = model(x_tensor) # [1, 2, 512, 512]
+                pred_mask = model(x_tensor) # [1, 2, 512, 512]
                 # print(pred_mask.shape)
                 # pred_mask_binary = pred_mask.squeeze(0).detach()
                 pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
