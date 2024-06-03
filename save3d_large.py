@@ -22,6 +22,9 @@ parser.add_argument('--ending_width', type=int, default=9360, help='Ending width
 parser.add_argument('--subvol_depth', type=int, default=3, help='subvol depth')
 parser.add_argument('--subvol_height', type=int, default=256, help='subvol height')
 parser.add_argument('--subvol_width', type=int, default=256, help='subvol width')
+parser.add_argument('--step_z', type=int, default=3, help='step depth')
+parser.add_argument('--step_y', type=int, default=256, help='step height')
+parser.add_argument('--step_x', type=int, default=256, help='step width')
 parser.add_argument('--mask_dir', type=str, default="/Volumes/LaCie/sem_dauer_2_gj_gt", help='Mask directory')
 parser.add_argument('--img_dir', type=str, default="/Volumes/LaCie/SEM_dauer_2_em", help='Image directory')
 parser.add_argument('--save_dir', type=str, default="", help='Save directory')
@@ -88,6 +91,10 @@ if args.use_full_volume:
     ending_width = full_volume_img.shape[2]
 print("subvolume shape:", subvol_depth, subvol_height, subvol_width)
 print("ending:", ending_depth, ending_height, ending_width)
+
+step_z = args.step_z
+step_y = args.step_y
+step_x = args.step_x
 while start_z < ending_depth:
     end_z = start_z + subvol_depth
     start_y = args.start_y
@@ -120,6 +127,6 @@ while start_z < ending_depth:
                 print(f"Saved z{start_z}-{end_z} y{start_y}-{end_y} x{start_x}-{end_x} subvolume")
             except:
                 print(f"Skipping z{start_z}-{end_z} y{start_y}-{end_y} x{start_x}-{end_x}")
-            start_x = end_x
-        start_y = end_y
-    start_z = end_z
+            start_x = start_x + step_x
+        start_y = start_y + step_y
+    start_z = start_z + step_z
