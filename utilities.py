@@ -429,70 +429,62 @@ class UNet(nn.Module):
         x = self.conv_last(x) # x: (16, 1, 512, 512)
         return x
 
-class SplitUNet(nn.Module):
-    """UNet Architecture"""
-    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False):
+class MemUNet(nn.Module):
+    """UNet Architecture with membrane feature information"""
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, scale=False):
         """Initialize the UNet model"""
-        super(SplitUNet, self).__init__()
+        super(MemUNet, self).__init__()
+        self.three = three
         self.up_sample_mode = up_sample_mode
         # Downsampling Path
         self.down_conv1 = DownBlock(1, 64, three=three) # 3 input channels --> 64 output channels
         self.down_conv2 = DownBlock(64, 128, three=three) # 64 input channels --> 128 output channels
+        self.down_conv1_mem = DownBlock(1, 64, three=three) # 3 input channels --> 64 output channels
+        self.down_conv2_mem = DownBlock(64, 128, three=three) # 64 input channels --> 128 output channels
         self.down_conv3 = DownBlock(128, 256) # 128 input channels --> 256 output channels
         self.down_conv4 = DownBlock(256, 512) # 256 input channels --> 512 output channels
-        self.down_conv5 = DownBlock(1024, 1024)
-        self.down_conv6 = DownBlock(1024, 1024)
         # Bottleneck
         self.double_conv = DoubleConv(512, 1024)
         # Upsampling Path
         self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode) # 512 + 1024 input channels --> 512 output channels
         self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode)
-        self.up_conv2 = UpBlock(128 + 256, 128, self.up_sample_mode)
+        self.up_conv2 = UpBlock(128+ 256, 128, self.up_sample_mode)
         self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
         # Final Convolution
-        self.conv_last = nn.Conv2d(64, 1, kernel_size=1) if not three else nn.Conv3d(64, 1, kernel_size=1)
+        self.conv_last = nn.Conv2d(64, 1, kernel_size=1)
+        self.attend = attend
+        if scale:
+            self.s1, self.s2 = torch.nn.Parameter(torch.ones(1), requires_grad=True), torch.nn.Parameter(torch.ones(1), requires_grad=True) # learn scaling
+        if attend:
 
-        self.flats = nn.Sequential(OrderedDict([
-            ('flat1', nn.Linear((3 if three else 1) * 4096, 1024)),
-            ('relu1', nn.ReLU()),
-            ('flat2', nn.Linear(1024, 64)),
-            ('relu2', nn.ReLU()),
-            ('flat3', nn.Linear(64, 1))
-        ]))
+            self.attention1 = nn.MultiheadAttention(512*512, 4, dropout=0.2)
+            self.attention2 = nn.MultiheadAttention(256*256, 4, dropout=0.2)
 
-        self.once = True
 
-    def forward(self, x):
+    def forward(self, x, mem_x):
         """Forward pass of the UNet model
         x: (16, 1, 512, 512)
         """
-        x, skip1_out = self.down_conv1(x) # x: (16, 64, 256, 256), skip1_out: (16, 64, 512, 512) (batch_size, channels, height, width)
-        if self.once: print("Step 1 shape {} and skipout {}".format(x.shape, skip1_out.shape))
-        x, skip2_out = self.down_conv2(x) # x: (16, 128, 128, 128), skip2_out: (16, 128, 256, 256)
-        if self.once:print("Step 2 shape {} and skipout {}".format(x.shape, skip2_out.shape))
-        x, skip3_out = self.down_conv3(x) # x: (16, 256, 64, 64), skip3_out: (16, 256, 128, 128)
-        if self.once:print("Step 3 shape {} and skipout {}".format(x.shape, skip3_out.shape))
+        # print(x.shape)
+        x, skip1_out = self.down_conv1(x) # x: (16, 64, 256, 256), skip1_out: (16, 64, 512, 512) (batch_size, channels, height, width) 
+        x_mem, skip1_out_mem = self.down_conv1_mem(mem_x)   
+        x, skip2_out = self.down_conv2(x+x_mem) # x: (16, 128, 128, 128), skip2_out: (16, 128, 256, 256)
+        x_mem, skip2_out_mem = self.down_conv2_mem(x_mem)
+        if self.three: x = x.squeeze(-3), x_mem.squeeze(-3)   
+        x, skip3_out = self.down_conv3(x+x_mem) # x: (16, 256, 64, 64), skip3_out: (16, 256, 128, 128)
         x, skip4_out = self.down_conv4(x) # x: (16, 512, 32, 32), skip4_out: (16, 512, 64, 64)
-        if self.once:print("Step 4 shape {} and skipout {}".format(x.shape, skip4_out.shape))
         x = self.double_conv(x) # x: (16, 1024, 32, 32)
-        if self.once:print("Step 5 shape {}".format(x.shape))
-    
-        x_, _ = self.down_conv5(x)
-        x_, _ = self.down_conv6(x_)
-        x_ = self.flats(x_.view(x_.shape[0], -1)) # flattent and pass into 
-
         x = self.up_conv4(x, skip4_out) # x: (16, 512, 64, 64)
-        if self.once:print("Step 6 shape {}".format(x.shape))
         x = self.up_conv3(x, skip3_out) # x: (16, 256, 128, 128)
-        if self.once:print("Step 7 shape {}".format(x.shape))
+        if self.three: 
+            #attention_mode???
+            skip1_out = torch.mean(skip1_out, dim=2)
+            skip2_out = torch.mean(skip2_out, dim=2)
         x = self.up_conv2(x, skip2_out) # x: (16, 128, 256, 256)
-        if self.once:print("Step 8 shape {}".format(x.shape))
         x = self.up_conv1(x, skip1_out) # x: (16, 64, 512, 512)
-        if self.once:print("Step 9 shape {}".format(x.shape))
         x = self.conv_last(x) # x: (16, 1, 512, 512)
-        if self.once:print("Step 10 shape {}".format(x.shape))
-        if self.once: self.once = False
-        return x, x_
+        return x
+
     
 class FocalLoss(nn.Module):
     def __init__(self, alpha, gamma=2, device=torch.device("cpu")):

@@ -89,7 +89,7 @@ def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False,
 
     return train, valid
 
-def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epochs=30, decay=None):
+def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem_feat=False, epochs=30, decay=None):
     global table, class_labels, model_folder, DEVICE, args
     
     print(f"Using device: {DEVICE}")
@@ -105,6 +105,9 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
     signal.signal(signal.SIGINT, sigint_handler)
     signal.signal(signal.SIGUSR1, sigint_handler)
 
+    recall_f = lambda pred, gt: torch.nansum(pred[pred == 1])/torch.nansum(gt[gt == 1])
+    precision_f = lambda pred, gt: torch.nansum(pred[pred == 1])/torch.nansum(pred[(pred == 1) & (gt == 1)])
+
     for epoch in range(epochs):
         pbar = tqdm(total=len(train_loader))
         for i, data in enumerate(train_loader):
@@ -113,14 +116,16 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             if neuron_mask != []: neuron_mask = neuron_mask.to(DEVICE)
             if mito_mask != []: mito_mask = mito_mask.to(DEVICE)
-            pred = model(inputs)
+            pred = model(inputs) if not mem_feat else model(inputs, neuron_mask)
             if args.focalweight == 0:
                 loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] else [], mito_mask.squeeze(1) if mito_mask != [] else [], model.s1, model.s2)
             else: loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] else [], mito_mask.squeeze(1) if mito_mask != [] else [])
             loss.backward() # calculate gradients (backpropagation)
-            # for name, param in model.named_parameters():
-            #     print(name, torch.any(torch.isnan(param.grad)))
-            # raise Exception
+            
+            # log some metrics
+            wandb.log({"train_precision": precision_f(pred >= 0.5, labels)})
+            wandb.log({"train_recall": recall_f(pred >= 0.5, labels)})
+
             if args.mask_neurons and args.gendice: torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
             optimizer.step() # update model weights (values for kernels)
             pbar.set_postfix(step = f"Step: {i}", loss = f"Loss: {loss}")
@@ -140,7 +145,10 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
                 if valid_neuron_mask != []: valid_neuron_mask = valid_neuron_mask.to(DEVICE)
                 if valid_mito_mask != []: valid_mito_mask = valid_mito_mask.to(DEVICE)
                 valid_pred = model(valid_inputs)
-                valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] else [], valid_mito_mask if valid_mito_mask !=[] else [])
+                if args.focalweight == 0:
+                    valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] else [], valid_mito_mask if valid_mito_mask !=[] else [], model.s1, model.s2)
+                else:   
+                    valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] else [], valid_mito_mask if valid_mito_mask !=[] else [])
                 mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy()[0] if args.td else valid_inputs[0].squeeze(0).cpu().numpy(), 
                                         masks = {
                                             "predictions" : {
@@ -161,6 +169,10 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, epo
                         print("UNIQUE OUTPUTS!")
                 else:
                     epoch_non_empty = False
+                
+                # log some metrics
+                wandb.log({"valid_precision": precision_f(valid_pred >= 0.5, valid_labels)})
+                wandb.log({"valid_recall": recall_f(valid_pred >= 0.5, valid_labels)})
         if decay is not None: decay.step(valid_loss)
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
@@ -222,159 +234,6 @@ def inference_save(model, train_dataset, valid_dataset):
         pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
         plt.imshow(pred_mask_binary.cpu().detach().squeeze(0).squeeze(0).numpy(), cmap="gray")
         plt.savefig(os.path.join(sample_val_folder, f"sample_pred_binary_{suffix}.png"))
-
-
-def train_loop_split(model, train_loader, classifier_criterion, criterion, optimizer, valid_loader=None, epochs=30, decay=None):
-    global table, class_labels, model_folder, DEVICE
-    
-    print(f"Using device: {DEVICE}")
-    model_name = "model5"
-    def sigint_handler(sig, frame):
-        if table is not None:
-            print("logging to WANDB")
-            wandb.log({"Table" : table})
-            joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
-            wandb.finish()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, sigint_handler)
-    signal.signal(signal.SIGUSR1, sigint_handler)
-    
-    for epoch in range(epochs):
-        pbar = tqdm(total = len(train_loader))
-        for i, data in enumerate(train_loader):
-            pbar.set_description("Progress: {:.2%}".format(i/len(train_loader)))
-            inputs, labels, neuron_mask, mito_mask= data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
-            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-            if neuron_mask != []: neuron_mask = neuron_mask.to(DEVICE)
-            if mito_mask != []: mito_mask = mito_mask.to(DEVICE)
-            train_class_labels = labels.view(labels.shape[0], -1).sum(axis=-1, keepdim=True) >= 1 # loss mask
-
-            pred, classifier = model(inputs)
-            classifier_loss = classifier_criterion(classifier, train_class_labels.to(dtype=torch.float32)).mean()
-
-            #might have to scale the criteria, decide from experiments
-            if neuron_mask == []:
-                loss = criterion(pred, labels, train_class_labels, mito_mask) * batch_size/torch.count_nonzero(train_class_labels) # take into account only the losses that have positive labels
-            else:
-                neuron_mask *= train_class_labels.unsqueeze(-1)
-                mito_mask *= train_class_labels.unsqueeze(-1)
-                loss = criterion(pred, labels, neuron_mask, mito_mask) * batch_size/torch.count_nonzero(train_class_labels) # take into account only the losses that have positive labels
-
-            wandb.log({"segmentation loss": loss})
-            loss += classifier_loss
-            loss.backward() # calculate gradients (backpropagation)
-            torch.nn.utils.clip_grad_norm(model.parameters(), 1)
-            optimizer.step() # update model weights (values for kernels)
-            pbar.set_postfix(step=f"Step: {i}", loss=f"Loss: {loss}")
-            loss_list.append(loss)
-            wandb.log({"loss": loss})
-            wandb.log({"classifier loss": classifier_loss})
-            pbar.update(1)
-            pbar.refresh()
-        
-        epoch_non_empty = False
-
-        for i, data in enumerate(valid_loader):
-            valid_inputs, valid_labels, v_neuron_mask, v_mito_mask = data
-            valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
-            if v_neuron_mask != []: v_neuron_mask = v_neuron_mask.to(DEVICE)
-            if v_mito_mask != []: v_mito_mask = v_mito_mask.to(DEVICE)
-            valid_class_labels = valid_labels.view(valid_labels.shape[0], -1).sum(axis=-1, keepdim=True) >= 1 # loss mask
-
-            valid_pred, valid_classifier = model(valid_inputs)
-            valid_classifier_loss = classifier_criterion(valid_classifier, valid_class_labels.to(dtype=torch.float32)).mean()
-
-            if v_neuron_mask == []:
-                valid_loss = criterion(valid_pred, valid_labels, valid_class_labels, v_mito_mask)
-            else:
-                v_neuron_mask *= valid_class_labels.unsqueeze(-1)
-                v_mito_mask *= valid_class_labels.unsqueeze(-1)
-                valid_loss = criterion(valid_pred, valid_labels, v_neuron_mask, v_mito_mask)
-            valid_loss += valid_classifier_loss
-            mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy(), 
-                                    masks = {
-                                        "predictions" : {
-                            "mask_data" : (torch.round(nn.Sigmoid()(valid_pred[0].squeeze(0))) * 255).cpu().detach().numpy(),
-                            "class_labels" : class_labels
-                        },
-                        "ground_truth" : {
-                            "mask_data" : (valid_labels[0].squeeze(0) * 255).cpu().numpy(),
-                            "class_labels" : class_labels
-                        }}
-            )
-            table.add_data(f"Epoch {epoch} Step {i}", mask_img)
-            wandb.log({"valid_loss": valid_loss})
-            wandb.log({"classification loss": valid_classifier_loss})
-            uniques = np.unique(torch.round(nn.Sigmoid()(valid_pred[0].squeeze(0))).detach().cpu().numpy())
-            if len(uniques) == 2:
-                if not epoch_non_empty:
-                    epoch_non_empty = True
-                    print("UNIQUE OUTPUTS!")
-            else:
-                epoch_non_empty = False
-        if decay is not None: decay.step(valid_loss)
-
-        print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
-        print(f"Time elapsed: {time.time() - start} seconds")
-        temp_name = model_name+"_epoch"+str(epoch)
-        joblib.dump(model, os.path.join(model_folder, f"{temp_name}.pk1"))
-    print(f"Total time: {time.time() - start} seconds")
-    wandb.log({"Table" : table})
-    joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
-    wandb.finish()
-    try:
-        joblib.dump(loss_list, os.path.join(model_folder, "loss_list_1.pkl"))
-    except:
-        print("Failed to save loss list")
-
-def inference_save_split(model, train_dataset, valid_dataset):
-    global DEVICE, model_folder, sample_preds_folder
-
-    sample_train_folder = sample_preds_folder+"//train_res"
-    model = joblib.load(os.path.join(model_folder, "model5_epoch17.pk1"))
-    model = model.to(DEVICE)
-    model.eval()
-    for i in tqdm(range(len(train_dataset))):
-        image, gt_mask, _ = train_dataset[i] # image and ground truth from test dataset
-        # print(image.shape, gt_mask.shape) # [1, 512, 512] and [2, 512, 512]
-        # print(image)
-        suffix = "_1_{}".format(i)
-        plt.imshow(image.squeeze(0).numpy(), cmap='gray')
-        plt.savefig(os.path.join(sample_train_folder, f"sample_pred_{suffix}.png"))
-        # plt.show()
-        plt.imshow(gt_mask.squeeze(0).detach().numpy(), cmap="gray")
-        plt.savefig(os.path.join(sample_train_folder, f"sample_gt_{suffix}.png"))
-        # plt.show()
-        x_tensor = image.to(DEVICE).unsqueeze(0)
-        pred_mask = model(x_tensor) # [1, 2, 512, 512]
-        # print(pred_mask.shape)
-        # pred_mask_binary = pred_mask.squeeze(0).detach()
-        pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
-        plt.imshow(pred_mask_binary.cpu().detach().squeeze(0).squeeze(0).numpy(), cmap="gray")
-        plt.savefig(os.path.join(sample_train_folder, f"sample_pred_binary_{suffix}.png"))
-        # plt.show()
-
-    sample_val_folder = sample_preds_folder+"//valid_res"
-    for i in tqdm(range(len(valid_dataset))):
-        image, gt_mask, _ = valid_dataset[i] # image and ground truth from test dataset
-        # print(image.shape, gt_mask.shape) # [1, 512, 512] and [2, 512, 512]
-        # print(image)
-        suffix = "_1_{}".format(i)
-        plt.imshow(image.squeeze(0).numpy(), cmap='gray')
-        plt.savefig(os.path.join(sample_val_folder, f"sample_pred_{suffix}.png"))
-        # plt.show()
-        plt.imshow(gt_mask.squeeze(0).detach().numpy(), cmap="gray")
-        plt.savefig(os.path.join(sample_val_folder, f"sample_gt_{suffix}.png"))
-        # plt.show()
-        x_tensor = image.to(DEVICE).unsqueeze(0)
-        pred_mask = model(x_tensor) # [1, 2, 512, 512]
-        
-        # pred_mask_binary = torch.argmax(pred_mask.squeeze(0).detach(), 0)
-        pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
-        plt.imshow(pred_mask_binary.cpu().detach().squeeze(0).squeeze(0).numpy(), cmap="gray")
-        plt.savefig(os.path.join(sample_val_folder, f"sample_pred_binary_{suffix}.png"))
-
 
 def setup_wandb(epochs, lr):
     global table, class_labels
@@ -450,6 +309,8 @@ if __name__ == "__main__":
 
 
         if args.dataset is None: print("----WARNING: RUNNING OLD DATASET----")
+
+        print("ARGS: ", sys.argv)
 
         #set the model and results path
         model_folder += args.dataset+"/"
@@ -556,13 +417,14 @@ if __name__ == "__main__":
     else:
         #--- Personal debug area ---
 
-        model_folder += "new3dfocal0"
-        sample_preds_folder = sample_preds_folder+"/new3dfocaltest/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch108.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115
+        model_folder += "3d_df_dyna"
+        sample_preds_folder = sample_preds_folder+"/new3d_df_dyna_run1_train/"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch82.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
         model = model.to("cuda")
         model.eval()
 
-        dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/3d_test/imgs/"
+        dataset_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split3d/train_imgs"
+        # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/3d_test/imgs/"
 
         # dataset = CaImagesDataset(dataset_dir, preprocessing=None, augmentation=None, image_dim=(512, 512), split=1)
         dataset = TestDataset(dataset_dir, td=True)
