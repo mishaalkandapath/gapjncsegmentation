@@ -1,17 +1,13 @@
 import torchio as tio
 import torch
 import os
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import re
-import tqdm
 import argparse
 from models import *
 from utilities import *
 
 print("starting...")
-# Adding arguments with default values
 parser = argparse.ArgumentParser(description="save preds")
 parser.add_argument('--start_x', type=int, default=0, help='Starting X coordinate')
 parser.add_argument('--start_y', type=int, default=0, help='Starting Y coordinate')
