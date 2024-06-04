@@ -52,6 +52,8 @@ if __name__ == "__main__":
 
     # -- Results Flags --
     parser.add_argument("--results_dir", default=None, type=str, help="Full path to the results directory")
+    parser.add_argument("--no_assemble", action="store_true", help="Do not assemble the predictions before calculating the metrics")
+    parser.add_argument("--breakdown", action="store_true", help="Breakdown the metrics by confidence type")
 
     args = parser.parse_args()
 
@@ -180,7 +182,7 @@ if __name__ == "__main__":
         f = None if args.test else lambda x: x.replace(args.img_template, args.seg_template)
         assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, overlap=True, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset)
     
-    if args.results:
+    if args.results and not args.no_assemble:
         recalls, precisions, precisions_gen, accs, accs_gen = [], [], [], [], []
 
 
@@ -198,6 +200,10 @@ if __name__ == "__main__":
         print("Precision Generous: ", np.nanmean(precisions_gen))
         print("Accuracy: ", np.nanmean(accs))
         print("Accuracy Generous: ", np.nanmean(accs_gen))
+    elif args.results and args.no_assemble:
+        preds_to_seg = lambda x: x.replace(args.image_template, args.seg_template)
+        preds_to_mask = lambda x: x.replace(args.image_template, args.nr_mask_template)
+        mask_acc_split(args.seg_dir, args.preds_dir, args.nr_mask_dir, args.td, args.breakdown, preds_to_seg, preds_to_mask)
 
 
 

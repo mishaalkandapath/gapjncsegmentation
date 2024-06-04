@@ -1,4 +1,4 @@
-import cv2, numpy as np, re, os, sys, shutil, glob
+import cv2, numpy as np, re, os, sys, shutil, glob, traceback
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -232,8 +232,6 @@ def mask_recall(gt, pred, mask=None):
     gt[gt != 0] = 255   
 
     return np.sum(np.logical_and(gt == 255, pred == 255)) / np.sum(gt == 255)
-
-#-- Archived -- 
 """
 @params: gt_image: ground truth image
 @params: preds_image: predicted image
@@ -265,4 +263,63 @@ def assembled_stats(gt_image, preds_image, nr_mask=None, seg_bads=(2, 15)):
     acc_gen = mask_acc_generous(gt_image, preds_image, mask=nr_mask)
 
     return recall, precision, precision_gen, acc, acc_gen
+
+#get stats on a split dataset:
+def mask_acc_split(seg_dir, results_dir, nr_mask_dir=None, td=False, breakdown=False, preds_to_seg_map=lambda x:x, preds_to_nr_map=lambda x:x):
+    segs = sorted(os.listdir(seg_dir))
+    preds = sorted(os.listdir(results_dir))
+
+    t_recall, t_acc = [], []
+    t_acc_gen = []
+    t_prec, t_prec_gen = [], []
+
+    t_45_recall, t_3_recall, t_2_recall, t_1_recall = [], [], [], []
+
+    weird_shape_count = 0
+
+    for i, file in tqdm(enumerate(preds), total=len(preds)): 
+        if "DS" in file: continue #villainous
+        try:
+            segs[i] = os.path.join(seg_dir, preds_to_seg_map(file))
+            gt = cv2.cvtColor(cv2.imread(segs[i]), cv2.COLOR_BGR2GRAY)
+            no = re.findall(r'_\d+', file)[0]
+            pred = cv2.cvtColor(cv2.imread(os.path.join(results_dir, file)), cv2.COLOR_BGR2GRAY)
+
+            #area mask 
+            if nr_mask_dir:
+                mask = cv2.cvtColor(cv2.imread(os.path.join(nr_mask_dir, preds_to_nr_map(file))), cv2.COLOR_BGR2GRAY)
+                mask = mask == 21
+            else: mask = np.ones_like(gt)
+            if breakdown:
+                test_gt = gt.copy()
+
+            t_acc.append(mask_acc(gt, pred, mask=mask))
+            t_recall.append(mask_recall(gt, pred, mask=mask))
+            t_acc_gen.append(mask_acc_generous(gt, pred, mask=mask))
+            t_prec_gen.append(mask_precision_generous(gt, pred, mask=mask))
+            t_prec.append(mask_precision(gt, pred, mask=mask))
+
+            if breakdown:
+                t_45_recall.append(mask_recall((np.where(test_gt == 11, 1, 0) | np.where(test_gt == 9, 1, 0)) * 255, pred, mask=mask))
+                t_3_recall.append(mask_recall(np.where(test_gt == 7, 255, 0), pred, mask=mask))
+                t_2_recall.append(mask_recall(np.where(test_gt == 5, 255, 0), pred, mask=mask))
+                t_1_recall.append(mask_recall(np.where(test_gt == 3, 255, 0), pred, mask=mask))
+
+        except Exception:
+            segs[i] = os.path.join(seg_dir, preds_to_seg_map(file))
+            gt = cv2.cvtColor(cv2.imread(segs[i]), cv2.COLOR_BGR2GRAY) 
+            assert not np.count_nonzero(gt[(gt != 2) & (gt != 15)])
+            weird_shape_count +=1
+
+            print(traceback.format_exc())
     
+    print("Training set mask accuracy {}".format(np.nanmean(t_acc)))
+    print("Training set mask recall {}".format(np.nanmean(t_recall)))
+    print("Training set mask accuracy generous {}".format(np.nanmean(t_acc_gen)))
+    print("Training set mask prec {}".format(np.nanmean(t_prec)))
+    print("Training set mask prec generous {}".format(np.nanmean(t_prec_gen)))
+
+    print("Training set mask recall 45 {}".format(np.nanmean(t_45_recall)))
+    print("Training set mask recall 3 {}".format(np.nanmean(t_3_recall)))
+    print("Training set mask recall 2 {}".format(np.nanmean(t_2_recall)))
+    print("Training set mask recall 1 {}".format(np.nanmean(t_1_recall)))
