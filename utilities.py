@@ -331,44 +331,44 @@ class TestDataset(torch.utils.data.Dataset):
         # return length of 
         return len(self.image_paths)
 
-
-
-
 class DoubleConv(nn.Module):
     """(Conv2d -> BN -> ReLU) * 2"""
-    def __init__(self, in_channels, out_channels, three=False, spatial=False, dropout=0):
+    def __init__(self, in_channels, out_channels, three=False, spatial=False, residual=False, dropout=0):
         super(DoubleConv, self).__init__()
         self.dropout = torch.nn.Dropout(p=dropout)
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1) if not three else nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels) if not three else nn.BatchNorm3d(out_channels),
             nn.ReLU(inplace=True),
-            self.dropout,
+            nn.BatchNorm2d(out_channels) if not three else nn.BatchNorm3d(out_channels),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1) if not three else nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels) if not three else nn.BatchNorm3d(out_channels),
+        )
+        self.final = nn.Sequential(
             nn.ReLU(inplace=True),
+            nn.BatchNorm2d(out_channels) if not three else nn.BatchNorm3d(out_channels),
             self.dropout,
         )
         self.spatial=spatial
         if spatial: 
-            self.spatial_sample = PyramidPooling(levels=[2, 2, 4, 4, 4, 4, 4, 4,4, 4])
+            self.spatial_sample = PyramidPooling(levels=[2, 2, 4, 4, 4, 4, 4, 4,4, 4], td=three)
 
-    def forward(self, x):
-        x = self.double_conv(x)
+    def forward(self, x_in):
+        x = self.double_conv(x_in)
+        if self.residual: x = x + x_in
+        x = self.final(x)
         con_shape = x.shape
-        if self.spatial:
+        if self.spatial: # Spatial pyramidal pooling
             x = self.spatial_sample(x)
             x = x.reshape(con_shape)
         return x
     
 class DownBlock(nn.Module):
     """Double Convolution followed by Max Pooling"""
-    def __init__(self, in_channels, out_channels, three=False, spatial=True, dropout=0):
+    def __init__(self, in_channels, out_channels, three=False, spatial=True, dropout=0, residual=False):
         super(DownBlock, self).__init__()
-        self.double_conv = DoubleConv(in_channels, out_channels, three=three, dropout=dropout)
+        self.double_conv = DoubleConv(in_channels, out_channels, three=three, dropout=dropout, residual=residual)
         self.spatial = spatial
         if spatial: 
-            self.spatial_sample = PyramidPooling(levels=[2, 2, 4, 4, 4, 4, 4, 4,4, 4])
+            self.spatial_sample = PyramidPooling(levels=[2, 2, 4, 4, 4, 4, 4, 4,4, 4], td=three)
         self.down_sample = nn.MaxPool2d(2, stride=2) if not three else nn.MaxPool3d(2, stride=2)
 
     def forward(self, x):
@@ -402,24 +402,24 @@ class UpBlock(nn.Module):
 
 class UNet(nn.Module):
     """UNet Architecture"""
-    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, scale=False, spatial=False, dropout=0):
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, residual=False scale=False, spatial=False, dropout=0):
         """Initialize the UNet model"""
         super(UNet, self).__init__()
         self.three = three
         self.up_sample_mode = up_sample_mode
         self.dropout=dropout
-        
+
         # Downsampling Path
-        self.down_conv1 = DownBlock(1, 64, three=three, spatial=False) # 3 input channels --> 64 output channels
-        self.down_conv2 = DownBlock(64, 128, three=three, spatial=spatial, dropout=self.dropout) # 64 input channels --> 128 output channels
-        self.down_conv3 = DownBlock(128, 256, spatial=spatial, dropout=self.dropout) # 128 input channels --> 256 output channels
-        self.down_conv4 = DownBlock(256, 512, spatial=spatial, dropout=self.dropout) # 256 input channels --> 512 output channels
+        self.down_conv1 = DownBlock(1, 64, three=three, spatial=False, residual=residual) # 3 input channels --> 64 output channels
+        self.down_conv2 = DownBlock(64, 128, three=three, spatial=spatial, dropout=self.dropout, residual=residual) # 64 input channels --> 128 output channels
+        self.down_conv3 = DownBlock(128, 256, spatial=spatial, dropout=self.dropout, residual=residual) # 128 input channels --> 256 output channels
+        self.down_conv4 = DownBlock(256, 512, spatial=spatial, dropout=self.dropout, residual=residual) # 256 input channels --> 512 output channels
         # Bottleneck
-        self.double_conv = DoubleConv(512, 1024,spatial=spatial, dropout=self.dropout)
+        self.double_conv = DoubleConv(512, 1024,spatial=spatial, dropout=self.dropout, residual=residual)
         # Upsampling Path
-        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode, dropout=self.dropout) # 512 + 1024 input channels --> 512 output channels
-        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode, dropout=self.dropout)
-        self.up_conv2 = UpBlock(128+ 256, 128, self.up_sample_mode, dropout=self.dropout)
+        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode, dropout=self.dropout, residual=residual) # 512 + 1024 input channels --> 512 output channels
+        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode, dropout=self.dropout, residual=residual)
+        self.up_conv2 = UpBlock(128+ 256, 128, self.up_sample_mode, dropout=self.dropout, residual=residual)
         self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
         # Final Convolution
         self.conv_last = nn.Conv2d(64, 1, kernel_size=1)
@@ -477,7 +477,6 @@ class MemUNet(nn.Module):
         if scale:
             self.s1, self.s2 = torch.nn.Parameter(torch.ones(1), requires_grad=True), torch.nn.Parameter(torch.ones(1), requires_grad=True) # learn scaling
         if attend:
-
             self.attention1 = nn.MultiheadAttention(512*512, 4, dropout=0.2)
             self.attention2 = nn.MultiheadAttention(256*256, 4, dropout=0.2)
 
@@ -616,125 +615,9 @@ class GenDLoss(nn.Module):
         return torch.nanmean(1 - 2 * torch.nansum(weights * torch.nansum(targets * inputs, dim=-1), dim=-1)/\
                           torch.nansum(weights * torch.nansum(targets + inputs, dim=-1), dim=-1))
 
-def get_training_augmentation():
-    """ Add augmentation to the training data. Crop it to 256, 256 and flip it horizontally, vertically or rotate it by 90 degrees.
-    
-    Returns:
-        album.Compose: Composed augmentation functions
-    """
-    train_transform = [    
-        album.RandomCrop(height=256, width=256, always_apply=True), # crop it to 256, 256
-        album.OneOf(
-            [
-                album.HorizontalFlip(p=1),
-                album.VerticalFlip(p=1),
-                album.RandomRotate90(p=1),
-            ],
-            p=0.75,
-        ),
-    ]
-    return album.Compose(train_transform)
-
-def get_validation_augmentation():   
-    """ Add augmentation to the validation data. Add padding to make it 1536, 1536. 
-    
-    Returns:
-        album.Compose: Composed augmentation functions
-    """
-    test_transform = [
-        album.PadIfNeeded(min_height=1536, min_width=1536, always_apply=True, border_mode=0), # crop it to 1536, 1536
-    ]
-    return album.Compose(test_transform)
-
-
-def get_preprocessing(preprocessing_fn=None, image_dim=(512, 512)):
-    """Construct preprocessing transform    
-    Args:
-        preprocessing_fn (callable): data normalization function 
-            (can be specific for each pretrained neural network)
-    Return:
-        transform: albumentations.Compose
-    """   
-    _transform = []
-    _transform.append(transforms.ToTensor())
-
-    img_size = 512
-    width, height = image_dim
-    max_dim = max(img_size, width, height)
-    pad_left = (max_dim-width)//2
-    pad_right = max_dim-width-pad_left
-    pad_top = (max_dim-height)//2
-    pad_bottom = max_dim-height-pad_top
-    _transform.append(transforms.Pad(padding=(pad_left, pad_top, pad_right, pad_bottom), 
-                                    padding_mode='edge'))
-    _transform.append(transforms.Resize(interpolation=transforms.InterpolationMode.NEAREST_EXACT,size=(img_size, img_size)))       
-    if preprocessing_fn:
-        _transform.append(preprocessing_fn)
-
-    return transforms.Compose(_transform)
-
-def visualize(**images):
-    """
-    Plot images in one row
-    images: List of images in the form (width, height, channels)
-    """
-    n_images = len(images)
-    plt.figure(figsize=(20,8))
-    # for each item in images, it has an index, name, and image
-    for idx, (name, image) in enumerate(images.items()):
-        plt.subplot(1, n_images, idx + 1)
-        plt.xticks([]); 
-        plt.yticks([])
-        # get title from the parameter names
-        plt.title(name.replace('_',' ').title(), fontsize=20)
-        plt.imshow(image)
-    plt.show()
-    
-
-def find_centroids(segmented_img):
-    centroids = []
-    cont, hierarchy = cv2.findContours(segmented_img, 
-                            cv2.RETR_EXTERNAL, 
-                            cv2.CHAIN_APPROX_SIMPLE)
-    for c in cont:
-        # compute the center of the contour
-        M = cv2.moments(c)
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
-        centroids.append((cX, cY))
-    
-    return centroids
-
-# Center crop padded image / mask to original image dims
-def crop_image(image, target_image_dims):
-
-    target_size = target_image_dims[0]
-    image_size = len(image)
-    padding = (image_size - target_size) // 2
-
-    return image[
-        padding:image_size - padding,
-        padding:image_size - padding,
-        :,
-    ]
-
-def get_subset(dataset, subset_size):
-    """Get a subset of the dataset
-    
-    Args:
-        dataset (CaImagesDataset): dataset to get subset from
-        subset_size (int): size of the subset
-        
-    Returns:
-        subset (CaImagesDataset): subset of the dataset
-    """
-    # get a random subset of the dataset
-    subset = torch.utils.data.Subset(dataset, random.sample(range(len(dataset)), subset_size))
-    return subset
-
 class PyramidPooling(nn.Module):
 
-    def __init__(self, levels, channels=1, mode="max", method='spatial'):
+    def __init__(self, levels, channels=1, mode="max", method='spatial', td=False):
         """
         General Pyramid Pooling class which uses Spatial Pyramid Pooling by default and holds the static methods for both spatial and temporal pooling.
         :param levels defines the different divisions to be made in the width and (spatial) height dimension
@@ -833,7 +716,8 @@ class PyramidPooling(nn.Module):
                                     mode='constant', value=0)
             
             if mode == "max":
-                pool = nn.MaxPool2d((h_kernel, w_kernel), stride=(h_kernel, w_kernel), padding=(0, 0))
+                if not self.td: pool = nn.MaxPool2d((h_kernel, w_kernel), stride=(h_kernel, w_kernel), padding=(0, 0))
+                else: pool = nn.MaxPool3d((h_kernel, w_kernel), stride=(h_kernel, w_kernel), padding=(0, 0))
             elif mode == "avg":
                 pool = nn.AvgPool2d((h_kernel, w_kernel), stride=(h_kernel, w_kernel), padding=(0, 0))
             else:

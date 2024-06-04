@@ -288,6 +288,7 @@ if __name__ == "__main__":
     parser.add_argument("--mask_feat", action="store_true")
     parser.add_argument("--dropout", default=0, type=float, help="Dropout for neural network training")
     parser.add_argument("--spatial", action="store_true", help="Spatial Pyramid")
+    parser.add_argument("--residual", action="store_true")
 
     args = parser.parse_args()
 
@@ -325,7 +326,7 @@ if __name__ == "__main__":
 
         DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
 
-        if args.model_name is None: model = UNet(three=args.td, scale=args.focalweight == 0, spatial=args.spatial, dropout=args.dropout).to(DEVICE)
+        if args.model_name is None: model = UNet(three=args.td, scale=args.focalweight == 0, spatial=args.spatial, dropout=args.dropout, residual=args.residual).to(DEVICE)
         else: model = joblib.load(os.path.join("/home/mishaalk/scratch/gapjunc/models/", args.model_name)) # load model
 
         if not args.infer:
