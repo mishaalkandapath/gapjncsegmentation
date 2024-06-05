@@ -59,8 +59,12 @@ class SliceDataset(torch.utils.data.Dataset):
                 image=tio.ScalarImage(tensor=image),
                 mask=tio.LabelMap(tensor=mask)
             )
-            flip_transform = tio.RandomFlip(flip_probability=1)
+            flip_transform = tio.RandomFlip(axes=0, flip_probability=0.5)
             flipped_subject = flip_transform(subject)
+            flip_transform = tio.RandomFlip(axes=1, flip_probability=0.5)
+            flipped_subject = flip_transform(flipped_subject)
+            flip_transform = tio.RandomFlip(axes=2, flip_probability=0.5)
+            flipped_subject = flip_transform(flipped_subject)
             image = flipped_subject.image.tensor
             mask = flipped_subject.mask.tensor
 

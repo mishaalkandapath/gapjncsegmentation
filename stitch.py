@@ -130,19 +130,21 @@ print("uselines", use_lines)
 
 # stich together preds
 new_img, new_pred, new_gt = assemble_predictions(img_dir, pred_dir, gt_dir)
-binary_gt = new_gt.copy()
-binary_gt[binary_gt != 0] = 1
 volume_depth = new_img.shape[0]
 print("shape", new_img.shape, new_pred.shape, new_gt.shape)
-unique_gt_labels = np.unique(new_gt)
-    
+unique_gt_labels, unique_gt_counts = np.unique(new_gt, return_counts=True)
+print("unique gt:", unique_gt_labels)
+print("unique gt counts:", unique_gt_counts)
+
 # save by confidence
 height, width = new_img.shape[1], new_img.shape[2]
 for label in unique_gt_labels:
     print("Saving confidence ", label)
     confidence_gt = new_gt.copy()
     confidence_gt[confidence_gt != label] = 0
-    combined_volume = np.asarray((confidence_gt[1] * 2 + new_pred))
+    confidence_gt[confidence_gt == label] = 1
+    print(np.unique(confidence_gt, return_counts=True))
+    combined_volume = np.asarray((confidence_gt * 2 + new_pred))
     color_combined_volume = get_colored_image(combined_volume)
     if show_img:
         for k in range(volume_depth):
@@ -169,7 +171,9 @@ for label in unique_gt_labels:
 
     
 # save with all labels
-combined_volume = np.asarray((binary_gt[1] * 2 + new_pred))
+binary_gt = new_gt.copy()
+binary_gt[binary_gt != 0] = 1
+combined_volume = np.asarray((binary_gt * 2 + new_pred))
 color_combined_volume = get_colored_image(combined_volume)
 if show_img:
     for k in range(volume_depth):
