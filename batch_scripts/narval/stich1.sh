@@ -10,12 +10,8 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-DATA_DIR="/Volumes/LaCie/may31/savepred3/"
-SAVE_DIR="/Volumes/LaCie/gapjnc93/"
-
-DATA_DIR="/Volumes/LaCie/june4/savepred6/"
-SAVE_DIR="/Volumes/LaCie/gapjncsave6/"
-USE_LINES=false
-SHOW_IMG=false
-python stitch.py --data_dir $DATA_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG --use_lines $USE_LINES
+DATA_DIR="/home/hluo/scratch/results/savepred6/"
+SAVE_DIR="/home/hluo/scratch/stichsavepred6/"
+USE_LINES=true
+SHOW_IMG=true
 python ~/gapjncsegmentation/stitch.py --data_dir $DATA_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG --use_lines $USE_LINES
