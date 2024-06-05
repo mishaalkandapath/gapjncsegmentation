@@ -4,7 +4,6 @@ import argparse
 
 
 parser = argparse.ArgumentParser(description="Slice images into smaller images")
-parser.add
 args = parser.parse_args()
 
 old_dir = "small_data_3d_5"
