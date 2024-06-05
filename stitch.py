@@ -112,6 +112,8 @@ args = parser.parse_args()
 # constants
 data_dir= args.data_dir
 save_dir = args.save_dir
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
 img_dir=os.path.join(data_dir, "original")
 gt_dir=os.path.join(data_dir, "ground_truth")
 pred_dir=os.path.join(data_dir, "pred")
@@ -158,11 +160,11 @@ for label in unique_gt_labels:
             else:
                 plt.imshow(new_img[k], cmap='gray')
             plt.imshow(color_combined_volume[k], alpha=alpha)
-            plt.savefig(save_dir + f"combwithimg_confidence{label}_slice{k}.png", dpi=800)
+            plt.savefig(save_dir + f"combwithimg_confidence{str(int(label))}_slice{k}.png", dpi=800)
             plt.close("all")
     else:
         for k in range(volume_depth):
-            plt.imsave(save_dir + f"comb_confidence{label}_slice{k}.png", color_combined_volume[k], cmap="gray")
+            plt.imsave(save_dir + f"comb_confidence{str(int(label))}_slice{k}.png", color_combined_volume[k], cmap="gray")
             print(f"Saved slice {k}")
 
     

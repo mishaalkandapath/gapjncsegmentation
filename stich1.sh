@@ -18,4 +18,7 @@ SAVE_DIR="/Volumes/LaCie/gapjncsave6/"
 USE_LINES=false
 SHOW_IMG=false
 python stitch.py --data_dir $DATA_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG --use_lines $USE_LINES
+
+
+
 python ~/gapjncsegmentation/stitch.py --data_dir $DATA_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG --use_lines $USE_LINES
