@@ -74,18 +74,115 @@ class FocalLossWith2d3d(nn.Module):
         loss_3d = self.final_loss(preds_3d, targets)
         return loss_3d + self.c_2d * loss_2d
 
-
-class DiceLoss(nn.Module):
-    def __init__(self):
-        super(DiceLoss, self).__init__()
+# class DiceLoss(nn.Module):
+#     def __init__(self):
+#         super(DiceLoss, self).__init__()
     
-    def forward(self, inputs, targets, smooth=1e-6):
-        inputs = inputs.view(-1) # flatten
-        targets = targets.view(-1) # flatten
-        intersection = (inputs * targets).sum() # (pred * target) is 1 if both are 1, 0 otherwise
+#     def forward(self, inputs, targets, smooth=1e-6):
+#         inputs = inputs.view(-1) # flatten
+#         targets = targets.view(-1) # flatten
+#         intersection = (inputs * targets).sum() # (pred * target) is 1 if both are 1, 0 otherwise
+#         dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+#         dice_loss = 1 - dice
+#         return dice_loss
+    
+class DiceLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(DiceLoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        
+        #comment out if your model contains a sigmoid or equivalent activation layer
+        # inputs = F.sigmoid(inputs)       
+        
+        #flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+        
+        intersection = (inputs * targets).sum()                            
+        dice = (2.*intersection + smooth)/(inputs.sum() + targets.sum() + smooth)  
+        
+        return 1 - dice
+    
+class IoULoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(IoULoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        
+        #comment out if your model contains a sigmoid or equivalent activation layer
+        # inputs = F.sigmoid(inputs)       
+        
+        #flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+        
+        #intersection is equivalent to True Positive count
+        #union is the mutually inclusive area of all labels & predictions 
+        intersection = (inputs * targets).sum()
+        total = (inputs + targets).sum()
+        union = total - intersection 
+        
+        IoU = (intersection + smooth)/(union + smooth)
+                
+        return 1 - IoU
+
+
+class ComboLoss(nn.Module):
+    """ 
+    Attributes:
+    alpha:  < 0.5 penalises FP more, > 0.5 penalises FN more
+    ce_ratio: weighted contribution of modified CE loss compared to Dice loss
+    """
+    def __init__(self, alpha, ce_ratio, weight=None, size_average=True):
+        super(ComboLoss, self).__init__()
+        self.alpha = alpha
+        self.ce_ratio = ce_ratio
+
+    def forward(self, inputs, targets, smooth=1, eps=1e-9):
+        
+        #flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+        
+        #True Positives, False Positives & False Negatives
+        intersection = (inputs * targets).sum()    
         dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
-        dice_loss = 1 - dice
-        return dice_loss
+        print("dice", dice)
+        
+        inputs = torch.clamp(inputs, eps, 1.0 - eps)
+        print((targets * torch.log(inputs)))
+        print((1 - self.alpha) * (1.0 - targets) * torch.log(1.0 - inputs))
+        print((targets * torch.log(inputs)) + ((1 - self.alpha) * (1.0 - targets) * torch.log(1.0 - inputs)))
+        out = - (self.alpha * ((targets * torch.log(inputs)) + ((1 - self.alpha) * (1.0 - targets) * torch.log(1.0 - inputs))))
+        print("out", out)
+        print(torch.isnan(out).any())
+        weighted_ce = out.mean(-1)
+        print("weighted_Ce", weighted_ce)
+        combo = (self.ce_ratio * weighted_ce) - ((1 - self.ce_ratio) * dice)
+        print("combo", combo)
+        
+        return combo
+
+class DiceBCELoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(DiceBCELoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        
+        #comment out if your model contains a sigmoid or equivalent activation layer
+        # inputs = F.sigmoid(inputs)       
+        
+        #flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+        
+        intersection = (inputs * targets).sum()                            
+        dice_loss = 1 - (2.*intersection + smooth)/(inputs.sum() + targets.sum() + smooth)  
+        BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
+        Dice_BCE = BCE + dice_loss
+        
+        return Dice_BCE
 
 def calculate_alpha(train_dataset):
     """ 
