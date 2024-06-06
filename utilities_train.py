@@ -119,7 +119,8 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
 
             # Save predictions for each epoch
             if num_train_logged < num_predictions_to_log:
-                input_img = inputs.squeeze(0).squeeze(0).cpu().numpy()
+                # input_img = inputs.squeeze(0).squeeze(0).cpu().numpy()
+                input_img = inputs[0][0].cpu().numpy()
                 label_img = labels[0][1].cpu().numpy()
                 pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
                 
@@ -149,7 +150,8 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             valid_loss = criterion(valid_pred, valid_labels)
             # Save predictions for each epoch
             if num_logged < num_predictions_to_log:
-                input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
+                # input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
+                input_img = valid_inputs[0][0].cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
                 pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
                 
@@ -232,7 +234,8 @@ def train_log_local_2d3d(model: torch.nn.Module, train_loader: torch.utils.data.
 
             # Save predictions for each epoch
             if num_train_logged < num_predictions_to_log:
-                input_img = inputs.squeeze(0).squeeze(0).cpu().numpy()
+                # input_img = inputs.squeeze(0).squeeze(0).cpu().numpy()
+                input_img = inputs[0][0].cpu().numpy()
                 label_img = labels[0][1].cpu().numpy()
                 pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
                 
@@ -262,7 +265,8 @@ def train_log_local_2d3d(model: torch.nn.Module, train_loader: torch.utils.data.
             valid_loss = criterion(valid_interm_pred, valid_pred, valid_labels)
             # Save predictions for each epoch
             if num_logged < num_predictions_to_log:
-                input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
+                # input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
+                input_img = valid_inputs[0][0].cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
                 pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
                 
