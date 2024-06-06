@@ -13,13 +13,13 @@ module load scipy-stack gcc cuda opencv
 LOSS_TYPE=combo
 ALPHA=0.9
 CE_RATIO=0.5
-EPOCHS=2
+EPOCHS=50
 BATCH_SIZE=1
 NUM_WORKERS=4
 LR=0.0001
 NUM_PREDICTIONS_TO_LOG=10
 AUGMENT=True
-LOAD_MODEL_PATH=/scratch/models/model_job89/model_job89_epoch_49.pth
+LOAD_MODEL_PATH=/home/hluo/scratch/models/model_job89/model_job89_epoch_49.pth
 DATA_DIR=/home/hluo/scratch/select_dauer_data_512
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
