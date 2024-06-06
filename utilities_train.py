@@ -91,6 +91,18 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_losses = []
     valid_losses = []
+    train_tp = []
+    train_fp = []
+    train_fn = []
+    train_tn = []
+    valid_tp = []
+    valid_fp = []
+    valid_fn = []
+    valid_tn = []
+    train_precision = []
+    train_recall = []
+    valid_precision = []
+    valid_recall = []
     first_img=True
     for epoch in range(epochs):
         num_train_logged = 0
@@ -99,7 +111,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             if (first_img):
-                print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}")
+                print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}") # (batch, channel, depth, height, width)
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
                 _, _, depth, height, width = inputs.shape # initialize depth, height, width
                 if height != width:
@@ -116,7 +128,21 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             loss = criterion(pred, labels)
             loss.backward() # calculate gradients
             optimizer.step() # update weights based on calculated gradients
+            mask_for_metric = labels[:, 1]
+            pred_for_metric = torch.argmax(pred, dim=1) 
+            accuracy = get_accuracy(pred=pred_for_metric, target=mask_for_metric)
+            precision = get_precision(pred=pred_for_metric, target=mask_for_metric)
+            recall = get_recall(pred=pred_for_metric, target=mask_for_metric)
+            tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
+            print(f"Precision: {precision}, Recall: {recall}, Accuracy: {accuracy}")
+            print(f"TP: {tp}, TN: {tn} | FP: {fp}, FN: {fn}")
             # print(f"Step: {i}, Loss: {loss}")
+            train_tn.append(tn)
+            train_tp.append(tp)
+            train_fn.append(fn)
+            train_fp.append(fp)
+            train_precision.append(precision)
+            train_recall.append(recall)
             train_losses.append(loss.detach().cpu().item())
 
             # Save predictions for each epoch
@@ -150,6 +176,21 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             
             valid_interm_pred, valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
+            mask_for_metric = valid_labels[:, 1]
+            pred_for_metric = torch.argmax(valid_pred, dim=1) 
+            accuracy = get_accuracy(pred=pred_for_metric, target=mask_for_metric)
+            precision = get_precision(pred=pred_for_metric, target=mask_for_metric)
+            recall = get_recall(pred=pred_for_metric, target=mask_for_metric)
+            valid_precision.append(precision)
+            valid_recall.append(recall)
+            tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
+            print(f"Precision: {precision}, Recall: {recall}, Accuracy: {accuracy}")
+            print(f"TP: {tp}, TN: {tn} | FP: {fp}, FN: {fn}")
+            # print(f"Step: {i}, Loss: {loss}")
+            valid_tn.append(tn)
+            valid_tp.append(tp)
+            valid_fn.append(fn)
+            valid_fp.append(fp)
             # Save predictions for each epoch
             if num_logged < num_predictions_to_log:
                 # input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
@@ -181,7 +222,19 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(0, 0), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
         torch.save({
             'train_losses': train_losses,
-            'valid_losses': valid_losses
+            'valid_losses': valid_losses,
+            'train_precision': train_precision,
+            'train_recall': train_recall,
+            'valid_precision': valid_precision,
+            'valid_recall': valid_recall,
+            'train_tp': train_tp,
+            'train_fn': train_fn,
+            'train_fp': train_fp,
+            'train_tn': train_tn,
+            'valid_tp': valid_tp,
+            'valid_fn': valid_fn,
+            'valid_fp': valid_fp,
+            'valid_tn': valid_tn,
         }, os.path.join(results_folder, "losses.pth"))
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
 

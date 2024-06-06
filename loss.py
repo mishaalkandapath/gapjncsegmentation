@@ -26,23 +26,55 @@ class FocalLoss(nn.Module):
         focal_loss = self.alpha[targets] * (1-pt)**self.gamma * bce_loss
         return focal_loss.mean()
 
-class FocalTverskyLoss(nn.Module):
-    def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu")):
-        super(FocalTverskyLoss, self).__init__()
-        self.device = device
-        self.gamma = gamma
-        self.alpha = torch.Tensor([alpha]).to(device)
-        self.beta = torch.Tensor([beta]).to(device)
+# class FocalTverskyLoss(nn.Module):
+#     """ 
+#     alpha: larger alpha penalize FP more
+#     beta: larger beta penalize FN more
+#     """
+#     def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu")):
+#         super(FocalTverskyLoss, self).__init__()
+#         self.device = device
+#         self.gamma = gamma
+#         self.alpha = torch.Tensor([alpha]).to(device)
+#         self.beta = torch.Tensor([beta]).to(device)
     
+#     def forward(self, inputs, targets, smooth=1):
+#         true_pos = torch.sum(targets * inputs, dim=(1,2,3,4))
+#         false_neg = torch.sum(targets * (1-inputs), dim=(1,2,3,4))
+#         false_pos = torch.sum((1-targets) * inputs, dim=(1,2,3,4))
+#         tversky = (true_pos + smooth) / (true_pos + self.alpha * false_neg + self.beta * false_pos + smooth)
+#         tversky_loss = 1 - tversky
+#         focal_tversky_loss = torch.pow(tversky_loss, self.gamma)
+#         return focal_tversky_loss.mean()
+
+
+class FocalTverskyLoss(nn.Module):
+    def __init__(self, alpha, beta, gamma, weight=None, size_average=True):
+        super(FocalTverskyLoss, self).__init__()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.alpha = torch.tensor(alpha).to(device)
+        self.beta = torch.tensor(beta).to(device)
+        self.gamma = torch.tensor(gamma).to(device)
+
     def forward(self, inputs, targets, smooth=1):
-        true_pos = torch.sum(targets * inputs, dim=(1,2,3,4))
-        false_neg = torch.sum(targets * (1-inputs), dim=(1,2,3,4))
-        false_pos = torch.sum((1-targets) * inputs, dim=(1,2,3,4))
-        print(f"True pos: {true_pos}, False neg: {false_neg}, False pos: {false_pos}")
-        tversky = (true_pos + smooth) / (true_pos + self.alpha * false_neg + self.beta * false_pos + smooth)
-        tversky_loss = 1 - tversky
-        focal_tversky_loss = torch.pow(tversky_loss, self.gamma)
-        return focal_tversky_loss.mean()
+        
+        #comment out if your model contains a sigmoid or equivalent activation layer
+        inputs = F.sigmoid(inputs)       
+        
+        #flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+        
+        #True Positives, False Positives & False Negatives
+        TP = (inputs * targets).sum()    
+        FP = ((1-targets) * inputs).sum()
+        FN = (targets * (1-inputs)).sum()
+        
+        Tversky = (TP + smooth) / (TP + self.alpha*FP + self.beta*FN + smooth)  
+        FocalTversky = (1 - Tversky)**self.gamma
+                       
+        return FocalTversky
+
 
 class FocalTverskyLossWith2d3d(nn.Module):
     def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu"), intermediate_weight = 0.33):
@@ -127,7 +159,6 @@ class IoULoss(nn.Module):
                 
         return 1 - IoU
 
-
 class ComboLoss(nn.Module):
     """ 
     Attributes:
@@ -136,10 +167,11 @@ class ComboLoss(nn.Module):
     """
     def __init__(self, alpha, ce_ratio, weight=None, size_average=True):
         super(ComboLoss, self).__init__()
-        self.alpha = alpha
-        self.ce_ratio = ce_ratio
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.alpha = torch.tensor(alpha).to(device)
+        self.ce_ratio = torch.tensor(ce_ratio).to(device)
 
-    def forward(self, inputs, targets, smooth=1, eps=1e-9):
+    def forward(self, inputs, targets, smooth=1, eps=1e-7):
         
         #flatten label and prediction tensors
         inputs = inputs.view(-1)
@@ -148,20 +180,13 @@ class ComboLoss(nn.Module):
         #True Positives, False Positives & False Negatives
         intersection = (inputs * targets).sum()    
         dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
-        print("dice", dice)
         
         inputs = torch.clamp(inputs, eps, 1.0 - eps)
-        print((targets * torch.log(inputs)))
-        print((1 - self.alpha) * (1.0 - targets) * torch.log(1.0 - inputs))
-        print((targets * torch.log(inputs)) + ((1 - self.alpha) * (1.0 - targets) * torch.log(1.0 - inputs)))
-        out = - (self.alpha * ((targets * torch.log(inputs)) + ((1 - self.alpha) * (1.0 - targets) * torch.log(1.0 - inputs))))
-        print("out", out)
-        print(torch.isnan(out).any())
+        positive_loss = self.alpha * (targets * torch.log(inputs))
+        negative_loss = (1 - self.alpha) * ((1.0 - targets) * torch.log(1.0 - inputs))
+        out = - (positive_loss + negative_loss)
         weighted_ce = out.mean(-1)
-        print("weighted_Ce", weighted_ce)
-        combo = (self.ce_ratio * weighted_ce) - ((1 - self.ce_ratio) * dice)
-        print("combo", combo)
-        
+        combo = (self.ce_ratio * weighted_ce) + ((1 - self.ce_ratio) * dice)
         return combo
 
 class DiceBCELoss(nn.Module):
