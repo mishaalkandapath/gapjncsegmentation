@@ -74,6 +74,7 @@ def main():
         if (sub_vol_height < subvol_height) or (sub_vol_width < subvol_width) or (sub_vol_depth < subvol_depth):
             tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(inputs[0].detach().cpu())
             inputs = tmp.unsqueeze(0)
+            inputs = inputs.to(DEVICE)
             print("Padded to", inputs.shape)
             del tmp
 
