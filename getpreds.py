@@ -15,8 +15,11 @@ def main():
     parser.add_argument('--model_path', type=str, required=True, help='model path')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
     parser.add_argument('--num_workers', type=int, default=4, help='num workers')
-    parser.add_argument('--save_vis', type=bool, default=True, help='save vis')
+    parser.add_argument('--save_vis', type=lambda x: (str(x).lower() == 'true'), default=True, help='save vis')
+    parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
     args = parser.parse_args()
+    
+    print(f"Use2d {args.save2d}, savevis {args.save_vis}")
 
     save_dir = args.save_dir
     if not os.path.exists(save_dir):
@@ -69,23 +72,28 @@ def main():
         # Save predictions for each epoch
         pred=pred[0, 1].detach().cpu()
         binary_pred=binary_pred[0].detach().cpu()
-        np.save(os.path.join(save_dir, "probpreds", f"{filenames[0]}.npy"), pred)
-        np.save(os.path.join(save_dir, "binarypreds", f"{filenames[0]}.npy"), binary_pred)
-        if args.save_vis:
-            if i==0:
-                print("Saving visualizations", args.save_vis)
-            fig, ax = plt.subplots(4, depth, figsize=(15, 8), num=1)
-            for j in range(depth):
-                ax[0, j].imshow(inputs[0, 0, j], cmap="gray")
-                ax[1, j].imshow(labels[0, 0, j], cmap="gray")
-                ax[2, j].imshow(binary_pred[j], cmap="gray")
-                im = ax[3, j].imshow(pred[j], cmap="viridis")
-            cbar = fig.colorbar(im, ax=ax[3, :])
-            ax[0, 0].set_ylabel("Input")
-            ax[1, 0].set_ylabel("Ground Truth")
-            ax[2, 0].set_ylabel("Prediction")
-            ax[3, 0].set_ylabel("Prediction (probability)")
-            plt.savefig(os.path.join(save_dir, "visualize", f"{filenames[0]}.png"))
+        if args.save2d:
+            for k in range(depth):
+                cv2.imwrite(os.path.join(save_dir, "probpreds", f"{filenames[0]}_{k}.png"), np.array(pred[k]))
+                cv2.imwrite(os.path.join(save_dir, "binarypreds", f"{filenames[0]}_{k}.png"), np.array(binary_pred[k]))
+        else:
+            np.save(os.path.join(save_dir, "probpreds", f"{filenames[0]}.npy"), pred)
+            np.save(os.path.join(save_dir, "binarypreds", f"{filenames[0]}.npy"), binary_pred)
+            if args.save_vis:
+                if i==0:
+                    print("Saving visualizations", args.save_vis)
+                fig, ax = plt.subplots(4, depth, figsize=(15, 8), num=1)
+                for j in range(depth):
+                    ax[0, j].imshow(inputs[0, 0, j], cmap="gray")
+                    ax[1, j].imshow(labels[0, 0, j], cmap="gray")
+                    ax[2, j].imshow(binary_pred[j], cmap="gray")
+                    im = ax[3, j].imshow(pred[j], cmap="viridis")
+                cbar = fig.colorbar(im, ax=ax[3, :])
+                ax[0, 0].set_ylabel("Input")
+                ax[1, 0].set_ylabel("Ground Truth")
+                ax[2, 0].set_ylabel("Prediction")
+                ax[3, 0].set_ylabel("Prediction (probability)")
+                plt.savefig(os.path.join(save_dir, "visualize", f"{filenames[0]}.png"))
         avg_precision = total_precision / (i+1)
         avg_recall = total_recall/ (i+1)
         print(f"loaded {i} imgs: avg precision {avg_precision:.2f}, avg recall {avg_recall:.2f}")

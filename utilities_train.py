@@ -32,9 +32,9 @@ def parse_arguments():
     parser.add_argument("--ce_ratio", type=float, default=0.5, help="Weight in Combo Loss")
     parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
     parser.add_argument("--num_predictions_to_log", type=int, default=5, help="Number of predictions to log per epoch")
-    parser.add_argument("--augment", type=bool, default=False, help="Whether to augment the data")
+    parser.add_argument("--augment", type=lambda x: (str(x).lower() == 'true'), default=True, help="Whether to augment the data")
     parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
-    parser.add_argument("--use_dice", type=bool, default=False, help="Type of loss function to use")
+    parser.add_argument("--use_dice", type=lambda x: (str(x).lower() == 'true'), default=False, help="Type of loss function to use")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     args = parser.parse_args()
     return args
