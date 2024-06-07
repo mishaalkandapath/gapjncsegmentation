@@ -6,7 +6,7 @@
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
 #SBATCH --mem=64G
-#SBATCH --time=11:0:0
+#SBATCH --time=12:0:0
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
@@ -14,12 +14,12 @@ LOSS_TYPE=focalt
 ALPHA=0.1
 BETA=0.9
 GAMMA=2
-EPOCHS=50
+EPOCHS=100
 BATCH_SIZE=2
 NUM_WORKERS=4
-LR=0.00001
+LR=0.00002
 NUM_PREDICTIONS_TO_LOG=10
-AUGMENT=True
+AUGMENT=true
 LOAD_MODEL_PATH=/home/hluo/scratch/models/model_job89/model_job89_epoch_49.pth
 DATA_DIR=/home/hluo/scratch/select_dauer_data_512
 MODEL_DIR=/home/hluo/scratch/models
