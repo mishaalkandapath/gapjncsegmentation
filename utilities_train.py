@@ -103,10 +103,6 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
     train_recall = []
     valid_precision = []
     valid_recall = []
-    epoch_train_precisions = []
-    epoch_valid_precisions = []
-    epoch_train_recalls = []
-    epoch_valid_recalls = []
     first_img=True
     for epoch in range(epochs):
         num_train_logged = 0
@@ -136,24 +132,25 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             loss = criterion(pred, labels)
             loss.backward() # calculate gradients
             optimizer.step() # update weights based on calculated gradients
-            mask_for_metric = labels[:, 1]
-            pred_for_metric = torch.argmax(pred, dim=1) 
-            accuracy = get_accuracy(pred=pred_for_metric, target=mask_for_metric)
-            precision = get_precision(pred=pred_for_metric, target=mask_for_metric)
-            epoch_train_precision += precision
-            recall = get_recall(pred=pred_for_metric, target=mask_for_metric)
-            epoch_train_recall += recall
-            tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
-            print(f"Precision: {precision}, Recall: {recall}, Accuracy: {accuracy}")
-            print(f"TP: {tp}, TN: {tn} | FP: {fp}, FN: {fn}")
-            # print(f"Step: {i}, Loss: {loss}")
-            train_tn.append(tn)
-            train_tp.append(tp)
-            train_fn.append(fn)
-            train_fp.append(fp)
-            train_precision.append(precision)
-            train_recall.append(recall)
-            train_losses.append(loss.detach().cpu().item())
+            if batch_size < 2:
+                mask_for_metric = labels[:, 1]
+                pred_for_metric = torch.argmax(pred, dim=1) 
+                accuracy = get_accuracy(pred=pred_for_metric, target=mask_for_metric)
+                precision = get_precision(pred=pred_for_metric, target=mask_for_metric)
+                epoch_train_precision += precision
+                recall = get_recall(pred=pred_for_metric, target=mask_for_metric)
+                epoch_train_recall += recall
+                tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
+                print(f"Precision: {precision}, Recall: {recall}, Accuracy: {accuracy}")
+                print(f"TP: {tp}, TN: {tn} | FP: {fp}, FN: {fn}")
+                # print(f"Step: {i}, Loss: {loss}")
+                train_tn.append(tn)
+                train_tp.append(tp)
+                train_fn.append(fn)
+                train_fp.append(fp)
+                train_precision.append(precision)
+                train_recall.append(recall)
+                train_losses.append(loss.detach().cpu().item())
 
             # Save predictions for each epoch
             if num_train_logged < num_predictions_to_log:
@@ -185,23 +182,24 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             
             valid_interm_pred, valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
-            mask_for_metric = valid_labels[:, 1]
-            pred_for_metric = torch.argmax(valid_pred, dim=1) 
-            accuracy = get_accuracy(pred=pred_for_metric, target=mask_for_metric)
-            precision = get_precision(pred=pred_for_metric, target=mask_for_metric)
-            recall = get_recall(pred=pred_for_metric, target=mask_for_metric)
-            epoch_valid_precision += precision
-            epoch_valid_recall += recall
-            valid_precision.append(precision)
-            valid_recall.append(recall)
-            tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
-            print(f"Precision: {precision}, Recall: {recall}, Accuracy: {accuracy}")
-            print(f"TP: {tp}, TN: {tn} | FP: {fp}, FN: {fn}")
-            # print(f"Step: {i}, Loss: {loss}")
-            valid_tn.append(tn)
-            valid_tp.append(tp)
-            valid_fn.append(fn)
-            valid_fp.append(fp)
+            if batch_size < 2:
+                mask_for_metric = valid_labels[:, 1]
+                pred_for_metric = torch.argmax(valid_pred, dim=1) 
+                accuracy = get_accuracy(pred=pred_for_metric, target=mask_for_metric)
+                precision = get_precision(pred=pred_for_metric, target=mask_for_metric)
+                recall = get_recall(pred=pred_for_metric, target=mask_for_metric)
+                epoch_valid_precision += precision
+                epoch_valid_recall += recall
+                valid_precision.append(precision)
+                valid_recall.append(recall)
+                tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
+                print(f"Precision: {precision}, Recall: {recall}, Accuracy: {accuracy}")
+                print(f"TP: {tp}, TN: {tn} | FP: {fp}, FN: {fn}")
+                # print(f"Step: {i}, Loss: {loss}")
+                valid_tn.append(tn)
+                valid_tp.append(tp)
+                valid_fn.append(fn)
+                valid_fp.append(fp)
             # Save predictions for each epoch
             if num_logged < num_predictions_to_log:
                 # input_img = valid_inputs.squeeze(0).squeeze(0).cpu().numpy()
