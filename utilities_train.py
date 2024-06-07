@@ -103,9 +103,17 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
     train_recall = []
     valid_precision = []
     valid_recall = []
+    epoch_train_precisions = []
+    epoch_valid_precisions = []
+    epoch_train_recalls = []
+    epoch_valid_recalls = []
     first_img=True
     for epoch in range(epochs):
         num_train_logged = 0
+        epoch_valid_precision = 0
+        epoch_train_precision = 0
+        epoch_valid_recall = 0
+        epoch_train_recall = 0
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)), end="\r")
             inputs, labels = data
@@ -132,7 +140,9 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             pred_for_metric = torch.argmax(pred, dim=1) 
             accuracy = get_accuracy(pred=pred_for_metric, target=mask_for_metric)
             precision = get_precision(pred=pred_for_metric, target=mask_for_metric)
+            epoch_train_precision += precision
             recall = get_recall(pred=pred_for_metric, target=mask_for_metric)
+            epoch_train_recall += recall
             tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
             print(f"Precision: {precision}, Recall: {recall}, Accuracy: {accuracy}")
             print(f"TP: {tp}, TN: {tn} | FP: {fp}, FN: {fn}")
@@ -165,7 +175,6 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 num_train_logged += 1
             plt.close("all")
         print(f"Epoch: {epoch}, Loss: {loss}")
-            
         num_logged = 0
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
@@ -181,6 +190,8 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             accuracy = get_accuracy(pred=pred_for_metric, target=mask_for_metric)
             precision = get_precision(pred=pred_for_metric, target=mask_for_metric)
             recall = get_recall(pred=pred_for_metric, target=mask_for_metric)
+            epoch_valid_precision += precision
+            epoch_valid_recall += recall
             valid_precision.append(precision)
             valid_recall.append(recall)
             tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
@@ -208,7 +219,6 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 ax[2, 0].set_ylabel("Prediction")
                 plt.savefig(os.path.join(results_folder, "valid", f"epoch{epoch}_num{num_logged}.png"))
                 num_logged += 1
-                
             valid_losses.append(valid_loss.detach().cpu().item())
             plt.close("all")
         try:
@@ -352,7 +362,6 @@ def train_log_local_2d3d(model: torch.nn.Module, train_loader: torch.utils.data.
             'valid_losses': valid_losses
         }, os.path.join(results_folder, "losses.pth"))
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
-
 
 def train(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, num_predictions_to_log:int=5) -> None:
     """ 
