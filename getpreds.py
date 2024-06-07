@@ -78,6 +78,14 @@ def main():
             print("Padded to", inputs.shape)
             del tmp
 
+        sub_vol_depth, sub_vol_height, sub_vol_width = labels.shape[2:]
+        if (sub_vol_height < subvol_height) or (sub_vol_width < subvol_width) or (sub_vol_depth < subvol_depth):
+            tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(labels[0].detach().cpu())
+            labels = tmp.unsqueeze(0)
+            labels = labels.to(DEVICE)
+            print("Padded to", labels.shape)
+            del tmp
+            
         interm_pred, pred = model(inputs)
         binary_pred = torch.argmax(pred, dim=1) 
         precision = get_precision(pred=binary_pred, target=labels)
