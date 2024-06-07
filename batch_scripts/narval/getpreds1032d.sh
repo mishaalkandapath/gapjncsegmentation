@@ -20,4 +20,7 @@ BATCH_SIZE=1
 NUM_WORKERS=1
 SAVE_VIS=false
 SAVE2D=true
-python /home/hluo/gapjncsegmentation/getpreds.py --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save_vis $SAVE_VIS --save2d $SAVE2D
+SUBVOL_DEPTH=3
+SUBVOL_HEIGHT=512
+SUBVOL_WIDTH=512
+python /home/hluo/gapjncsegmentation/getpreds.py --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save_vis $SAVE_VIS --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH

@@ -5,6 +5,7 @@ import argparse
 import time
 from models import *
 from utilities import *
+import torchio as tio
 
 def main():
     print("starting...")
@@ -17,6 +18,9 @@ def main():
     parser.add_argument('--num_workers', type=int, default=4, help='num workers')
     parser.add_argument('--save_vis', type=lambda x: (str(x).lower() == 'true'), default=True, help='save vis')
     parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
+    parser.add_argument('--subvol_depth', type=int, default=3, help='num workers')
+    parser.add_argument('--subvol_height', type=int, default=512, help='num workers')
+    parser.add_argument('--subvol_width', type=int, default=512, help='num workers')
     args = parser.parse_args()
     
     print(f"Use2d {args.save2d}, savevis {args.save_vis}")
@@ -57,11 +61,22 @@ def main():
     total_precision = 0
     total_recall = 0
     start_time = time.time()
+    subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
     for i, data in enumerate(test_loader):
         inputs, labels, filenames = data
         inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
         if i == 0:
             _, _, depth, height, width = inputs.shape # batch size, channels, depth, height, width
+
+        # pad as needed
+        print(inputs.shape)
+        sub_vol_depth, sub_vol_height, sub_vol_width = inputs.shape[2:]
+        if (sub_vol_height < subvol_height) or (sub_vol_width < subvol_width) or (sub_vol_depth < subvol_depth):
+            tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(inputs[0])
+            inputs = tmp.unsqueeze(0)
+            print("Padded to", inputs.shape)
+            del tmp
+
         interm_pred, pred = model(inputs)
         binary_pred = torch.argmax(pred, dim=1) 
         precision = get_precision(pred=binary_pred, target=labels)
