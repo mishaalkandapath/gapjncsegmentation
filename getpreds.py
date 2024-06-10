@@ -92,11 +92,11 @@ def main():
         interm_pred, pred = model(inputs)
         binary_pred = torch.argmax(pred, dim=1) 
 
-        
         precision = get_precision(pred=binary_pred, target=labels)
         recall = get_recall(pred=binary_pred, target=labels)
-        total_precision += precision
-        total_recall += recall
+        print(f"precision {precision}, recall {recall}")
+        # total_precision += precision
+        # total_recall += recall
         
         # Save predictions for each epoch
         pred=pred[0, 1].detach().cpu()
@@ -106,6 +106,17 @@ def main():
             combined_volume = np.asarray((labels * 2 + binary_pred))
             vals, counts = np.unique(combined_volume, return_counts=True)
             color_combined_volume = get_colored_image(combined_volume)
+            res = dict(map(lambda i,j : (i,j) , vals,counts))
+            tn=counts[0]
+            fp=counts[1]
+            fn=counts[2]
+            tp=counts[3]
+            precision=tp/(tp+fp)
+            recall=tp/(tp+fn)
+            total_precision += precision
+            total_recall += recall
+            print(f"comb precision {precision}, recall {recall}")
+            
             print(vals, counts)
         binary_pred[binary_pred!=0]=255 # to visualize
 
