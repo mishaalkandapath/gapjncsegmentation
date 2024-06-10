@@ -157,7 +157,7 @@ def main():
             
         avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 0
         avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 0
-        print(f"----------------------loaded {i} imgs: avg precision {avg_precision:.2f}, avg recall {avg_recall:.2f}----------------------")
+        print(f"----------------------loaded {i} imgs: avg precision {avg_precision:.3f}, avg recall {avg_recall:.3f}----------------------")
         print(f"Time: {time.time()-start_time:.3f}s")
 
 if __name__ == '__main__':
