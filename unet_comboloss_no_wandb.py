@@ -50,7 +50,11 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     num_workers = args.num_workers
     print("Augment", args.augment)
-    train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders(data_dir, batch_size, num_workers, augment=args.augment)
+    if args.cellmask_dir is not None:
+        print("Using cell mask -- 2 class prediction")
+        train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders_withmemb(data_dir, args.cellmask_dir, batch_size, num_workers, augment=args.augment)
+    else:
+        train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders(data_dir, batch_size, num_workers, augment=args.augment)
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
     print(f"Data loaders created. Train dataset size: {len(train_dataset)}, Validation dataset size: {len(valid_dataset)}")
 
@@ -78,6 +82,10 @@ if __name__ == "__main__":
     elif args.loss_type == "dicebce":
         criterion = DiceBCELoss()
         print("using dicebce loss")
+    elif args.loss_type == "focal":
+        alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
+        criterion = FocalLoss(alpha=alpha, gamma=args.gamma, device=DEVICE)
+        print(f"using focal loss", "alpha:", args.alpha, "gamma:", args.gamma)
     else:
         criterion = DiceLoss()
         print("using dice loss")

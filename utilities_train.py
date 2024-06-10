@@ -26,6 +26,7 @@ def parse_arguments():
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
     parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for DataLoader")
     parser.add_argument("--load_model_path", type=str, default=None, help="Path to load model from")
+    parser.add_argument("--cellmask_dir", type=str, default=None, help="Path to load cellmask from")
     parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
     parser.add_argument("--alpha", type=float, default=0.04, help="Weight for class 0 in Focal Loss")
     parser.add_argument("--beta", type=float, default=0.96, help="Weight for class 0 in Focal Loss")
@@ -66,6 +67,21 @@ def setup_datasets_and_dataloaders(data_dir: str, batch_size: int, num_workers: 
     
     train_dataset = SliceDataset(x_train_dir, y_train_dir, augment=augment)
     valid_dataset = SliceDataset(x_valid_dir, y_valid_dir)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
+    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
+    return train_dataset, valid_dataset, train_loader, valid_loader
+
+def setup_datasets_and_dataloaders_withmemb(data_dir: str, cellmask_dir:str, batch_size: int, num_workers: int, augment: bool=False):
+    """ Setup datasets and dataloaders for training and validation"""
+    x_train_dir = os.path.join(data_dir, "original", "train")
+    x_valid_dir = os.path.join(data_dir, "original", "valid")
+    y_train_dir = os.path.join(data_dir, "ground_truth", "train")
+    y_valid_dir = os.path.join(data_dir, "ground_truth", "valid")
+    cellmask_train_dir = os.path.join(cellmask_dir, "train")
+    cellmask_valid_dir = os.path.join(cellmask_dir, "valid")
+    
+    train_dataset = SliceDatasetWithMemb(x_train_dir, y_train_dir, cellmask_train_dir, augment=augment)
+    valid_dataset = SliceDatasetWithMemb(x_valid_dir, y_valid_dir, cellmask_valid_dir)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
     return train_dataset, valid_dataset, train_loader, valid_loader
@@ -141,8 +157,8 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 recall = get_recall(pred=pred_for_metric, target=mask_for_metric)
                 epoch_train_recall += recall
                 tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
-                print(f"Precision: {precision}, Recall: {recall}, Accuracy: {accuracy}")
-                print(f"TP: {tp}, TN: {tn} | FP: {fp}, FN: {fn}")
+                # print(f"Precision: {precision}, Recall: {recall}, Accuracy: {accuracy}")
+                # print(f"TP: {tp}, TN: {tn} | FP: {fp}, FN: {fn}")
                 # print(f"Step: {i}, Loss: {loss}")
                 train_tn.append(tn)
                 train_tp.append(tp)
@@ -172,6 +188,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 num_train_logged += 1
             plt.close("all")
         print(f"Epoch: {epoch}, Loss: {loss}")
+        print(f"Epoch ")
         num_logged = 0
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
