@@ -18,7 +18,7 @@ def main():
     parser.add_argument('--num_workers', type=int, default=4, help='num workers')
     parser.add_argument('--save_vis', type=lambda x: (str(x).lower() == 'true'), default=True, help='save vis')
     parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
-    parser.add_argument('--savecomb', type=lambda x: (str(x).lower() == 'true'), default=True, help='save combined tp fp')
+    parser.add_argument('--savecomb', type=lambda x: (str(x).lower() == 'true'), default=True, help='save combined')
     parser.add_argument('--subvol_depth', type=int, default=3, help='num workers')
     parser.add_argument('--subvol_height', type=int, default=512, help='num workers')
     parser.add_argument('--subvol_width', type=int, default=512, help='num workers')
@@ -35,6 +35,8 @@ def main():
         os.makedirs(os.path.join(save_dir, "probpreds"))
     if not os.path.exists(os.path.join(save_dir, "visualize")):
         os.makedirs(os.path.join(save_dir, "visualize"))
+    if not os.path.exists(os.path.join(save_dir, "combinedpreds")):
+        os.makedirs(os.path.join(save_dir, "combinedpreds"))
     batch_size = args.batch_size
     num_workers = args.num_workers
 
@@ -91,6 +93,7 @@ def main():
         binary_pred = torch.argmax(pred, dim=1) 
         
         labels[labels!=0]=1
+        
         precision = get_precision(pred=binary_pred, target=labels)
         recall = get_recall(pred=binary_pred, target=labels)
         total_precision += precision
@@ -100,10 +103,18 @@ def main():
         pred=pred[0, 1].detach().cpu()
         binary_pred=binary_pred[0].detach().cpu()
         binary_pred[binary_pred!=0]=255 # to visualize
+        if args.savecomb:
+            combined_volume = np.asarray((labels * 2 + binary_pred))
+            vals, counts = np.unique(combined_volume, return_counts=True)
+            color_combined_volume = get_colored_image(combined_volume)
+            print(vals, counts)
         if args.save2d:
             for k in range(subvol_depth):
                 cv2.imwrite(os.path.join(save_dir, "probpreds", f"{filenames[0]}_{k}.png"), np.array(pred[k]))
                 cv2.imwrite(os.path.join(save_dir, "binarypreds", f"{filenames[0]}_{k}.png"), np.array(binary_pred[k]))
+                if args.savecomb:
+                    cv2.imwrite(os.path.join(save_dir, "combinedpreds", f"{filenames[0]}_{k}.png"), np.array(color_combined_volume[k]))
+                    
         else:
             print(f"Saving {filenames[0]} 3D")
             np.save(os.path.join(save_dir, "probpreds", f"{filenames[0]}.npy"), pred)
