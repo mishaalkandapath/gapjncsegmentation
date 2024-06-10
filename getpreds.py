@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--num_workers', type=int, default=4, help='num workers')
     parser.add_argument('--save_vis', type=lambda x: (str(x).lower() == 'true'), default=True, help='save vis')
     parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
+    parser.add_argument('--savecomb', type=lambda x: (str(x).lower() == 'true'), default=True, help='save combined tp fp')
     parser.add_argument('--subvol_depth', type=int, default=3, help='num workers')
     parser.add_argument('--subvol_height', type=int, default=512, help='num workers')
     parser.add_argument('--subvol_width', type=int, default=512, help='num workers')
@@ -101,6 +102,7 @@ def main():
                 cv2.imwrite(os.path.join(save_dir, "probpreds", f"{filenames[0]}_{k}.png"), np.array(pred[k]))
                 cv2.imwrite(os.path.join(save_dir, "binarypreds", f"{filenames[0]}_{k}.png"), np.array(binary_pred[k]))
         else:
+            print(f"Saving {filenames[0]} 3D")
             np.save(os.path.join(save_dir, "probpreds", f"{filenames[0]}.npy"), pred)
             np.save(os.path.join(save_dir, "binarypreds", f"{filenames[0]}.npy"), binary_pred)
             if args.save_vis:
@@ -118,6 +120,9 @@ def main():
                 ax[2, 0].set_ylabel("Prediction")
                 ax[3, 0].set_ylabel("Prediction (probability)")
                 plt.savefig(os.path.join(save_dir, "visualize", f"{filenames[0]}.png"))
+                
+        # if args.savecomb:
+            
         avg_precision = total_precision / (i+1)
         avg_recall = total_recall/ (i+1)
         print(f"loaded {i} imgs: avg precision {avg_precision:.2f}, avg recall {avg_recall:.2f}")
