@@ -96,33 +96,26 @@ def main():
             
         interm_pred, pred = model(inputs)
         binary_pred = torch.argmax(pred, dim=1) 
-
-        precision = get_precision(pred=binary_pred, target=labels)
-        recall = get_recall(pred=binary_pred, target=labels)
-        print(f"precision {precision}, recall {recall}")
-        # total_precision += precision
-        # total_recall += recall
         
         # Save predictions for each epoch
         pred=pred[0, 1].detach().cpu()
         binary_pred=binary_pred[0].detach().cpu()
         labels = labels[0,0].detach().cpu()
+        combined_volume = np.asarray((labels * 2 + binary_pred))
+        vals, counts = np.unique(combined_volume, return_counts=True)
+        res = dict(map(lambda i,j : (int(i),j) , vals,counts))
+        fp = res.get(1, 0)
+        fn = res.get(2, 0)
+        tp = res.get(3, 0)
+        total_tp+=tp
+        total_fp+=fp
+        total_fn+=fn
+        precision=tp/(tp+fp) if (tp + fp) != 0 else 0
+        recall=tp/(tp+fn) if (tp + fn) != 0 else 0
+        print(f"comb precision {precision}, recall {recall}")
+        print(vals, counts)
         if args.savecomb:
-            combined_volume = np.asarray((labels * 2 + binary_pred))
-            vals, counts = np.unique(combined_volume, return_counts=True)
             color_combined_volume = get_colored_image(combined_volume)
-            res = dict(map(lambda i,j : (int(i),j) , vals,counts))
-            fp = res.get(1, 0)
-            fn = res.get(2, 0)
-            tp = res.get(3, 0)
-            total_tp+=tp
-            total_fp+=fp
-            total_fn+=fn
-            precision=tp/(tp+fp) if (tp + fp) != 0 else 0
-            recall=tp/(tp+fn) if (tp + fn) != 0 else 0
-            print(f"comb precision {precision}, recall {recall}")
-            
-            print(vals, counts)
         binary_pred[binary_pred!=0]=255 # to visualize
 
         if args.save2d:
