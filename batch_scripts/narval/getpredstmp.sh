@@ -12,9 +12,9 @@ source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
 X_DIR=/home/hluo/scratch/100_110_3x512x512/original
 Y_DIR=/home/hluo/scratch/100_110_3x512x512/ground_truth
-SAVE_DIR=/home/hluo/scratch/1052dcombtmp
-MODEL_NAME=model_job105
-EPOCH=86
+SAVE_DIR=/home/hluo/scratch/114tmp
+MODEL_NAME=model_job114
+EPOCH=96
 MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
 BATCH_SIZE=1
 NUM_WORKERS=1
