@@ -89,6 +89,8 @@ def main():
             
         interm_pred, pred = model(inputs)
         binary_pred = torch.argmax(pred, dim=1) 
+        
+        labels[labels!=0]=1
         precision = get_precision(pred=binary_pred, target=labels)
         recall = get_recall(pred=binary_pred, target=labels)
         total_precision += precision
@@ -98,7 +100,7 @@ def main():
         pred=pred[0, 1].detach().cpu()
         binary_pred=binary_pred[0].detach().cpu()
         if args.save2d:
-            for k in range(depth):
+            for k in range(subvol_depth):
                 cv2.imwrite(os.path.join(save_dir, "probpreds", f"{filenames[0]}_{k}.png"), np.array(pred[k]))
                 cv2.imwrite(os.path.join(save_dir, "binarypreds", f"{filenames[0]}_{k}.png"), np.array(binary_pred[k]))
         else:
