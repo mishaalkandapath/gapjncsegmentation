@@ -99,6 +99,7 @@ def main():
         # Save predictions for each epoch
         pred=pred[0, 1].detach().cpu()
         binary_pred=binary_pred[0].detach().cpu()
+        binary_pred[binary_pred!=0]=255 # to visualize
         if args.save2d:
             for k in range(subvol_depth):
                 cv2.imwrite(os.path.join(save_dir, "probpreds", f"{filenames[0]}_{k}.png"), np.array(pred[k]))
