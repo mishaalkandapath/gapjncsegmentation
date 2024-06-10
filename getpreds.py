@@ -107,10 +107,9 @@ def main():
             vals, counts = np.unique(combined_volume, return_counts=True)
             color_combined_volume = get_colored_image(combined_volume)
             res = dict(map(lambda i,j : (i,j) , vals,counts))
-            tn=counts[0]
-            fp=counts[1]
-            fn=counts[2]
-            tp=counts[3]
+            fp=res[1]
+            fn=res[2]
+            tp=res[3]
             precision=tp/(tp+fp)
             recall=tp/(tp+fn)
             total_precision += precision
