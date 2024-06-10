@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--num_workers', type=int, default=4, help='num workers')
     parser.add_argument('--save_vis', type=lambda x: (str(x).lower() == 'true'), default=True, help='save vis')
     parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
+    parser.add_argument('--save3d', type=lambda x: (str(x).lower() == 'true'), default=False, help='save 3d')
     parser.add_argument('--savecomb', type=lambda x: (str(x).lower() == 'true'), default=True, help='save combined')
     parser.add_argument('--subvol_depth', type=int, default=3, help='num workers')
     parser.add_argument('--subvol_height', type=int, default=512, help='num workers')
