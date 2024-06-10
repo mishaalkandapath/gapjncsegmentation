@@ -65,6 +65,10 @@ def main():
     total_recall = 0
     start_time = time.time()
     subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
+    total_tp=0
+    total_fp=0
+    total_fn=0
+    total_tn=0
     for i, data in enumerate(test_loader):
         inputs, labels, filenames = data
         inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
@@ -110,10 +114,11 @@ def main():
             fp = res.get(1, 0)
             fn = res.get(2, 0)
             tp = res.get(3, 0)
-            precision=tp/(tp+fp)
-            recall=tp/(tp+fn)
-            total_precision += precision
-            total_recall += recall
+            total_tp+=tp
+            total_fp+=fp
+            total_fn+=fn
+            precision=tp/(tp+fp) if (tp + fp) != 0 else 0
+            recall=tp/(tp+fn) if (tp + fn) != 0 else 0
             print(f"comb precision {precision}, recall {recall}")
             
             print(vals, counts)
@@ -148,8 +153,8 @@ def main():
                 
         # if args.savecomb:
             
-        avg_precision = total_precision / (i+1)
-        avg_recall = total_recall/ (i+1)
+        avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 0
+        avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 0
         print(f"loaded {i} imgs: avg precision {avg_precision:.2f}, avg recall {avg_recall:.2f}")
         print(f"Time: {time.time()-start_time:.3f}s")
 
