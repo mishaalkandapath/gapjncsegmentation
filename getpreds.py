@@ -131,7 +131,7 @@ def main():
                 if args.savecomb:
                     cv2.imwrite(os.path.join(save_dir, "combinedpreds", f"{filenames[0]}_{k}.png"), np.array(color_combined_volume[k]))
                     
-        else:
+        elif args.save3d:
             print(f"Saving {filenames[0]} 3D")
             np.save(os.path.join(save_dir, "probpreds", f"{filenames[0]}.npy"), pred)
             np.save(os.path.join(save_dir, "binarypreds", f"{filenames[0]}.npy"), binary_pred)
@@ -150,8 +150,9 @@ def main():
                 ax[2, 0].set_ylabel("Prediction")
                 ax[3, 0].set_ylabel("Prediction (probability)")
                 plt.savefig(os.path.join(save_dir, "visualize", f"{filenames[0]}.png"))
+        else:
+            pass
                 
-        # if args.savecomb:
             
         avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 0
         avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 0
