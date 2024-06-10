@@ -91,8 +91,7 @@ def main():
             
         interm_pred, pred = model(inputs)
         binary_pred = torch.argmax(pred, dim=1) 
-        
-        labels[labels!=0]=1
+
         
         precision = get_precision(pred=binary_pred, target=labels)
         recall = get_recall(pred=binary_pred, target=labels)
@@ -102,13 +101,14 @@ def main():
         # Save predictions for each epoch
         pred=pred[0, 1].detach().cpu()
         binary_pred=binary_pred[0].detach().cpu()
-        binary_pred[binary_pred!=0]=255 # to visualize
         labels = labels[0,0].detach().cpu()
         if args.savecomb:
             combined_volume = np.asarray((labels * 2 + binary_pred))
             vals, counts = np.unique(combined_volume, return_counts=True)
             color_combined_volume = get_colored_image(combined_volume)
             print(vals, counts)
+        binary_pred[binary_pred!=0]=255 # to visualize
+
         if args.save2d:
             for k in range(subvol_depth):
                 cv2.imwrite(os.path.join(save_dir, "probpreds", f"{filenames[0]}_{k}.png"), np.array(pred[k]))
