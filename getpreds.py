@@ -110,8 +110,8 @@ def main():
                     print("Saving visualizations", args.save_vis)
                 fig, ax = plt.subplots(4, depth, figsize=(15, 8), num=1)
                 for j in range(depth):
-                    ax[0, j].imshow(inputs[0, 0, j], cmap="gray")
-                    ax[1, j].imshow(labels[0, 0, j], cmap="gray")
+                    ax[0, j].imshow(inputs[0, 0, j].detach().cpu(), cmap="gray")
+                    ax[1, j].imshow(labels[0, 0, j].detach().cpu(), cmap="gray")
                     ax[2, j].imshow(binary_pred[j], cmap="gray")
                     im = ax[3, j].imshow(pred[j], cmap="viridis")
                 cbar = fig.colorbar(im, ax=ax[3, :])
