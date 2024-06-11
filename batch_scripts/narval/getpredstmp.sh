@@ -7,15 +7,14 @@
 #SBATCH --gpus-per-node=a100:1
 #SBATCH --mem=64G
 #SBATCH --time=10:0:0
+X_DIR=/home/hluo/scratch/select_dauer_data_512/original/train
+Y_DIR=/home/hluo/scratch/select_dauer_data_512/ground_truth/train
+
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
 X_DIR=/home/hluo/scratch/100_110_3x512x512/original
 Y_DIR=/home/hluo/scratch/100_110_3x512x512/ground_truth
-
-
-X_DIR=/home/hluo/scratch/select_dauer_data_512/original/train
-Y_DIR=/home/hluo/scratch/select_dauer_data_512/ground_truth/train
 BATCH_SIZE=1
 NUM_WORKERS=1
 SAVE_VIS=false
