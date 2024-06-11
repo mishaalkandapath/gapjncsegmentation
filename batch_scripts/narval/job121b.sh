@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job122
+#SBATCH --job-name=job121b
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -11,13 +11,13 @@ module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
 LOSS_TYPE=focalt
-ALPHA=0.1
-BETA=0.9
+ALPHA=0.04
+BETA=0.96
 GAMMA=2
 EPOCHS=100
-BATCH_SIZE=2
-NUM_WORKERS=2
-LR=0.00001
+BATCH_SIZE=1
+NUM_WORKERS=4
+LR=0.0001
 NUM_PREDICTIONS_TO_LOG=10
 AUGMENT=True
 LOAD_MODEL_NAME=model_job111
@@ -26,5 +26,5 @@ LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_
 DATA_DIR=/home/hluo/scratch/filtered_100_110_3x512x512_40
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
-MODEL_NAME="model_job122"
+MODEL_NAME="model_job121b"
 python ~/gapjncsegmentation/unet_comboloss_no_wandb.py --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG --results_dir $RESULTS_DIR --augment $AUGMENT --load_model_path $LOAD_MODEL_PATH --alpha $ALPHA --beta $BETA --gamma $GAMMA --loss_type $LOSS_TYPE
