@@ -6,7 +6,7 @@
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
 #SBATCH --mem=64G
-#SBATCH --time=10:0:0
+#SBATCH --time=2:0:0
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
