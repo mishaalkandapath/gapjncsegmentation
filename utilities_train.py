@@ -20,6 +20,7 @@ def parse_arguments():
     parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
     parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
     parser.add_argument("--results_dir", type=str, default="results", help="Directory to save results")
+    parser.add_argument("--freeze_model_start_layer", type=str, default=None, help="Layer to start unfreezing model from")
     parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train for")
@@ -126,6 +127,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         epoch_train_precision = 0
         epoch_valid_recall = 0
         epoch_train_recall = 0
+        num_train_processed = 0
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)), end="\r")
             inputs, labels = data

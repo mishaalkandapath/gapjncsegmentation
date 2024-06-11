@@ -70,6 +70,52 @@ if __name__ == "__main__":
         model, optimizer, start_epoch, loss, batch_size, lr, focal_loss_weights = load_checkpoint(model, optimizer, load_model_path)
         print(f"Model loaded from {load_model_path}. Starting from epoch {start_epoch}.")
     print(f"Model is on device {next(model.parameters()).device}")
+    
+    freeze_model_start_layer = args.freeze_model_start_layer
+    if freeze_model_start_layer is not None:
+        # first freeze all parameters
+        for param in model.parameters():
+            param.requires_grad = False
+        print("Freezed all layers")
+            
+        # then unfreeze small portion
+        if freeze_model_start_layer > 0:
+            # -- last layer only --
+            for param in model.single_conv3.parameters():
+                param.requires_grad = True
+            print("unfreezed layer 1")
+            if freeze_model_start_layer > 1:
+                # -- pyramid1 -- 
+                for param in model.single_three_conv1.parameters():
+                    param.requires_grad = True
+                for param in model.pyramid1.parameters():
+                    param.requires_grad = True
+                for param in model.res_conn.parameters():
+                    param.requires_grad = True
+                print("unfreezed layer 2 (short pyramid)")
+                # -- pyramid2 -- 
+                if freeze_model_start_layer > 2:
+                    for param in model.pyramid2.parameters():
+                        param.requires_grad = True
+                    for param in model.single_three_conv2.parameters():
+                        param.requires_grad = True
+                    for param in model.single_conv2.parameters():
+                        param.requires_grad = True
+                    for param in model.transpose.parameters():
+                        param.requires_grad = True
+                    print("unfreezed layer 3 (long pyramid)")
+                    if freeze_model_start_layer > 3:
+                        for param in model.one_conv1.parameters():
+                            param.requires_grad = True
+                        for param in model.up_conv1.parameters():
+                            param.requires_grad = True
+                        for param in model.up_conv2.parameters():
+                            param.requires_grad = True
+                        for param in model.up_conv3.parameters():
+                            param.requires_grad = True
+                        print("unfreezed layer 4 (upsampling path)")
+
+
 
     # Initialize loss function
     print("Args loss type", args.loss_type)
