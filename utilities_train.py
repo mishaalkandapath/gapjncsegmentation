@@ -188,7 +188,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 num_train_logged += 1
             plt.close("all")
         print(f"Epoch: {epoch}, Loss: {loss}")
-        print(f"Epoch train precision: {epoch_train_precision:.4f} recall: {epoch_train_recall:.4f}")
+        print(f"Epoch train precision: {(epoch_train_precision/(i+1)):.4f} recall: {(epoch_train_recall/(i+1)):.4f}")
         num_logged = 0
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
@@ -238,7 +238,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             plt.close("all")
         try:
             print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
-            print(f"Epoch valid precision: {epoch_valid_precision:.4f} recall: {epoch_valid_recall:.4f}")
+            print(f"Epoch valid precision: {(epoch_valid_precision/(i+1)):.4f} recall: {(epoch_valid_recall/(i+1)):.4f}")
         except:
             print(f"Epoch: {epoch} | Loss: {loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
