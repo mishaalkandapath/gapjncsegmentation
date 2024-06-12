@@ -1,4 +1,5 @@
-import cv2, re, os, sys, tqdm, shutil, numpy as np
+import cv2, re, os, sys, shutil, numpy as np
+from tqdm import tqdm
 
 
 """
@@ -13,12 +14,12 @@ def split_img(img, offset=256, tile_size=512, names=False):
     if offset:
         img = img[offset:-offset, offset:-offset]
     imgs = []
-    names = []
+    names_list = []
     for i in range(img.shape[0]//tile_size+1):
         for j in range(img.shape[1]//tile_size +1):
             imgs.append(img[i*tile_size:(i+1)*tile_size, j*tile_size:(j+1)*tile_size])
-            names.append("Y{}_X{}".format(i, j))
-    return (imgs, names) if names else imgs 
+            names_list.append("Y{}_X{}".format(i, j))
+    return (imgs, names_list) if names else imgs 
 
 """
 Given an image at a certain cross_section, get corresponding area at a different cross-section at offset i from current depth
@@ -88,18 +89,18 @@ def create_dataset_3d(flat_dataset_dir, output_dir, window=(0, 1, 0, 0), image_t
                 seq_adds.append(helper_for_another(img, add_dir_maps[i]))
 
     for i in tqdm(range(len(seq_imgs))):
-        os.mkdir(os.path.join(output_dir, "imgs", os.path.split(seq_imgs[i][1])[-1][:-4]))
+        os.makedirs(os.path.join(output_dir, "imgs", os.path.split(seq_imgs[i][1])[-1][:-4]))
         if not test:
-            os.mkdir(os.path.join(output_dir, "gts", os.path.split(seq_imgs[i][1])[-1][:-4]))
+            os.makedirs(os.path.join(output_dir, "gts", os.path.split(seq_imgs[i][1])[-1][:-4]))
             for j in add_dir_maps:
-                os.mkdir(os.path.join(output_dir, j, os.path.split(seq_imgs[i][1])[-1][:-4]))
+                os.makedirs(os.path.join(output_dir, os.path.split(j)[-1], os.path.split(seq_imgs[i][1])[-1][:-4]))
 
         for j in range(4):
             shutil.copy(os.path.join(flat_dataset_dir, "imgs", seq_imgs[i][j]), os.path.join(output_dir, "imgs", os.path.split(seq_imgs[i][1])[-1][:-4], os.path.split(seq_imgs[i][j])[-1]))
             if not test:
                 shutil.copy(os.path.join(flat_dataset_dir, "gts", seq_segs[i][j]), os.path.join(output_dir, "gts", os.path.split(seq_imgs[i][1])[-1][:-4], os.path.split(seq_segs[i][j])[-1]))
                 for k in add_dir:
-                    shutil.copy(os.path.join(flat_dataset_dir, k, seq_adds[i][j]), os.path.join(output_dir, k, os.path.split(seq_imgs[i][1])[-1][:-4], os.path.split(seq_adds[i][j])[-1]))
+                    shutil.copy(os.path.join(flat_dataset_dir, os.path.split(k)[-1], seq_adds[i][j]), os.path.join(output_dir, os.path.split(k)[-1], os.path.split(seq_imgs[i][1])[-1][:-4], os.path.split(seq_adds[i][j])[-1]))
     
 """
 Function to create a 2d dataset from a dataset of full EM images
@@ -137,7 +138,7 @@ def create_dataset_2d_from_full(imgs_dir, output_dir, seg_dir=None, img_size=512
         os.makedirs(os.path.join(output_dir, "gts"))
         if add_dir:
             for i in (add_dir):
-                os.makedirs(os.path.join(output_dir, i))
+                os.makedirs(os.path.join(output_dir, os.path.split(i)[-1]))
 
     imgs = sorted(os.listdir(imgs_dir))
 
@@ -146,13 +147,12 @@ def create_dataset_2d_from_full(imgs_dir, output_dir, seg_dir=None, img_size=512
             img_imgs, img_names = split_img(img, offset=offset, tile_size=img_size, names=True)
             if not test: 
                 gt_imgs = split_img(gt, offset=offset, tile_size=img_size)
-
                 add_data = [] if add_dir else None
                 if add_dir:
-                    for j in (add_dir):
-                        dat = cv2.imread(os.path.join(add_dir[j], add_dir_maps[j](imgs[i])))
-                        dat = split_img(dat, offset=offset, tile_siz=img_size)
-                        add_data.append()
+                    for j in range(len(add_dir)):
+                        dat = cv2.imread(os.path.join(add_dir[j], add_dir_maps[add_dir[j]](imgs[i])))
+                        dat = split_img(dat, offset=offset, tile_size=img_size)
+                        add_data.append(dat)
 
             for j in range(len(img_imgs)):
                 cv2.imwrite(os.path.join(output_dir, f"imgs/{imgs[i].replace('.png', '_'+img_names[j] + ('' if not offset else 'off'))}.png"), img_imgs[j])
@@ -160,7 +160,7 @@ def create_dataset_2d_from_full(imgs_dir, output_dir, seg_dir=None, img_size=512
                     cv2.imwrite(os.path.join(output_dir, f"gts/{imgs[i].replace('.png', '_'+img_names[j] + ('' if not offset else 'off'))}.png"), gt_imgs[j])
                     if add_dir:
                         for k in range(len(add_data)):
-                            cv2.imwrite(os.path.join(output_dir, f"{add_dir[k]}/{imgs[i].replace('.png', '_'+img_names[j] + ('' if not offset else 'off'))}.png"), add_data[k][j])
+                            assert cv2.imwrite(os.path.join(output_dir, f"{os.path.split(add_dir[k])[-1]}/{imgs[i].replace('.png', '_'+img_names[j] + ('' if not offset else 'off'))}.png"), add_data[k][j])
 
     for i in tqdm(range(len(imgs))):
         img = cv2.imread(os.path.join(imgs_dir, imgs[i]))
