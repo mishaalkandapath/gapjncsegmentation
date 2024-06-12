@@ -290,10 +290,13 @@ class TestDataset(torch.utils.data.Dataset):
             self, 
             dataset_dir ,
             image_dim = (512, 512),
-            td=False
+            td=False,
+            membrane=False
     ):      
         self.image_paths = [os.path.join(dataset_dir, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
-
+        if membrane:
+            self.membrane_paths = [os.path.join(dataset_dir, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
+        else: self.membrane_paths = None
         self.td = td
 
     def __getitem__(self, i):
@@ -301,32 +304,45 @@ class TestDataset(torch.utils.data.Dataset):
         if not self.td:
             try:
                 image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
+                if self.membrane_paths: memb = cv2.cvtColor(cv2.imread(self.membrane_paths[i]), cv2.COLOR_BGR2GRAY)
             except Exception as e:
                 print(self.image_paths[i])
                 raise Exception(self.image_paths[i])
         else:
             images = sorted(os.listdir(self.image_paths[i]))
-            img = []
+            img, mem = [], []
             for j in range(4):
                 im = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], images[j])), cv2.COLOR_BGR2GRAY)
+                if self.membrane_paths: 
+                    memb = cv2.cvtColor(cv2.imread(os.path.join(self.membrane_paths[i], images[j])), cv2.COLOR_BGR2GRAY)
+                    mem.append(memb)
                 img.append(im)
             
             image = np.stack(img, axis=0)
+            memb = np.stack(mem, axis=0)
 
         _transform = []
         _transform.append(transforms.ToTensor()) 
-
+        if self.membrane_paths: memb = transforms.Compose(_transform)(memb)
         _transform_img = _transform.copy()
         # _transform_img.append(transforms.Normalize(mean=[0.5], std=[0.5]))
         image = transforms.Compose(_transform_img)(image)
-        if self.td: image = torch.permute(image, (1, 2, 0)) 
-        else: image = image.squeeze(0) 
+        if self.td: 
+            image = torch.permute(image, (1, 2, 0)) 
+            if self.membrane_paths: memb = torch.permute(memb, (1, 2, 0)) 
+        else: 
+            image = image.squeeze(0) 
+            memb = memb.squeeze(0)
 
 
-        if image.shape[-1] != 512: image = torch.zeros(image.shape[:-1]+(512,))
-        if image.shape[-2] != 512: image = torch.zeros(image.shape[:-2]+(512,512))
+        if image.shape[-1] != 512: 
+            image = torch.zeros(image.shape[:-1]+(512,))
+            if self.membrane_paths: memb = torch.zeros(memb.shape[:-1]+(512,))
+        if image.shape[-2] != 512: 
+            image = torch.zeros(image.shape[:-2]+(512,512))
+            if self.membrane_paths: memb = torch.zeros(memb.shape[:-2]+(512,512))
 
-        return image.unsqueeze(0), image.unsqueeze(0), image.unsqueeze(0), image.unsqueeze(0)
+        return image.unsqueeze(0), image.unsqueeze(0) if not self.membrane_paths else memb.unsqueeze(0), image.unsqueeze(0), image.unsqueeze(0)
     def __len__(self):
         # return length of 
         return len(self.image_paths)
@@ -338,27 +354,29 @@ class DoubleConv(nn.Module):
         self.dropout = torch.nn.Dropout(p=dropout)
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1) if not three else nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
             nn.BatchNorm2d(out_channels) if not three else nn.BatchNorm3d(out_channels),
+            nn.ReLU(inplace=False),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1) if not three else nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1),
         )
+        self.projection_add = nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)
         self.final = nn.Sequential(
-            nn.ReLU(inplace=True),
             nn.BatchNorm2d(out_channels) if not three else nn.BatchNorm3d(out_channels),
+            nn.ReLU(inplace=False),
             self.dropout,
         )
         self.spatial=spatial
         if spatial: 
             self.spatial_sample = PyramidPooling(levels=[2, 2, 4, 4, 4, 4, 4, 4,4, 4], td=three)
+        self.residual = residual
 
     def forward(self, x_in):
         x = self.double_conv(x_in)
-        if self.residual: x = x + x_in
-        x = self.final(x)
+        # if self.residual: x = x + self.projection_add(x_in)
+        # x = self.final(x)
         con_shape = x.shape
-        if self.spatial: # Spatial pyramidal pooling
-            x = self.spatial_sample(x)
-            x = x.reshape(con_shape)
+        # if self.spatial: # Spatial pyramidal pooling
+        #     x = self.spatial_sample(x)
+        #     x = x.reshape(con_shape)
         return x
     
 class DownBlock(nn.Module):
@@ -373,36 +391,40 @@ class DownBlock(nn.Module):
 
     def forward(self, x):
         skip_out = self.double_conv(x)
-        if self.spatial: 
-            x = self.spatial_sample(skip_out)
-            x = x.reshape(skip_out.shape)
-            down_out = self.down_sample(x)
-        else:   
-            down_out = self.down_sample(skip_out)
+        # if self.spatial: 
+        #     x = self.spatial_sample(skip_out)
+        #     x = x.reshape(skip_out.shape)
+        #     down_out = self.down_sample(x)
+        # else:   
+        down_out = self.down_sample(skip_out)
         return (down_out, skip_out)
 
 class UpBlock(nn.Module):
     """Up Convolution (Upsampling followed by Double Convolution)"""
-    def __init__(self, in_channels, out_channels, up_sample_mode, three=False, dropout=0):
+    def __init__(self, in_channels, out_channels, up_sample_mode, three=False, dropout=0, residual=False):
         super(UpBlock, self).__init__()
         if up_sample_mode == 'conv_transpose':
-            if three: self.up_sample = nn.ConvTranspose3d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2)        
-            else: self.up_sample = nn.ConvTranspose2d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2)        
+            if three: self.up_sample = nn.Sequential(
+                nn.ConvTranspose3d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2),
+                nn.ReLU())       
+            else: self.up_sample = nn.Sequential(
+                nn.ConvTranspose2d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2),
+                nn.ReLU())
         elif up_sample_mode == 'bilinear':
             self.up_sample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True, three=three)
         else:
             raise ValueError("Unsupported `up_sample_mode` (can take one of `conv_transpose` or `bilinear`)")
-        self.double_conv = DoubleConv(in_channels, out_channels, three=three)
+        self.double_conv = DoubleConv(in_channels, out_channels, three=three, residual=residual)
         self.dropout = torch.nn.Dropout(p=dropout)
 
     def forward(self, down_input, skip_input):
-        x = self.dropout(self.up_sample(down_input))
+        x = self.up_sample(down_input)
         x = torch.cat([x, skip_input], dim=1)
         return self.double_conv(x)
 
 class UNet(nn.Module):
     """UNet Architecture"""
-    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, residual=False scale=False, spatial=False, dropout=0):
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, residual=False, scale=False, spatial=False, dropout=0):
         """Initialize the UNet model"""
         super(UNet, self).__init__()
         self.three = three
@@ -562,8 +584,48 @@ class DiceLoss(nn.Module):
         n2 = n2.view(n2.shape[0], -1)
         d =  d.view(d.shape[0], -1)
 
-        return torch.mean(1 - (torch.sum(n1, dim=-1) + self.eps)/(torch.sum(d, dim=-1) + self.eps)
+        return torch.mean(2 - (torch.sum(n1, dim=-1) + self.eps)/(torch.sum(d, dim=-1) + self.eps)
                            - (torch.sum(n2, dim=-1) + self.eps)/(torch.sum(2-d, dim=-1) + self.eps))
+
+class TverskyFocal(nn.Module):
+    def __init__(self, eps=1e-6):
+        super(TverskyFocal, self).__init__()
+        self.eps = eps
+    
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], recall=0.7, precision=0.3):
+        #get the probabilities:
+        probs = nn.Sigmoid()(inputs)
+        n1 = probs * targets
+        inv_targets = 1 - targets
+
+        d = probs + targets
+
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
+        
+        if loss_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            # loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            inv_targets[loss_mask] = 0
+            d *= (loss_mask == 0)
+            d += (loss_mask *2) # eqv to d[loss_mask]=2
+
+        n2 = (1-probs) * inv_targets
+
+        f1 = probs * inv_targets
+        f2 = (1-probs) * targets
+    
+        # no need to use masks for balancing, coz of the loss fn here
+
+        n1 = n1.view(n1.shape[0], -1)
+        n2 = n2.view(n2.shape[0], -1)
+        d =  d.view(d.shape[0], -1)
+
+        f1 = torch.sum(f1.view(n1.shape[0], -1))
+        f2 = torch.sum(f2.view(n1.shape[0], -1))
+
+        return torch.mean(2 - (torch.sum(n1, dim=-1) + self.eps)/(torch.sum(n1, dim=-1) + recall*f2 + precision*f1  + self.eps)
+                           - (torch.sum(n2, dim=-1) + self.eps)/(torch.sum(n2, dim=-1) + precision*f2 + recall*f1 + self.eps))
 
 class SSLoss(nn.Module):
     def __init__(self, eps=1e-6, lamda=0.05):
@@ -716,8 +778,7 @@ class PyramidPooling(nn.Module):
                                     mode='constant', value=0)
             
             if mode == "max":
-                if not self.td: pool = nn.MaxPool2d((h_kernel, w_kernel), stride=(h_kernel, w_kernel), padding=(0, 0))
-                else: pool = nn.MaxPool3d((h_kernel, w_kernel), stride=(h_kernel, w_kernel), padding=(0, 0))
+                pool = nn.MaxPool2d((h_kernel, w_kernel), stride=(h_kernel, w_kernel), padding=(0, 0))
             elif mode == "avg":
                 pool = nn.AvgPool2d((h_kernel, w_kernel), stride=(h_kernel, w_kernel), padding=(0, 0))
             else:
