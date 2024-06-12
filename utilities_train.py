@@ -87,7 +87,7 @@ def setup_datasets_and_dataloaders_withmemb(data_dir: str, cellmask_dir:str, bat
     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
     return train_dataset, valid_dataset, train_loader, valid_loader
 
-def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, num_predictions_to_log:int=5, depth=5, height=512, width=512) -> None:
+def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, num_predictions_to_log:int=5, depth=3, height=512, width=512) -> None:
     """ 
     Train the model and log predictions locally.
     
@@ -135,6 +135,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             if (first_img):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}") # (batch, channel, depth, height, width)
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
+                first_img = False
             
             if inputs.shape[2:] != (depth, height, width):
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
