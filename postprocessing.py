@@ -32,7 +32,7 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
                 suffix = r"s{}_Y{}_X{}".format(s, y, x)
 
                 if not os.path.isfile(os.path.join(img_dir, img_templ +suffix + ".png")): 
-                    assert missing_dir is not None
+                    assert missing_dir is not None, f"Missing image {img_templ +suffix + '.png'}"
                     shutil.copy(os.path.join(missing_dir, img_templ + suffix + ".png"), os.path.join(img_dir, img_templ + suffix + ".png"))
                 im =cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_templ+ suffix + ".png")), cv2.COLOR_BGR2GRAY)
 
@@ -103,10 +103,12 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
         new_pred1 = np.repeat(new_pred[:, :, np.newaxis], 3, axis=-1)            
 
         if not fn:
+            # else: 
             #color statistics now
             red = (0, 0, 255)
             green = (0, 255, 0)
             blue = (255, 0, 0)
+            print(np.unique(new_pred), np.unique(new_gt))
             for m in range(3):
                 new_pred1[(new_pred == 1) & (new_gt == 1)] = green
                 new_pred1[(new_pred == 1) & (new_gt == 0)] = red
@@ -163,6 +165,7 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
             mask = cv2.cvtColor(cv2.imread(mask), cv2.COLOR_BGR2GRAY)  
             mask = mask == 21
             fn_stats.append(fn(new_gt_conf, new_pred, nr_mask=mask))
+
     if fn: return fn_stats
 
 #statistics
@@ -227,6 +230,7 @@ def iou_accuracy(gt, pred, mask=None):
     return np.sum(np.logical_and(gt == 255, pred == 255)) / np.sum(np.logical_or(gt == 255, pred == 255))
 
 def mask_recall(gt, pred, mask=None):
+    print(gt.shape, pred.shape, mask.shape)
     gt = gt.flatten()[mask]
     pred = pred.flatten()[mask]
     gt[gt != 0] = 255   

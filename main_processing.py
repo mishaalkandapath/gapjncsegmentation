@@ -68,7 +68,7 @@ if __name__ == "__main__":
             raise ValueError("Please specify the image directory")
         if (args.make_twoD or args.make_threeD) and args.train_val_split:
             raise ValueError("Cannot make a 2d or 3d dataset and train val split at the same time. Run the 2d or 3d first, and then proceed with the split")
-        if not args.test and args.seg_dir is None:
+        if not args.test and args.seg_dir is None and args.make_threeD is None:
             raise ValueError("Please specify the segmentation directory or raise the test flag")
         if args.add_dir is not None and args.add_dir_templates is None:
             raise ValueError("Please specify the template for the additional directories")
@@ -86,6 +86,7 @@ if __name__ == "__main__":
         #report printing:
         print("Relevant Preprocessing Arguments:")
         print(f"Image Directory: {args.imgs_dir}")
+        print(f"Image Template: {args.img_template}")
         if not args.test: 
             print(f"Segmentation Directory: {args.seg_dir}")
             print(f"Segmentation Template: {args.seg_template}")
@@ -163,15 +164,15 @@ if __name__ == "__main__":
     
     if args.preprocessing and args.make_twoD:
         f = None if args.test else lambda x: x.replace(args.img_template, args.seg_template)
-        gs = None if args.add_dir is None else {i: lambda x: x.replace(args.img_template, args.add_dir_templates[i]) for i in args.add_dir}
+        gs = None if args.add_dir is None else {i: lambda x: x.replace(args.img_template, args.add_dir_templates[j]) for j, i in enumerate(args.add_dir)}
         create_dataset_2d_from_full(args.imgs_dir, args.output_dir, seg_dir=args.seg_dir, img_size=args.img_size, image_to_seg_name_map= f, add_dir=args.add_dir, add_dir_maps=gs, seg_ignore=args.seg_ignore, create_overlap=args.create_overlap, test=args.test)
-        flat_dataset = args.output_dir
+        args.flat_dataset_dir = args.output_dir
     
     if args.preprocessing and args.make_threeD:
         f = None if args.test else lambda x: x.replace(args.img_template, args.seg_template)
-        gs = None if args.add_dir is None else {i: lambda x: x.replace(args.img_template, args.add_dir_templates[i]) for i in args.add_dir}
+        gs = None if args.add_dir is None else {i: lambda x: x.replace(args.img_template, args.add_dir_templates[j]) for j, i in enumerate(args.add_dir)}
         output_dir = args.output_dir if not args.make_twoD else args.output_dir+"_3d"
-        create_dataset_3d(args.flat_dataset_dir, output_dir, depth_pattern=args.depth_pattern, window=args.window, test=args.test, image_to_seg_name_map=f, add_dir_maps=gs, add_dir=args.add_dir)
+        create_dataset_3d(args.flat_dataset_dir, output_dir, depth_pattern=r's\d\d\d', window=args.window, test=args.test, image_to_seg_name_map=f, add_dir_maps=gs, add_dir=args.add_dir)
     
     if args.preprocessing and args.train_val_split:
         f = None if args.test else lambda x: x.replace(args.img_template, args.seg_template)
@@ -180,7 +181,7 @@ if __name__ == "__main__":
     
     if args.postprocessing:
         f = None if args.test else lambda x: x.replace(args.img_template, args.seg_template)
-        assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, overlap=True, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset)
+        assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, overlap=args.create_overlap, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset)
     
     if args.results and not args.no_assemble:
         recalls, precisions, precisions_gen, accs, accs_gen = [], [], [], [], []
