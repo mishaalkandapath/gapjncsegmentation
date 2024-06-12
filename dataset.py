@@ -132,6 +132,7 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
         image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         combmask = torch.tensor(combmask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         combmask[combmask!=0]=1
+        print("combmask", combmask.shape)
         image = tio.ZNormalization()(image)
     
         # apply augmentations, if any
