@@ -20,7 +20,7 @@ def parse_arguments():
     parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
     parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
     parser.add_argument("--results_dir", type=str, default="results", help="Directory to save results")
-    parser.add_argument("--freeze_model_start_layer", type=str, default=None, help="Layer to start unfreezing model from")
+    parser.add_argument("--freeze_model_start_layer", type=int, default=None, help="Layer to start unfreezing model from")
     parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train for")
@@ -87,7 +87,7 @@ def setup_datasets_and_dataloaders_withmemb(data_dir: str, cellmask_dir:str, bat
     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
     return train_dataset, valid_dataset, train_loader, valid_loader
 
-def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, num_predictions_to_log:int=5) -> None:
+def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, num_predictions_to_log:int=5, depth=5, height=512, width=512) -> None:
     """ 
     Train the model and log predictions locally.
     
@@ -135,12 +135,6 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             if (first_img):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}") # (batch, channel, depth, height, width)
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
-                _, _, depth, height, width = inputs.shape # initialize depth, height, width
-                if height != width:
-                    continue
-                else:
-                    first_img=False
-                    print(f"depth {depth}, height {height}, width {width}")
             
             if inputs.shape[2:] != (depth, height, width):
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
