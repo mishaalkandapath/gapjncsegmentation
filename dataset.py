@@ -139,7 +139,7 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
             # Apply the flip transformation to the subject
             subject = tio.Subject(
                 image=tio.ScalarImage(tensor=image),
-                mask=tio.LabelMap(tensor=mask)
+                mask=tio.LabelMap(tensor=combmask)
             )
             flip_transform = tio.RandomFlip(axes=0, flip_probability=0.5)
             flipped_subject = flip_transform(subject)
