@@ -69,7 +69,7 @@ def log_predictions(input_img: np.ndarray, label_img: np.ndarray, pred_img: np.n
 def setup_datasets_and_dataloaders_from_lists(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True):
     """ Setup datasets and dataloaders for training and validation"""
     print("Setting up: augment ", augment, " shuffle ", shuffle)
-    my_dataset = SliceDataset(img_dir_list, mask_dir_list, augment=augment)
+    my_dataset = SliceDatasetMultipleFolders(img_dir_list, mask_dir_list, augment=augment)
     my_loader = DataLoader(my_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers) # change num_workers as needed
     return my_dataset, my_loader
 
