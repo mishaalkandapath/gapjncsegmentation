@@ -1,6 +1,6 @@
 import os
 from torch.utils.data import DataLoader
-from dataset import SliceDatasetWithFilename
+from dataset import SliceDatasetWithFilename, SliceDatasetWithFilenameAllSubfolders
 import argparse
 import time
 from models import *
@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
     parser.add_argument('--save3d', type=lambda x: (str(x).lower() == 'true'), default=False, help='save 3d')
     parser.add_argument('--savecomb', type=lambda x: (str(x).lower() == 'true'), default=False, help='save combined')
+    parser.add_argument('--useallsubfolders', type=lambda x: (str(x).lower() == 'true'), default=False, help='use all subfolders')
     parser.add_argument('--subvol_depth', type=int, default=3, help='num workers')
     parser.add_argument('--subvol_height', type=int, default=512, help='num workers')
     parser.add_argument('--subvol_width', type=int, default=512, help='num workers')
@@ -44,7 +45,10 @@ def main():
     print("Loading data dir")
     x_test_dir = args.x_dir
     y_test_dir = args.y_dir
-    test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir)
+    if args.useallsubfolders:
+        test_dataset = SliceDatasetWithFilenameAllSubfolders(x_test_dir, y_test_dir)
+    else:
+        test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
     print(f"Data loaders created. Train dataset size: {len(test_dataset)}")
