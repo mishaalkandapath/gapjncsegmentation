@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--model_path', type=str, required=True, help='model path')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
     parser.add_argument('--num_workers', type=int, default=4, help='num workers')
+    parser.add_argument('--pred_memb', type=lambda x: (str(x).lower() == 'true'), default=False, help='if model also predicts membrane')
     parser.add_argument('--save_vis', type=lambda x: (str(x).lower() == 'true'), default=True, help='save vis')
     parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
     parser.add_argument('--save3d', type=lambda x: (str(x).lower() == 'true'), default=False, help='save 3d')
@@ -26,7 +27,7 @@ def main():
     parser.add_argument('--subvol_width', type=int, default=512, help='num workers')
     args = parser.parse_args()
     
-    print(f"Use2d {args.save2d}, savevis {args.save_vis}")
+    print(f"Use2d {args.save2d}, savevis {args.save_vis}, predmemb {args.pred_memb}")
 
     save_dir = args.save_dir
     if not os.path.exists(save_dir):
@@ -99,11 +100,14 @@ def main():
             del tmp
             
         interm_pred, pred = model(inputs)
-        binary_pred = torch.argmax(pred, dim=1) 
         
-        # Save predictions for each epoch
-        pred=pred[0, 1].detach().cpu()
-        binary_pred=binary_pred[0].detach().cpu()
+        if args.pred_memb:
+            binary_pred = pred[0, 1].detach().cpu()
+            pred = pred[0, 0].detach().cpu()
+        else:
+            binary_pred = torch.argmax(pred, dim=1) 
+            pred=pred[0, 1].detach().cpu()
+            binary_pred=binary_pred[0].detach().cpu()
         labels = labels[0,0].detach().cpu()
         combined_volume = np.asarray((labels * 2 + binary_pred))
         vals, counts = np.unique(combined_volume, return_counts=True)
