@@ -136,7 +136,6 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
     
         # apply augmentations, if any
         if self.augment:
-            print("augmenting")
             # Apply the flip transformation to the subject
             subject = tio.Subject(
                 image=tio.ScalarImage(tensor=image),
