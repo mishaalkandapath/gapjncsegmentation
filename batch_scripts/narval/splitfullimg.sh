@@ -20,7 +20,7 @@ SUBVOL_DEPTH=3
 SUBVOL_HEIGHT=512
 SUBVOL_WIDTH=512
 SAVE_DIR=/home/hluo/scratch/111_120_3x512x512
-IMG_DIR=/home/hluo/scratch/sem_dauer_2_em
-MASK_DIR=/home/hluo/scratch/sem_dauer_2_gj_gt
+IMG_DIR=/home/hluo/scratch/111_120_fullimgs/original
+MASK_DIR=/home/hluo/scratch/111_120_fullimgs/ground_truth
 USE_FULL_VOLUME=True
 python /home/hluo/gapjncsegmentation/split_full_img.py --img_dir $IMG_DIR --mask_dir $MASK_DIR --start_x $START_X --start_y $START_Y --start_z $START_Z --ending_depth $ENDING_DEPTH --ending_height $ENDING_HEIGHT --ending_width $ENDING_WIDTH --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --save_dir $SAVE_DIR --use_full_volume $USE_FULL_VOLUME

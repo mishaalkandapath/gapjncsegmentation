@@ -54,7 +54,7 @@ mask_pattern=r"sem_dauer_2_gj_gt_s(\d+).png"
 img_pattern=r"SEM_dauer_2_em_s(\d+).png"
 img_files = [os.path.join(img_dir, f) for f in img_files if f.endswith(".png")]
 mask_files = [os.path.join(mask_dir, f) for f in mask_files if f.endswith(".png")]
-
+print("# imgs: ", len(img_files), "# masks: ", len(mask_files))
 # -- get masks:
 i=0
 for z in range(start_z, ending_depth):
@@ -71,7 +71,7 @@ for z in range(start_z, ending_depth):
     print(f"done {z} z-slice")
 print("full volume shape:", full_volume_img.shape, full_volume_mask.shape)
 
-start_z = 0
+start_z = 0 # start from 0 of local vol
 # ending_depth = full_volume_img.shape[0]
 if args.use_full_volume:
     ending_height = full_volume_img.shape[1]
