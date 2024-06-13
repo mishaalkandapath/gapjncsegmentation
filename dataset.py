@@ -127,7 +127,6 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
         mask = np.load(self.mask_paths[i]) # each pixel is 0 or 1, shape (depth, height, width)
         cellmask = np.load(self.cellmask_paths[i]) # each pixel is 0 or 1, shape (1, height, width)
         # combmask = np.concatenate((mask[np.newaxis, ...], cellmask[np.newaxis, ...]), axis=0) # (2, 3, 512, 512)
-        print("shapes", image.shape, mask.shape, cellmask.shape)
         # convert to tensor
         image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
@@ -165,8 +164,6 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
             image = additional_transforms(image)
         combmask = torch.cat((mask, cellmask), dim=0)
         combmask[combmask!=0]=1
-        print("combmask")
-        print(combmask.shape)
             
         # one-hot encode the mask (depth, height, width) --> (depth, height, width, num_classes=2)
         # one_hot_mask = torch.nn.functional.one_hot(combmask.squeeze(0).long(), num_classes=2)
