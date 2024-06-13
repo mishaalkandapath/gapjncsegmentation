@@ -191,8 +191,8 @@ class SliceDatasetWithFilename(torch.utils.data.Dataset):
             augment=False
     ):
         
-        self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
+        self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir)) if image_id.endswith(".npy")]
+        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if image_id.endswith(".npy")]
         self.augment = augment
     
     def __getitem__(self, i):
