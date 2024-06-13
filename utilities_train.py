@@ -38,6 +38,9 @@ def parse_arguments():
     parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
     parser.add_argument("--use_dice", type=lambda x: (str(x).lower() == 'true'), default=False, help="Type of loss function to use")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--height", type=int, default=512, help="height of input")
+    parser.add_argument("--width", type=int, default=512, help="width of input")
+    parser.add_argument("--depth", type=int, default=3, help="depth of input")
     args = parser.parse_args()
     return args
 

@@ -149,4 +149,7 @@ if __name__ == "__main__":
           model_folder=model_folder, 
           model_name=model_name, 
           results_folder=results_folder,
-          num_predictions_to_log=args.num_predictions_to_log)
+          num_predictions_to_log=args.num_predictions_to_log,
+          depth=args.depth,
+          height=args.height,
+          width=args.width)
