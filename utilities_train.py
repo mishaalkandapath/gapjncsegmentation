@@ -87,7 +87,7 @@ def setup_datasets_and_dataloaders_withmemb(data_dir: str, cellmask_dir:str, bat
     train_dataset = SliceDatasetWithMemb(x_train_dir, y_train_dir, cellmask_train_dir, augment=augment)
     valid_dataset = SliceDatasetWithMemb(x_valid_dir, y_valid_dir, cellmask_valid_dir)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
-    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
+    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=num_workers)
     return train_dataset, valid_dataset, train_loader, valid_loader
 
 def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, num_predictions_to_log:int=5, depth=3, height=512, width=512) -> None:
@@ -130,7 +130,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         epoch_train_precision = 0
         epoch_valid_recall = 0
         epoch_train_recall = 0
-        num_train_processed = 0
+        num_train_processed = 1
         for i, data in enumerate(train_loader):
             print("Progress: {:.2%}".format(i/len(train_loader)), end="\r")
             inputs, labels = data
@@ -148,6 +148,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             loss = criterion(pred, labels)
             loss.backward() # calculate gradients
             optimizer.step() # update weights based on calculated gradients
+            num_train_processed += 1
             if batch_size < 2:
                 mask_for_metric = labels[:, 1]
                 pred_for_metric = torch.argmax(pred, dim=1) 
@@ -167,6 +168,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 train_precision.append(precision)
                 train_recall.append(recall)
                 train_losses.append(loss.detach().cpu().item())
+            
 
             # Save predictions for each epoch
             if num_train_logged < num_predictions_to_log:
@@ -187,9 +189,10 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 plt.savefig(os.path.join(results_folder, "train", f"num{num_train_logged}_epoch{epoch}.png"))
                 num_train_logged += 1
             plt.close("all")
-        print(f"Epoch: {epoch}, Loss: {loss}")
-        print(f"Epoch train precision: {(epoch_train_precision/(i+1)):.4f} recall: {(epoch_train_recall/(i+1)):.4f}")
+        print(f"Epoch: {epoch}, Loss: {loss} | processed {num_train_processed}")
+        print(f"Epoch train precision: {(epoch_train_precision/(num_train_processed)):.4f} recall: {(epoch_train_recall/(num_train_processed)):.4f}")
         num_logged = 0
+        num_valid_processed = 1
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
@@ -199,6 +202,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             
             valid_interm_pred, valid_pred = model(valid_inputs)
             valid_loss = criterion(valid_pred, valid_labels)
+            num_valid_processed += 1
             if batch_size < 2:
                 mask_for_metric = valid_labels[:, 1]
                 pred_for_metric = torch.argmax(valid_pred, dim=1) 
@@ -237,8 +241,8 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             valid_losses.append(valid_loss.detach().cpu().item())
             plt.close("all")
         try:
-            print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
-            print(f"Epoch valid precision: {(epoch_valid_precision/(i+1)):.4f} recall: {(epoch_valid_recall/(i+1)):.4f}")
+            print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss} | num valid processed {num_valid_processed}")
+            print(f"Epoch valid precision: {(epoch_valid_precision/(num_valid_processed)):.4f} recall: {(epoch_valid_recall/(num_valid_processed)):.4f}")
         except:
             print(f"Epoch: {epoch} | Loss: {loss}")
         print(f"Time elapsed: {time.time() - start} seconds")
