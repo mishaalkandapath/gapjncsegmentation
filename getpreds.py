@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--model_path', type=str, required=True, help='model path')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
     parser.add_argument('--num_workers', type=int, default=4, help='num workers')
+    parser.add_argument('--threshold', type=int, default=0.5, help='threshold for binary pred')
     parser.add_argument('--pred_memb', type=lambda x: (str(x).lower() == 'true'), default=False, help='if model also predicts membrane')
     parser.add_argument('--save_vis', type=lambda x: (str(x).lower() == 'true'), default=True, help='save vis')
     parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
@@ -28,6 +29,7 @@ def main():
     args = parser.parse_args()
     
     print(f"Use2d {args.save2d}, savevis {args.save_vis}, predmemb {args.pred_memb}")
+    print(f"Args threshold: {args.threshold}")
 
     save_dir = args.save_dir
     if not os.path.exists(save_dir):
@@ -102,7 +104,10 @@ def main():
         interm_pred, pred = model(inputs)
         
         if args.pred_memb:
+            threshold=args.threshold
             binary_pred = pred[0, 1].detach().cpu()
+            binary_pred[binary_pred >= threshold] = 1
+            binary_pred[binary_pred < threshold] = 0
             pred = pred[0, 0].detach().cpu()
         else:
             binary_pred = torch.argmax(pred, dim=1) 
