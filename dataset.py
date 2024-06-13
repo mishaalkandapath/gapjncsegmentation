@@ -137,6 +137,7 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
     
         # apply augmentations, if any
         if self.augment:
+            print("augmenting")
             # Apply the flip transformation to the subject
             subject = tio.Subject(
                 image=tio.ScalarImage(tensor=image),
@@ -152,8 +153,6 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
             image = flipped_subject.image.tensor
             mask = flipped_subject.mask.tensor
             cellmask = flipped_subject.cellmask.tensor
-            combmask = torch.cat((mask, cellmask), dim=0)
-            combmask[combmask!=0]=1
 
             # Define additional transformations for the image
             additional_transforms = tio.Compose([
@@ -164,6 +163,8 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
 
             # Apply the additional transformations to the flipped image
             image = additional_transforms(image)
+        combmask = torch.cat((mask, cellmask), dim=0)
+        combmask[combmask!=0]=1
             
         # one-hot encode the mask (depth, height, width) --> (depth, height, width, num_classes=2)
         # one_hot_mask = torch.nn.functional.one_hot(combmask.squeeze(0).long(), num_classes=2)
