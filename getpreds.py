@@ -113,6 +113,7 @@ def main():
             binary_pred = torch.argmax(pred, dim=1) 
             pred=pred[0, 1].detach().cpu()
             binary_pred=binary_pred[0].detach().cpu()
+            binary_pred[binary_pred != 0] = 1
         labels = labels[0,0].detach().cpu()
         combined_volume = np.asarray((labels * 2 + binary_pred))
         vals, counts = np.unique(combined_volume, return_counts=True)
@@ -125,6 +126,7 @@ def main():
         total_fn+=fn
         precision=tp/(tp+fp) if (tp + fp) != 0 else 0
         recall=tp/(tp+fn) if (tp + fn) != 0 else 0
+        print(vals, counts)
         print(f"comb precision {precision}, recall {recall}")
         print(vals, counts)
         if args.savecomb:
