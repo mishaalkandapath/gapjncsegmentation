@@ -72,7 +72,7 @@ for z in range(start_z, ending_depth):
 print("full volume shape:", full_volume_img.shape, full_volume_mask.shape)
 
 start_z = 0 # start from 0 of local vol
-# ending_depth = full_volume_img.shape[0]
+ending_depth = full_volume_img.shape[0]
 if args.use_full_volume:
     ending_height = full_volume_img.shape[1]
     ending_width = full_volume_img.shape[2]
@@ -82,6 +82,7 @@ print("ending:", ending_depth, ending_height, ending_width)
 step_z = args.step_z
 step_y = args.step_y
 step_x = args.step_x
+print("Steps z y x: ", step_z, step_y, step_x)
 while start_z < ending_depth:
     end_z = start_z + subvol_depth
     start_y = args.start_y
