@@ -61,6 +61,9 @@ for z in range(start_z, ending_depth):
     print(f"Trying {z}")
     tmp_img = get_img_by_z(z, img_files, img_pattern)
     tmp_mask = get_img_by_z(z, mask_files, mask_pattern)
+    print(img_files)
+    print(mask_files)
+    print(tmp_img)
     if i == 0:
         h, w = tmp_img.shape[0], tmp_img.shape[1]
         full_volume_img = np.zeros((ending_depth-start_z, h, w))
