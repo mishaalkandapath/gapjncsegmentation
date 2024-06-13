@@ -17,6 +17,10 @@ from loss import *
 def parse_arguments():
     """ Parse command line arguments """
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
+    parser.add_argument("--img_dir_list", type=str, nargs='+', default=None, help="Directories to get original images from")
+    parser.add_argument("--gt_dir_list", type=str, nargs='+', default=None, help="Directories to get mask images from")
+    parser.add_argument("--valid_img_dir_list", type=str, nargs='+', default=None, help="Directories to get original images from")
+    parser.add_argument("--valid_gt_dir_list", type=str, nargs='+', default=None, help="Directories to get mask images from")
     parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
     parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
     parser.add_argument("--results_dir", type=str, default="results", help="Directory to save results")
@@ -61,6 +65,13 @@ def log_predictions(input_img: np.ndarray, label_img: np.ndarray, pred_img: np.n
     # save figure to wandb
     mask_img = wandb.Image(fig)          
     table.add_data(f"Epoch {epoch} Step {step}", mask_img)
+
+def setup_datasets_and_dataloaders_from_lists(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True):
+    """ Setup datasets and dataloaders for training and validation"""
+    print("Setting up: augment ", augment, " shuffle ", shuffle)
+    my_dataset = SliceDataset(img_dir_list, mask_dir_list, augment=augment)
+    my_loader = DataLoader(my_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers) # change num_workers as needed
+    return my_dataset, my_loader
 
 def setup_datasets_and_dataloaders(data_dir: str, batch_size: int, num_workers: int, augment: bool=False):
     """ Setup datasets and dataloaders for training and validation"""

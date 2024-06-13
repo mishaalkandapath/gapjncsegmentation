@@ -39,7 +39,7 @@ if __name__ == "__main__":
     # Define data directory
     data_dir = args.data_dir
     if not os.path.exists(data_dir): print(f"Data directory {data_dir} does not exist.")
-    
+
     # Define results directory
     results_folder = os.path.join(args.results_dir, args.model_name)
     if not os.path.exists(results_folder):
@@ -50,7 +50,17 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     num_workers = args.num_workers
     print("Augment", args.augment)
-    if args.cellmask_dir is not None:
+    
+    img_dir_list = args.img_dir_list
+    mask_dir_list = args.gt_dir_list
+    valid_img_dir_list = args.valid_img_dir_list
+    valid_mask_dir_list = args.valid_gt_dir_list
+    if img_dir_list is not None:
+        print("setting up from lists")
+        train_dataset, train_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=img_dir_list, mask_dir_list=mask_dir_list, batch_size=batch_size, num_workers=num_workers, augment=args.augment, shuffle=True)
+        valid_dataset, valid_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=valid_img_dir_list, mask_dir_list=valid_mask_dir_list, batch_size=1, num_workers=num_workers, augment=False, shuffle=False)
+
+    elif args.cellmask_dir is not None:
         print("Using cell mask -- 2 class prediction")
         train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders_withmemb(data_dir, args.cellmask_dir, batch_size, num_workers, augment=args.augment)
     else:
