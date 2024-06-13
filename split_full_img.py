@@ -51,19 +51,15 @@ if not os.path.exists(os.path.join(save_dir, "original")):
 img_files = os.listdir(img_dir)
 mask_files = os.listdir(mask_dir)
 mask_pattern=r"sem_dauer_2_gj_gt_s(\d+).png"
-img_pattern=r"SEM_dauer_2_em_s(\d+).png"
+img_pattern=r"sem_dauer_2_em_s(\d+).png"
 img_files = [os.path.join(img_dir, f) for f in img_files if f.endswith(".png")]
 mask_files = [os.path.join(mask_dir, f) for f in mask_files if f.endswith(".png")]
 print("# imgs: ", len(img_files), "# masks: ", len(mask_files))
 # -- get masks:
 i=0
 for z in range(start_z, ending_depth):
-    print(f"Trying {z}")
     tmp_img = get_img_by_z(z, img_files, img_pattern)
     tmp_mask = get_img_by_z(z, mask_files, mask_pattern)
-    print(img_files)
-    print(mask_files)
-    print(tmp_img)
     if i == 0:
         h, w = tmp_img.shape[0], tmp_img.shape[1]
         full_volume_img = np.zeros((ending_depth-start_z, h, w))
