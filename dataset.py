@@ -211,6 +211,7 @@ class SliceDatasetWithFilename(torch.utils.data.Dataset):
         # read images and masks (3D grayscale images)
         file_name = os.path.basename(self.image_paths[i])
         file_name = os.path.splitext(file_name)[0]
+        print(self.image_paths[i], self.mask_paths[i])
         image = np.load(self.image_paths[i]) # each pixel is 0-255, shape (depth, height, width)
         mask = np.load(self.mask_paths[i]) # each pixel is 0 or 1, shape (depth, height, width)
 

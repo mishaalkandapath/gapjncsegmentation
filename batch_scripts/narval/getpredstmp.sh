@@ -17,8 +17,8 @@ Y_DIR=/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/train
 
 
 # Load model!!!
-MODEL_NAME=model_job130
-EPOCH=563
+MODEL_NAME=model_job105
+EPOCH=85
 MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
 
 # 0-50

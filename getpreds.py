@@ -49,6 +49,7 @@ def main():
     x_test_dir = args.x_dir
     y_test_dir = args.y_dir
     if args.useallsubfolders:
+        print("using all subfolders")
         test_dataset = SliceDatasetWithFilenameAllSubfolders(x_test_dir, y_test_dir)
     else:
         test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir)
