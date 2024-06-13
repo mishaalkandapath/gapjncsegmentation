@@ -58,6 +58,7 @@ print("# imgs: ", len(img_files), "# masks: ", len(mask_files))
 # -- get masks:
 i=0
 for z in range(start_z, ending_depth):
+    print(f"Trying {z}")
     tmp_img = get_img_by_z(z, img_files, img_pattern)
     tmp_mask = get_img_by_z(z, mask_files, mask_pattern)
     if i == 0:
