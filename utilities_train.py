@@ -17,11 +17,18 @@ from loss import *
 def parse_arguments():
     """ Parse command line arguments """
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
+    parser.add_argument("--pred3classes", type=lambda x: (str(x).lower() == 'true'), default=False, help="Whether to augment the data")
     parser.add_argument("--img_dir_list", type=str, nargs='+', default=None, help="Directories to get original images from")
     parser.add_argument("--gt_dir_list", type=str, nargs='+', default=None, help="Directories to get mask images from")
     parser.add_argument("--valid_img_dir_list", type=str, nargs='+', default=None, help="Directories to get original images from")
     parser.add_argument("--valid_gt_dir_list", type=str, nargs='+', default=None, help="Directories to get mask images from")
     parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
+    parser.add_argument("--train_x_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
+    parser.add_argument("--train_y_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
+    parser.add_argument("--valid_x_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
+    parser.add_argument("--valid_y_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
+    parser.add_argument("--train_cellmask_dir", type=str, default=None, help="Path to load cellmask from")
+    parser.add_argument("--valid_cellmask_dir", type=str, default=None, help="Path to load cellmask from")
     parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
     parser.add_argument("--results_dir", type=str, default="results", help="Directory to save results")
     parser.add_argument("--freeze_model_start_layer", type=int, default=None, help="Layer to start unfreezing model from")
@@ -31,7 +38,6 @@ def parse_arguments():
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
     parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for DataLoader")
     parser.add_argument("--load_model_path", type=str, default=None, help="Path to load model from")
-    parser.add_argument("--cellmask_dir", type=str, default=None, help="Path to load cellmask from")
     parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
     parser.add_argument("--alpha", type=float, default=0.04, help="Weight for class 0 in Focal Loss")
     parser.add_argument("--beta", type=float, default=0.96, help="Weight for class 0 in Focal Loss")
@@ -73,33 +79,55 @@ def setup_datasets_and_dataloaders_from_lists(img_dir_list, mask_dir_list, batch
     my_loader = DataLoader(my_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers) # change num_workers as needed
     return my_dataset, my_loader
 
-def setup_datasets_and_dataloaders(data_dir: str, batch_size: int, num_workers: int, augment: bool=False):
+def setup_datasets_and_dataloaders(x_dir: str, y_dir: str, batch_size: int, num_workers: int, augment: bool=False, shuffle: bool=True):
     """ Setup datasets and dataloaders for training and validation"""
-    x_train_dir = os.path.join(data_dir, "original", "train")
-    y_train_dir = os.path.join(data_dir, "ground_truth", "train")
-    x_valid_dir = os.path.join(data_dir, "original", "valid")
-    y_valid_dir = os.path.join(data_dir, "ground_truth", "valid")
-    
-    train_dataset = SliceDataset(x_train_dir, y_train_dir, augment=augment)
-    valid_dataset = SliceDataset(x_valid_dir, y_valid_dir)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
-    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
-    return train_dataset, valid_dataset, train_loader, valid_loader
+    my_dataset = SliceDataset(x_dir, y_dir, augment=augment)
+    my_loader = DataLoader(my_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers) # change num_workers as needed
+    return my_dataset, my_loader
 
-def setup_datasets_and_dataloaders_withmemb(data_dir: str, cellmask_dir:str, batch_size: int, num_workers: int, augment: bool=False):
+def setup_datasets_and_dataloaders_withmemb(x_dir: str, y_dir:str, cellmask_dir:str, batch_size: int, num_workers: int, augment: bool=False, use3classes: bool=False, shuffle: bool=True):
     """ Setup datasets and dataloaders for training and validation"""
-    x_train_dir = os.path.join(data_dir, "original", "train")
-    x_valid_dir = os.path.join(data_dir, "original", "valid")
-    y_train_dir = os.path.join(data_dir, "ground_truth", "train")
-    y_valid_dir = os.path.join(data_dir, "ground_truth", "valid")
-    cellmask_train_dir = os.path.join(cellmask_dir, "train")
-    cellmask_valid_dir = os.path.join(cellmask_dir, "valid")
+    if use3classes:
+        my_dataset = SliceDatasetWithMembThreeClasses(x_dir, y_dir, cellmask_dir, augment=augment)
+    else:
+        my_dataset = SliceDatasetWithMemb(x_dir, y_dir, cellmask_dir, augment=augment)
+    my_loader = DataLoader(my_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers) # change num_workers as needed
+    return my_dataset, my_loader
+
+# def setup_datasets_and_dataloaders(data_dir: str, batch_size: int, num_workers: int, augment: bool=False):
+#     """ Setup datasets and dataloaders for training and validation"""
+#     x_train_dir = os.path.join(data_dir, "original", "train")
+#     y_train_dir = os.path.join(data_dir, "ground_truth", "train")
+#     x_valid_dir = os.path.join(data_dir, "original", "valid")
+#     y_valid_dir = os.path.join(data_dir, "ground_truth", "valid")
     
-    train_dataset = SliceDatasetWithMemb(x_train_dir, y_train_dir, cellmask_train_dir, augment=augment)
-    valid_dataset = SliceDatasetWithMemb(x_valid_dir, y_valid_dir, cellmask_valid_dir)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
-    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=num_workers)
-    return train_dataset, valid_dataset, train_loader, valid_loader
+#     train_dataset = SliceDataset(x_train_dir, y_train_dir, augment=augment)
+#     valid_dataset = SliceDataset(x_valid_dir, y_valid_dir)
+#     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
+#     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
+#     return train_dataset, valid_dataset, train_loader, valid_loader
+
+
+# def setup_datasets_and_dataloaders_withmemb(data_dir: str, cellmask_dir:str, batch_size: int, num_workers: int, augment: bool=False, use3classes: bool=False):
+#     """ Setup datasets and dataloaders for training and validation"""
+#     x_train_dir = os.path.join(data_dir, "original", "train")
+#     x_valid_dir = os.path.join(data_dir, "original", "valid")
+#     y_train_dir = os.path.join(data_dir, "ground_truth", "train")
+#     y_valid_dir = os.path.join(data_dir, "ground_truth", "valid")
+#     cellmask_train_dir = os.path.join(cellmask_dir, "train")
+#     cellmask_valid_dir = os.path.join(cellmask_dir, "valid")
+    
+#     if use3classes:
+#         train_dataset = SliceDatasetWithMembThreeClasses(x_train_dir, y_train_dir, cellmask_train_dir, augment=augment)
+#         valid_dataset = SliceDatasetWithMembThreeClasses(x_valid_dir, y_valid_dir, cellmask_valid_dir)
+#     else:
+#         train_dataset = SliceDatasetWithMemb(x_train_dir, y_train_dir, cellmask_train_dir, augment=augment)
+#         valid_dataset = SliceDatasetWithMemb(x_valid_dir, y_valid_dir, cellmask_valid_dir)
+#     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
+#     valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=num_workers)
+#     return train_dataset, valid_dataset, train_loader, valid_loader
+
+
 
 def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, num_predictions_to_log:int=5, depth=3, height=512, width=512) -> None:
     """ 

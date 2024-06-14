@@ -2,7 +2,6 @@
 import os
 import numpy as np;
 import torch 
-
 from utilities import *
 from models import *
 from dataset import *
@@ -20,10 +19,11 @@ if __name__ == "__main__":
    
     # Setup random seed
     seed = args.seed
-    print("seed:", seed)
     torch.manual_seed(seed)
     np.random.seed(seed)
- 
+    print("seed:", seed)
+
+
     # ----- Define class labels and directories -----
     # Define class labels
     class_labels = {
@@ -37,8 +37,8 @@ if __name__ == "__main__":
     if not os.path.exists(model_folder): os.makedirs(model_folder)
     
     # Define data directory
-    data_dir = args.data_dir
-    if not os.path.exists(data_dir): print(f"Data directory {data_dir} does not exist.")
+    # data_dir = args.data_dir
+    # if not os.path.exists(data_dir): print(f"Data directory {data_dir} does not exist.")
 
     # Define results directory
     results_folder = os.path.join(args.results_dir, args.model_name)
@@ -46,6 +46,7 @@ if __name__ == "__main__":
         os.makedirs(results_folder)
         os.makedirs(os.path.join(results_folder, "train"))
         os.makedirs(os.path.join(results_folder, "valid"))
+    
     # ----- Load data -----
     batch_size = args.batch_size
     num_workers = args.num_workers
@@ -56,15 +57,18 @@ if __name__ == "__main__":
     valid_img_dir_list = args.valid_img_dir_list
     valid_mask_dir_list = args.valid_gt_dir_list
     if img_dir_list is not None:
-        print("setting up from lists")
+        print("Setting up from lists")
         train_dataset, train_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=img_dir_list, mask_dir_list=mask_dir_list, batch_size=batch_size, num_workers=num_workers, augment=args.augment, shuffle=True)
         valid_dataset, valid_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=valid_img_dir_list, mask_dir_list=valid_mask_dir_list, batch_size=1, num_workers=num_workers, augment=False, shuffle=False)
-
-    elif args.cellmask_dir is not None:
+    elif args.train_cellmask_dir is not None:
         print("Using cell mask -- 2 class prediction")
-        train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders_withmemb(data_dir, args.cellmask_dir, batch_size, num_workers, augment=args.augment)
+        train_dataset, train_loader = setup_datasets_and_dataloaders_withmemb(args.train_x_dir, args.train_y_dir, args.train_cellmask_dir, batch_size, num_workers, args.augment, use3classes=args.pred3classes, shuffle=True)
+        valid_dataset, valid_loader = setup_datasets_and_dataloaders_withmemb(args.valid_x_dir, args.valid_y_dir, args.valid_cellmask_dir, batch_size, num_workers, False, use3classes=args.pred3classes, shuffle=False)
+        # train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders_withmemb(data_dir, args.cellmask_dir, batch_size, num_workers, augment=args.augment)
     else:
-        train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders(data_dir, batch_size, num_workers, augment=args.augment)
+        train_dataset, train_loader = setup_datasets_and_dataloaders(args.train_x_dir, args.train_y_dir, batch_size, num_workers, args.augment, shuffle=True)
+        valid_dataset, valid_loader = setup_datasets_and_dataloaders(args.valid_x_dir, args.valid_y_dir, batch_size, num_workers, False, shuffle=False)
+        # train_dataset, valid_dataset, train_loader, valid_loader = setup_datasets_and_dataloaders(data_dir, batch_size, num_workers, augment=args.augment)
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
     print(f"Data loaders created. Train dataset size: {len(train_dataset)}, Validation dataset size: {len(valid_dataset)}")
 
@@ -81,6 +85,7 @@ if __name__ == "__main__":
         print(f"Model loaded from {load_model_path}. Starting from epoch {start_epoch}.")
     print(f"Model is on device {next(model.parameters()).device}")
     
+    # Freeze layers for finetuning
     freeze_model_start_layer = args.freeze_model_start_layer
     if freeze_model_start_layer is not None:
         # first freeze all parameters
@@ -124,8 +129,6 @@ if __name__ == "__main__":
                         for param in model.up_conv3.parameters():
                             param.requires_grad = True
                         print("unfreezed layer 4 (upsampling path)")
-
-
 
     # Initialize loss function
     print("Args loss type", args.loss_type)

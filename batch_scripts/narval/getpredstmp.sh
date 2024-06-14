@@ -17,8 +17,8 @@ Y_DIR=/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/train
 
 
 # Load model!!!
-MODEL_NAME=model_job120
-EPOCH=80
+MODEL_NAME=model_job133
+EPOCH=56
 MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
 
 # 0-50
@@ -53,17 +53,20 @@ NUM_WORKERS=4
 SAVE_VIS=false
 SAVE2D=true
 SAVE3D=false
-SAVECOMB=true
+SAVECOMB=false
 SUBVOL_DEPTH=3
 SUBVOL_HEIGHT=512
 SUBVOL_WIDTH=512
 USEALLSUBFOLDERS=false
 SAVE_DIR=/home/hluo/scratch/100_110_${MODEL_NAME}_epoch${EPOCH}
-PRED_MEMB=false
+PRED_MEMB=true
 python /home/hluo/gapjncsegmentation/getpreds.py --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save_vis $SAVE_VIS --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
 
 
 # 111-120
+MODEL_NAME=model_job138b
+EPOCH=74
+MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
 X_DIR=/home/hluo/scratch/111_120_3x512x512_no_overlap/original
 Y_DIR=/home/hluo/scratch/111_120_3x512x512_no_overlap/ground_truth
 BATCH_SIZE=1
@@ -77,6 +80,6 @@ SUBVOL_HEIGHT=512
 SUBVOL_WIDTH=512
 USEALLSUBFOLDERS=false
 SAVE_DIR=/home/hluo/scratch/111_120_${MODEL_NAME}_epoch_${EPOCH}
-PRED_MEMB=true
+PRED_MEMB=false
 python /home/hluo/gapjncsegmentation/getpreds.py --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save_vis $SAVE_VIS --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
 
