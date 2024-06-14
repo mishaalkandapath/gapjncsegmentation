@@ -116,7 +116,7 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             if neuron_mask != []: neuron_mask = neuron_mask.to(DEVICE)
             if mito_mask != []: mito_mask = mito_mask.to(DEVICE)
-            pred = model(inputs) if not mem_feat else model(inputs, neuron_mask)
+            pred = model(inputs) if not mem_feat else model(inputs, neuron_mask.to(torch.float32).unsqueeze(1))
             if args.focalweight == 0:
                 loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [], model.s1, model.s2)
             else: loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [])
@@ -135,6 +135,8 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
             pbar.refresh()
             # break
 
+        val_loss_avg, val_count = [], []
+        val_prec_avg, val_recall_avg = [], []
         with torch.no_grad():
                     
             epoch_non_empty = False
@@ -144,7 +146,7 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                 valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
                 if valid_neuron_mask != []: valid_neuron_mask = valid_neuron_mask.to(DEVICE)
                 if valid_mito_mask != []: valid_mito_mask = valid_mito_mask.to(DEVICE)
-                valid_pred = model(valid_inputs) if not mem_feat else model(valid_inputs, valid_neuron_mask)
+                valid_pred = model(valid_inputs) if not mem_feat else model(valid_inputs, valid_neuron_mask.to(torch.float32).unsqueeze(1))
                 if args.focalweight == 0:
                     valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] and not mem_feat else [], valid_mito_mask if valid_mito_mask !=[] else [], model.s1, model.s2)
                 else:   
@@ -161,7 +163,9 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                             }}
                 )
                 table.add_data(f"Epoch {epoch} Step {i}", mask_img)
-                wandb.log({"valid_loss": valid_loss})
+                # wandb.log({"valid_loss": valid_loss})
+                val_loss_avg.append(valid_loss.detach().item())
+                val_count.append(valid_inputs.shape[0])
                 uniques = np.unique(torch.round(nn.Sigmoid()(valid_pred[0].squeeze(0))).detach().cpu().numpy())
                 if len(uniques) == 2:
                     if not epoch_non_empty:
@@ -169,10 +173,15 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                         print("UNIQUE OUTPUTS!")
                 else:
                     epoch_non_empty = False
-                
-                # log some metrics
-                wandb.log({"valid_precision": precision_f(valid_pred >= 0.5, valid_labels)})
-                wandb.log({"valid_recall": recall_f(valid_pred >= 0.5, valid_labels)})
+                val_prec_avg.append(precision_f(valid_pred >= 0.5, valid_labels).detach().item())
+                val_recall_avg.append(recall_f(valid_pred >= 0.5, valid_labels).detach().item())
+            # log some metrics
+            valid_loss = np.sum(np.array(val_loss_avg) * np.array(val_count))/sum(val_count)
+            wandb.log({"valid_loss": val_loss_avg})
+            val_prec_avg = np.sum(np.array(val_prec_avg) * np.array(val_count))/sum(val_count)
+            val_recall_avg = np.sum(np.array(val_recall_avg) * np.array(val_count))/sum(val_count)
+            wandb.log({"valid_precision": val_prec_avg})
+            wandb.log({"valid_recall": val_recall_avg})
         if decay is not None: decay.step(valid_loss)
 
         print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
@@ -283,9 +292,10 @@ if __name__ == "__main__":
     parser.add_argument("--gendice", action="store_true")
     parser.add_argument("--ss", action="store_true")
     parser.add_argument("--dicefocal", action="store_true")
+    parser.add_argument("--tversky", action="store_true")
     parser.add_argument("--focalweight", default=0.5, type=float)
     parser.add_argument("--epochs", default=0, type=int)
-    parser.add_argument("--mask_feat", action="store_true")
+    parser.add_argument("--mem_feat", action="store_true")
     parser.add_argument("--dropout", default=0, type=float, help="Dropout for neural network training")
     parser.add_argument("--spatial", action="store_true", help="Spatial Pyramid")
     parser.add_argument("--residual", action="store_true")
@@ -307,7 +317,7 @@ if __name__ == "__main__":
         
         if args.dataset is not None:
             train_dir = (DATASETS[args.dataset])
-            train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons, mito_mask=args.mask_mito, chain_length=args.td)
+            train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat, mito_mask=args.mask_mito, chain_length=args.td)
         else: make_dataset_old(args.aug)
 
 
@@ -317,8 +327,10 @@ if __name__ == "__main__":
         print("ARGS: ", sys.argv)
 
         #set the model and results path
-        model_folder += args.dataset+"/" if not args.spatial else args.dataset+"spatial"+"/"
-        sample_preds_folder += args.dataset + "/" if not args.spatial else args.dataset+"spatial"+"/"
+        model_folder += args.dataset+f"{'_residual' if args.residual else ''}"+"/" if not args.spatial else args.dataset+f"spatial{'_residual' if args.residual else ''}"+"/"
+        sample_preds_folder += args.dataset + "/" if not args.spatial else args.dataset+f"spatial{'_residual' if args.residual else ''}"+"/"
+
+        #
 
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
         valid_loader = DataLoader(valid_dataset, batch_size=min(batch_size, 16), shuffle=False, num_workers=4)
@@ -326,7 +338,7 @@ if __name__ == "__main__":
 
         DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
 
-        if args.model_name is None: model = UNet(three=args.td, scale=args.focalweight == 0, spatial=args.spatial, dropout=args.dropout, residual=args.residual).to(DEVICE)
+        if args.model_name is None: model = UNet(three=args.td, scale=args.focalweight == 0, spatial=args.spatial, dropout=args.dropout, residual=args.residual).to(DEVICE) if not args.mem_feat else MemUNet().to(DEVICE)
         else: model = joblib.load(os.path.join("/home/mishaalk/scratch/gapjunc/models/", args.model_name)) # load model
 
         if not args.infer:
@@ -357,7 +369,7 @@ if __name__ == "__main__":
             elif args.dataset == "erased":
                 cls_weights = torch.Tensor([1, 15])
             else:
-                cls_weights = torch.Tensor([1, 24])
+                cls_weights = torch.Tensor([0.05, 0.95])
 
             #init oprtimizers
             if args.gendice:
@@ -375,11 +387,14 @@ if __name__ == "__main__":
                     criterion = lambda a,b,c,d,s1, s2: floss(s1*a, b, c, d) + gloss(s2*a, b, c, d)
                 else: criterion = lambda a,b,c,d: args.focalweight * floss(a, b, c, d) + (1 - args.focalweight) *gloss(a, b, c, d)
                 model_folder =model_folder[:-1] +"dicefocalloss"
+            elif args.tversky:
+                criterion = TverskyFocal()
+                model_folder =model_folder[:-1] +"tvrsky"
             else:
                 criterion = FocalLoss(alpha=cls_weights, device=DEVICE)#torch.nn.BCEWithLogitsLoss()
                 model_folder= model_folder[:-1] +"focal"
 
-            optimizer = torch.optim.Adam(model.parameters(),lr=1e-5)
+            optimizer = torch.optim.Adam(model.parameters(),lr=1e-6)
             decayed_lr = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
             loss_list = [] 
 
@@ -406,7 +421,7 @@ if __name__ == "__main__":
     
             if not args.split:
                 print(f"running for {150 if not args.epochs else args.epochs} epochs")
-                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=150 if not args.epochs else args.epochs)
+                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=150 if not args.epochs else args.epochs, mem_feat=args.mem_feat)
             else:
                 print(f"running for {200 if not args.epochs else args.epochs} epochs")
                 train_loop_split(model, train_loader, classifier_criterion, criterion, optimizer, valid_loader, epochs=200 if not args.epochs else args.epochs, mem_feat=args.mask_feat)
@@ -421,19 +436,19 @@ if __name__ == "__main__":
     else:
         #--- Personal debug area ---
 
-        model_folder += "3d_gd_mem_run1"
-        sample_preds_folder = sample_preds_folder+"/3d_gd_mem_run1_test/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch125.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
-        # for flat dyna we have 125, 2wt we have 142
+        model_folder += "2d_membrane_noaug"
+        sample_preds_folder = sample_preds_folder+"/2d_membrane_noaug_test/"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch140.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
+        # for flat dyna we have 125, 2wt we have 142, 2d_gd_mem_run2 best was 36
         model = model.to("cuda")
         model.eval()
 
         # dataset_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split/"
-        dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/3d_test/imgs/"
-        # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/sem_dauer_2_10_125"
+        # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/3d_test_new/imgs/"
+        dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/imgs/"
 
         # dataset = CaImagesDataset(dataset_dir, preprocessing=None, augmentation=None, image_dim=(512, 512), split=1)
-        dataset = TestDataset(dataset_dir)
+        dataset = TestDataset(dataset_dir, td=False, membrane="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/")
         imgs_files, gt_files = [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i], [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i]
         def collate_fn(batch):
             return (
@@ -442,7 +457,7 @@ if __name__ == "__main__":
                 torch.stack([x[2] for x in batch]),
                 torch.stack([x[3] for x in batch]),
             )
-        dataloader = DataLoader(dataset, batch_size=10, shuffle=False, num_workers=8)
+        dataloader = DataLoader(dataset, batch_size=36, shuffle=False, num_workers=8)
 
         if not os.path.isdir(sample_preds_folder):
             os.mkdir(sample_preds_folder)
@@ -453,14 +468,15 @@ if __name__ == "__main__":
         with torch.no_grad():
             class_list = []
             for data in tqdm(dataloader):
-                image, gt, _, _ = data
+                image, membrane, _, _ = data
 
                 #infer:
                 x_tensor = image.to("cuda")
-                pred_mask = model(x_tensor) # [1, 2, 512, 512]
+                memb = membrane.to("cuda")
+                pred_mask = model(x_tensor, memb) # [1, 2, 512, 512]
                 # print(pred_mask.shape)
                 # pred_mask_binary = pred_mask.squeeze(0).detach()
-                pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
+                pred_mask_binary = pred_mask * 255
                 # classified = torch.round(nn.Sigmoid()(classified))
                 pred_mask_binary = pred_mask_binary.to("cpu")
                 for j in range(pred_mask_binary.shape[0]):
@@ -469,7 +485,11 @@ if __name__ == "__main__":
                     # print(np.count_nonzero(prfed_og == pred_mask_binary[j].squeeze(0).numpy()))
                     # raise Exception
                     # if os.path.isfile(sample_preds_folder+file_name): continue
-                    cv2.imwrite(sample_preds_folder+file_name+".png", pred_mask_binary[j].squeeze(0).numpy())
+                    # cv2.imwrite(sample_preds_folder+file_name+".png", pred_mask_binary[j].squeeze(0).numpy())
+                    #save it as a numpy file
+                    f = open(sample_preds_folder+file_name+".npy", "wb")
+                    np.save(f, pred_mask_binary[j].squeeze(0).numpy())
+                    f.close()
                     i+=1
                     # class_list.append([file_name, classified[j].item()])
 
