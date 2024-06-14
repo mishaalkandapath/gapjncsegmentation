@@ -350,7 +350,7 @@ def mask_acc_split(seg_dir, results_dir, nr_mask_dir=None, td=False, breakdown=F
 def center_img(img):
     # Convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    out = np.zeros_like(gray)
+    out = np.zeros_like(gray, dtype=np.uint32)
 
 
     # Apply thresholding
@@ -361,8 +361,7 @@ def center_img(img):
 
     # Calculate center of each contour
     centers = []
-    done = set()
-    for i, cnt in tqdm(enumerate(contours), total=len(contours)):
+    for i, cnt in enumerate(contours):
         M = cv2.moments(cnt)
         if M['m00'] != 0:
             cx = int(M['m10'] / M['m00'])
@@ -371,19 +370,22 @@ def center_img(img):
             # img = cv2.circle(img, (cx, cy), 15, (0, 255, 0), 10)
             centers.append((cx, cy))
             color = random.randint(0, 255)
-            while color in done:
-                color = random.randint(0, 255)
-            done.add(color)
-            out = cv2.drawContours(out, contours, i, color=color, thickness=-1)
+            # while color in done:
+            #     color = random.randint(0, 255)
+            # done.add(color)
+            gray = cv2.drawContours(gray, contours, i, color=30, thickness=-1)
+            out[gray == 30] = i+1
+            gray[gray == 30] = 1
+            assert not np.count_nonzero(gray == 30)
+            # assert len(np.unique(out)) == i+1, str(i) + " " + str(len(np.unique(out)))
             # assert np.count_nonzero(out == color), color
     return centers, out
 
 def entity_recall(gt_contour, pred):
     contours = np.unique(gt_contour)
-    print(contours)
     contours = contours[contours != 0]
+    num_right = 0
     for i , cnt in enumerate(contours):
-        num_right = 0
         num = np.count_nonzero(gt_contour == cnt)
         num_intersect = np.count_nonzero(pred[gt_contour == cnt] == 255)
         if num_intersect/num >= 0.5: 
@@ -403,5 +405,5 @@ if __name__ == "__main__":
         pred = cv2.cvtColor(cv2.imread(file), cv2.COLOR_BGR2GRAY)
         recall = entity_recall(gt_cont, pred)
         print(recall)
-    #     rec.append(rec)
-    # print(np.nanmean(rec))
+        rec.append(rec)
+    print(np.nanmean(rec))
