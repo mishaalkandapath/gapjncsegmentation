@@ -171,7 +171,6 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         epoch_train_recall = 0
         num_train_processed = 1
         for i, data in enumerate(train_loader):
-            print(f"Processing {i}")
             print("Progress: {:.2%}".format(i/len(train_loader)), end="\r")
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
