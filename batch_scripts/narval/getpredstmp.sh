@@ -70,15 +70,18 @@ python /home/hluo/gapjncsegmentation/getpreds.py --pred_memb $PRED_MEMB --useall
 
 
 # 111-120
-MODEL_NAME=model_job131
-EPOCH=750
+module purge
+source ~/py39/bin/activate
+module load scipy-stack gcc cuda opencv
+MODEL_NAME=model_job136b
+EPOCH=75
 MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
 X_DIR=/home/hluo/scratch/111_120_3x512x512_no_overlap/original
 Y_DIR=/home/hluo/scratch/111_120_3x512x512_no_overlap/ground_truth
 BATCH_SIZE=1
 NUM_WORKERS=4
 SAVE_VIS=false
-SAVE2D=true
+SAVE2D=false
 SAVE3D=false
 SAVECOMB=false
 SUBVOL_DEPTH=3
