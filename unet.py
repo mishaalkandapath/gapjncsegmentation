@@ -37,7 +37,8 @@ torch.autograd.set_detect_anomaly(True)
 DATASETS = {
     "new": r"/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split", 
     "tiny": r"/home/mishaalk/scratch/gapjunc/train_datasets/final_tiny_jnc_only128",
-    "new3d": r"/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split3d"
+    "new3d": r"/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split3d", 
+    "test": r"/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split"
 }
                 
 def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=False):
@@ -70,6 +71,9 @@ def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False,
             mask_mito = mito_mask, 
             split=1
         )
+    elif "test" in dataset_dir:
+        train = DebugDataset(dataset_dir)
+        valid = None
     else:
         train = CaImagesDataset(
             dataset_dir,
@@ -116,7 +120,7 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             if neuron_mask != []: neuron_mask = neuron_mask.to(DEVICE)
             if mito_mask != []: mito_mask = mito_mask.to(DEVICE)
-            pred = model(inputs) if not mem_feat else model(inputs, neuron_mask.to(torch.float32).unsqueeze(1))
+            pred = model(inputs) if not mem_feat else model(inputs, neuron_mask.to(torch.float32))
             if args.focalweight == 0:
                 loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [], model.s1, model.s2)
             else: loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [])
@@ -146,7 +150,7 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                 valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
                 if valid_neuron_mask != []: valid_neuron_mask = valid_neuron_mask.to(DEVICE)
                 if valid_mito_mask != []: valid_mito_mask = valid_mito_mask.to(DEVICE)
-                valid_pred = model(valid_inputs) if not mem_feat else model(valid_inputs, valid_neuron_mask.to(torch.float32).unsqueeze(1))
+                valid_pred = model(valid_inputs) if not mem_feat else model(valid_inputs, valid_neuron_mask.to(torch.float32))
                 if args.focalweight == 0:
                     valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] and not mem_feat else [], valid_mito_mask if valid_mito_mask !=[] else [], model.s1, model.s2)
                 else:   
@@ -184,7 +188,7 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
             wandb.log({"valid_recall": val_recall_avg})
         if decay is not None: decay.step(valid_loss)
 
-        print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss}")
+        print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss} | Valid Prec: {val_prec_avg} | Valid Recall: {val_recall_avg}")
         print(f"Time elapsed: {time.time() - start} seconds")
         temp_name = model_name+"_epoch"+str(epoch)
         joblib.dump(model, os.path.join(model_folder, f"{temp_name}.pk1"))
@@ -299,6 +303,7 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", default=0, type=float, help="Dropout for neural network training")
     parser.add_argument("--spatial", action="store_true", help="Spatial Pyramid")
     parser.add_argument("--residual", action="store_true")
+    parser.add_argument("--resnet", action="store_true")
 
     args = parser.parse_args()
 
@@ -320,8 +325,6 @@ if __name__ == "__main__":
             train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat, mito_mask=args.mask_mito, chain_length=args.td)
         else: make_dataset_old(args.aug)
 
-
-
         if args.dataset is None: print("----WARNING: RUNNING OLD DATASET----")
 
         print("ARGS: ", sys.argv)
@@ -330,22 +333,34 @@ if __name__ == "__main__":
         model_folder += args.dataset+f"{'_residual' if args.residual else ''}"+"/" if not args.spatial else args.dataset+f"spatial{'_residual' if args.residual else ''}"+"/"
         sample_preds_folder += args.dataset + "/" if not args.spatial else args.dataset+f"spatial{'_residual' if args.residual else ''}"+"/"
 
-        #
-
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
-        valid_loader = DataLoader(valid_dataset, batch_size=min(batch_size, 16), shuffle=False, num_workers=4)
+        
+        if "test" not in args.dataset: 
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+            valid_loader = DataLoader(valid_dataset, batch_size=min(batch_size, 16), shuffle=False, num_workers=4)
+        else:
+            print(len(train_dataset))
+            train_old, _ = make_dataset_new(DATASETS["new"], aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat, mito_mask=args.mask_mito, chain_length=args.td)
+            print(len(train_old))
+            train_dataset, valid_dataset, test_dataset = torch.utils.data.random_split(train_dataset, [math.ceil(0.08*len(train_dataset)), math.ceil(0.12*len(train_dataset)), len(train_dataset) - math.ceil(0.08*len(train_dataset)) - math.ceil(0.12*len(train_dataset))])
+            train_dataset = torch.utils.data.ConcatDataset([train_dataset, train_old]) 
+            print(len(train_dataset))          
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
         print("Data loaders created.")
 
         DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
 
-        if args.model_name is None: model = UNet(three=args.td, scale=args.focalweight == 0, spatial=args.spatial, dropout=args.dropout, residual=args.residual).to(DEVICE) if not args.mem_feat else MemUNet().to(DEVICE)
+        if args.model_name is None and not args.resnet:
+            model = UNet(three=args.td, scale=args.focalweight == 0, spatial=args.spatial, dropout=args.dropout, residual=args.residual).to(DEVICE) if not args.mem_feat else MemUNet().to(DEVICE)
+        elif args.model_name is None and args.resnet:
+            model = ResUNet(three=args.td).to(DEVICE) if not args.mem_feat else MemResUNet(three=args.td).to(DEVICE)
         else: model = joblib.load(os.path.join("/home/mishaalk/scratch/gapjunc/models/", args.model_name)) # load model
 
         if not args.infer:
 
             print("Current dataset {}".format(args.dataset))
 
-            if args.dataset != "tiny" and args.dataset != "erased" and args.dataset != "new" and args.dataset != "new3d":
+            if args.dataset != "tiny" and args.dataset != "erased" and args.dataset != "new" and args.dataset != "new3d" and args.dataset != "test":
                 print("MASKING NEURONS IS SET TO {}".format(args.mask_neurons))
 
                 #calc focal weighting:
@@ -420,8 +435,8 @@ if __name__ == "__main__":
             print("SAVING MODELS TO {}".format(model_folder))
     
             if not args.split:
-                print(f"running for {150 if not args.epochs else args.epochs} epochs")
-                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=150 if not args.epochs else args.epochs, mem_feat=args.mem_feat)
+                print(f"running for {300 if not args.epochs else args.epochs} epochs")
+                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=300 if not args.epochs else args.epochs, mem_feat=args.mem_feat)
             else:
                 print(f"running for {200 if not args.epochs else args.epochs} epochs")
                 train_loop_split(model, train_loader, classifier_criterion, criterion, optimizer, valid_loader, epochs=200 if not args.epochs else args.epochs, mem_feat=args.mask_feat)
@@ -436,10 +451,10 @@ if __name__ == "__main__":
     else:
         #--- Personal debug area ---
 
-        model_folder += "2d_membrane_noaug"
-        sample_preds_folder = sample_preds_folder+"/2d_membrane_noaug_test/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch140.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
-        # for flat dyna we have 125, 2wt we have 142, 2d_gd_mem_run2 best was 36
+        model_folder += "testgendice01234567"
+        sample_preds_folder = sample_preds_folder+"/testgendice_test1/"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch8.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
+        # for flat dyna we have 125, 2wt we have 142, 2d_gd_mem_run2 best was 36, 2d_membrane_aug_low is 83, 2d_membrane_noaug is 140
         model = model.to("cuda")
         model.eval()
 
@@ -463,12 +478,15 @@ if __name__ == "__main__":
             os.mkdir(sample_preds_folder)
 
         # assert len(imgs_files) == 2695
+        recall_f = lambda pred, gt: torch.nansum(pred[(pred == 1) & (gt == 1)])/torch.nansum(gt[gt == 1])
+        precision_f = lambda pred, gt: torch.nansum(pred[(pred == 1) & (gt == 1)])/torch.nansum(pred[pred == 1])
 
         i = 0
         with torch.no_grad():
             class_list = []
+            rec_acc, prec_acc = [], []
             for data in tqdm(dataloader):
-                image, membrane, _, _ = data
+                image, gt, membrane, _ = data
 
                 #infer:
                 x_tensor = image.to("cuda")
@@ -476,7 +494,7 @@ if __name__ == "__main__":
                 pred_mask = model(x_tensor, memb) # [1, 2, 512, 512]
                 # print(pred_mask.shape)
                 # pred_mask_binary = pred_mask.squeeze(0).detach()
-                pred_mask_binary = pred_mask * 255
+                pred_mask_binary = pred_mask
                 # classified = torch.round(nn.Sigmoid()(classified))
                 pred_mask_binary = pred_mask_binary.to("cpu")
                 for j in range(pred_mask_binary.shape[0]):
@@ -492,6 +510,14 @@ if __name__ == "__main__":
                     f.close()
                     i+=1
                     # class_list.append([file_name, classified[j].item()])
+                    pred_mask_binary1 = nn.Sigmoid()(pred_mask_binary) >= 0.5
+                    gt[gt == 255] = 1
+                    rec_acc.append(recall_f(pred_mask_binary1, gt).detach().item())
+                    prec_acc.append(precision_f(pred_mask_binary1, gt).detach().item())
+        print(np.nanmean(prec_acc))
+        print(np.nanmean(rec_acc))
+
+
 
         print(f"I wrote {i} files")
         
