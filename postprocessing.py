@@ -1,6 +1,7 @@
 import cv2, numpy as np, re, os, sys, shutil, glob, traceback
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import random
 
 #assembling function for full image assembly
 """
@@ -19,7 +20,7 @@ Function for assembling the prediction tiles into a single EM image.
 @param offset: offset for the overlap (default 256)
 @returns: None (saves the images in the save_dir)
 """
-def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_dir=None, img_templ="SEM_dauer_2_em_",seg_templ="sem_dauer_2_gj_gt_" , s_range=range(101, 109), x_range=range(0, 19), y_range=range(0, 17), offset=256, fn=None, fn_mask_dir=None):
+def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_dir=None, img_templ="SEM_dauer_2_em_",seg_templ="sem_dauer_2_gj_gt_" , s_range=range(101, 109), x_range=range(0, 19), y_range=range(0, 17), offset=256, fn=None, fn_mask_dir=None, plot_legend=True):
     
     if fn: fn_stats = []
     for s in s_range:
@@ -37,8 +38,10 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
                 im =cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_templ+ suffix + ".png")), cv2.COLOR_BGR2GRAY)
 
                 try:
-                    gt = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + ".png")), cv2.COLOR_BGR2GRAY)
-                    pred = cv2.cvtColor(cv2.imread(os.path.join(pred_dir, img_templ + suffix + ".png")), cv2.COLOR_BGR2GRAY)
+                    gt = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + ".png")), cv2.COLOR_BGR2GRAY) 
+                    pred = np.load(os.path.join(pred_dir, img_templ + suffix + ".png.npy"))
+                    # print(len(np.unique(pred)))
+                    pred = 1/(1+np.exp(-pred/255)) >= 0.5
                     if gt.shape != pred.shape: pred = np.zeros_like(gt)  
                 except:
                     gt = np.zeros_like(im)
@@ -53,13 +56,15 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
                     try:
                         im1 = cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_templ +suffix + "off.png")), cv2.COLOR_BGR2GRAY)
                         gt1 = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
-                        pred1 = cv2.cvtColor(cv2.imread(os.path.join(pred_dir, img_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
+                        pred1 = np.load(os.path.join(pred_dir, img_templ + suffix + "off.png.npy"))
+                        pred1 = 1/(1+np.exp(-pred1/255)) >= 0.5
                         if im1 is None or gt1 is None or pred1 is None: raise Exception
                         if gt1.shape != pred1.shape: pred1 = np.zeros_like(gt1)  
                         y_acc_img1.append(im1)
                         y_acc_pred1.append(pred1)
                         y_acc_gt1.append(gt1)
-                    except:
+                    except Exception as e:
+                        print(e)
                         # gt1 = np.zeros_like(im1)
                         # pred1 = np.zeros_like(im1)
                         continue
@@ -72,7 +77,9 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
                     s_acc_img1.append(np.concatenate(y_acc_img1, axis=1))
                     s_acc_pred1.append(np.concatenate(y_acc_pred1, axis=1))
                     s_acc_gt1.append(np.concatenate(y_acc_gt1, axis=1))
-                except: continue
+                except Exception as e:
+                    print(e)
+                    continue
 
         new_img = np.concatenate(s_acc_img, axis=0)
         new_pred = np.concatenate(s_acc_pred, axis=0)
@@ -102,7 +109,7 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
         new_gt1 = np.repeat(new_gt[:, :, np.newaxis], 3, axis=-1)
         new_pred1 = np.repeat(new_pred[:, :, np.newaxis], 3, axis=-1)            
 
-        if not fn:
+        if not fn and plot_legend:
             # else: 
             #color statistics now
             red = (0, 0, 255)
@@ -145,8 +152,8 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
                         fontScale, color, thickness, cv2.LINE_AA)
 
             if overlap:
-                new_pred1 = cv2.addWeighted(new_img1, 0.5, new_pred1, 0.1, 0)
-                new_gt1 = cv2.addWeighted(new_img1, 0.5, new_gt1, 0.1, 0)
+                new_pred1 = cv2.addWeighted(new_img1, 0.5, new_pred1, 0.6, 0)
+                new_gt1 = cv2.addWeighted(new_img1, 0.5, new_gt1, 0.6, 0)
             
             for color in [conf1, conf2, conf3, conf4, conf5]:
                 new_gt = write_legend(f"Confidence {[conf1, conf2, conf3, conf4, conf5].index(color)}", color, new_gt1, (450, 450+250*[conf1, conf2, conf3, conf4, conf5].index(color)))
@@ -155,6 +162,14 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
                 new_pred = write_legend(f"{['TP', 'FP', 'FN'][[green, red, blue].index(color)]}", color, new_pred1, (450, 450+250*[green, red, blue].index(color)))
             
             #write them all in
+            if not os.path.isdir(save_dir):
+                os.mkdir(save_dir)
+            assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_img.png"), new_img1)
+            assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_pred.png"), new_pred1)
+            assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_gt.png"), new_gt1)
+        elif not fn and not plot_legend:
+            new_gt1[new_gt == 1] = (255, 255, 255)
+            new_pred1[new_pred == 1] = (255, 255, 255)
             if not os.path.isdir(save_dir):
                 os.mkdir(save_dir)
             assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_img.png"), new_img1)
@@ -236,6 +251,10 @@ def mask_recall(gt, pred, mask=None):
     gt[gt != 0] = 255   
 
     return np.sum(np.logical_and(gt == 255, pred == 255)) / np.sum(gt == 255)
+    
+
+
+    
 """
 @params: gt_image: ground truth image
 @params: preds_image: predicted image
@@ -327,3 +346,64 @@ def mask_acc_split(seg_dir, results_dir, nr_mask_dir=None, td=False, breakdown=F
     print("Training set mask recall 3 {}".format(np.nanmean(t_3_recall)))
     print("Training set mask recall 2 {}".format(np.nanmean(t_2_recall)))
     print("Training set mask recall 1 {}".format(np.nanmean(t_1_recall)))
+
+def center_img(img):
+    # Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    out = np.zeros_like(gray, dtype=np.uint32)
+
+
+    # Apply thresholding
+    _, thresh = cv2.threshold(gray, 40, 255, cv2.THRESH_BINARY)
+
+    # Find contours
+    contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Calculate center of each contour
+    centers = []
+    for i, cnt in enumerate(contours):
+        M = cv2.moments(cnt)
+        if M['m00'] != 0:
+            cx = int(M['m10'] / M['m00'])
+            cy = int(M['m01'] / M['m00'])
+            # print(cx, cy)
+            # img = cv2.circle(img, (cx, cy), 15, (0, 255, 0), 10)
+            centers.append((cx, cy))
+            color = random.randint(0, 255)
+            # while color in done:
+            #     color = random.randint(0, 255)
+            # done.add(color)
+            gray = cv2.drawContours(gray, contours, i, color=30, thickness=-1)
+            out[gray == 30] = i+1
+            gray[gray == 30] = 1
+            assert not np.count_nonzero(gray == 30)
+            # assert len(np.unique(out)) == i+1, str(i) + " " + str(len(np.unique(out)))
+            # assert np.count_nonzero(out == color), color
+    return centers, out
+
+def entity_recall(gt_contour, pred):
+    contours = np.unique(gt_contour)
+    contours = contours[contours != 0]
+    num_right = 0
+    for i , cnt in enumerate(contours):
+        num = np.count_nonzero(gt_contour == cnt)
+        num_intersect = np.count_nonzero(pred[gt_contour == cnt] == 255)
+        if num_intersect/num >= 0.5: 
+            num_right +=1
+    return num_right/len(contours)
+
+
+if __name__ == "__main__":
+    base = "/Volumes/Normal/gapjnc/resuklts/assembled_2d_membrane_del/"
+    img = cv2.imread(base+"SEM_dauer_2_image_export_s101_Y16_X18_gt.png")
+    # print(len(center_img(img)[0]))
+    files = glob.glob(base+"SEM_dauer_2_image_export_*pred.png")
+    rec = []
+    for file in tqdm(files):
+        gt = cv2.imread(file.replace("pred", "gt"))
+        _, gt_cont = center_img(gt)
+        pred = cv2.cvtColor(cv2.imread(file), cv2.COLOR_BGR2GRAY)
+        recall = entity_recall(gt_cont, pred)
+        print(recall)
+        rec.append(rec)
+    print(np.nanmean(rec))
