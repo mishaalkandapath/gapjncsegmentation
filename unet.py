@@ -451,10 +451,13 @@ if __name__ == "__main__":
     else:
         #--- Personal debug area ---
 
-        model_folder += "testgendice01234567"
-        sample_preds_folder = sample_preds_folder+"/testgendice_test1/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch8.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
+        model_folder += "2d_resnet_focal_run1"
+        sample_preds_folder = sample_preds_folder+"/2d_resnet_focal_run1_test"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch126.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
         # for flat dyna we have 125, 2wt we have 142, 2d_gd_mem_run2 best was 36, 2d_membrane_aug_low is 83, 2d_membrane_noaug is 140
+        #resnet w memebrane 67 or 84, 
+        #resnet 3d 131 or 130
+        #resnet focal 126
         model = model.to("cuda")
         model.eval()
 
@@ -491,7 +494,7 @@ if __name__ == "__main__":
                 #infer:
                 x_tensor = image.to("cuda")
                 memb = membrane.to("cuda")
-                pred_mask = model(x_tensor, memb) # [1, 2, 512, 512]
+                pred_mask = model(x_tensor) # [1, 2, 512, 512]
                 # print(pred_mask.shape)
                 # pred_mask_binary = pred_mask.squeeze(0).detach()
                 pred_mask_binary = pred_mask
