@@ -853,6 +853,39 @@ class SSLoss(nn.Module):
         return torch.mean(self.lmda * torch.sum(torch.pow((targets - inputs), 2) * targets, dim=-1)/(torch.sum(targets, dim=-1) + self.eps) +
                            (1-self.lamda) * torch.sum(torch.pow((targets - inputs), 2) * inv_targets, dim=-1)/ (torch.sum(inv_targets, dim=-1) + self.eps))
 
+class SpecialLoss(nn.Module):
+    def __init__(self, bg_imp=0.2):
+        super(GenDLoss, self).__init__()
+        self.bg_imp = bg_imp
+    
+    def forward(self, predictions, target_centers, targets, pad_mask):
+        _, _, center_rows, center_cols = torch.where(target_centers == 1)
+        pad_tensors = torch.zeros((target_centers.shape[-2:]))
+        pad_tensors[0, 0] = 1 # simply 
+
+        target_centers[pad_mask] = pad_tensors # for now
+
+        rows, cols = np.indices(target_centers.shape[-2:])
+        rows, cols = torch.from_numpy(rows), torch.from_numpy(cols)
+        #extend 
+        rows, cols = rows.expand(predictions.size(0), len(center_rows)//predictions.size(0), -1, -1), cols.expand(predictions.size(0), len(center_rows)//predictions.size(0), -1, -1)
+        center_rows, center_cols = center_rows.view(predictions.size(0), predictions.size(1), 1, 1), center_cols.view(predictions.size(0), predictions.size(1), 1, 1)
+        
+        squared_dist = (rows - center_rows) ** 2 + (cols - center_cols) ** 2
+        pixel_importance = (targets) * 1/((squared_dist)+1e-6)
+        pixel_importance[pad_mask] = 0 # reset everything that was purely pad
+
+        pixel_importance = pixel_importance.sum(dim=1)
+        importance_coeff = (~targets.sum(dim=1)) * 0.5
+        pixel_importance += importance_coeff
+
+        bce_loss = F.binary_cross_entropy_with_logits(predictions, targets.sum(dim=1).to(dtype=torch.float32), reduction="none")
+        bce_loss *= pixel_importance
+
+        return torch.mean(bce_loss)
+        
+
+
 class GenDLoss(nn.Module):
     def __init__(self):
         super(GenDLoss, self).__init__()
