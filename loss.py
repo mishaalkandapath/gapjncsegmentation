@@ -75,7 +75,6 @@ class FocalTverskyLoss(nn.Module):
                        
         return FocalTversky
 
-
 class FocalTverskyLossWith2d3d(nn.Module):
     def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu"), intermediate_weight = 0.33):
         super(FocalTverskyLoss, self).__init__()
@@ -196,7 +195,7 @@ class DiceBCELoss(nn.Module):
     def forward(self, inputs, targets, smooth=1):
         
         #comment out if your model contains a sigmoid or equivalent activation layer
-        # inputs = F.sigmoid(inputs)       
+        inputs = F.sigmoid(inputs)       
         
         #flatten label and prediction tensors
         inputs = inputs.view(-1)
