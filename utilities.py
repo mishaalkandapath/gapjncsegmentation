@@ -51,18 +51,24 @@ class CaImagesDataset(torch.utils.data.Dataset):
             image_dim = (512, 512),
             mask_neurons=None,
             mask_mito=None,
+            gen_gj_entities=False,
             split=0 #0 for train, 1 for valid
     ):
-        
         prefix = "train" if not split else "valid"
         images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
         masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
-        self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_imgs"))) if "DS" not in image_id]
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts"))) if "DS" not in image_id]
+        
+        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts"))) if "DS" not in image_id and (True and self.centers_and_contours(cv2.imread(os.path.join(masks_dir, image_id)), filter_mode=True))]
+        self.image_paths = [os.path.join(images_dir, image_id) for image_id in self.mask_paths if "DS" not in image_id]
 
         if mask_neurons:
             assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "illegal naming, feds on the way"
-            self.neuron_paths = [os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_").replace(".png.png", ".png")) for neuron_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_imgs")))]
+            self.neuron_paths = []
+            for neuron_id in self.image_paths:
+                neuron_id = os.path.split(neuron_id)[-1]
+                item = os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_").replace(".png.png", ".png"))
+                self.neuron_paths.append(item)
+
         else: self.neuron_paths = None
 
         if mask_mito:
@@ -74,7 +80,68 @@ class CaImagesDataset(torch.utils.data.Dataset):
         self.augmentation = augmentation 
         self.preprocessing = preprocessing
         self.image_dim = image_dim
-    
+        self.gen_gj_entities=gen_gj_entities
+
+    def centers_and_contours(self, gt, filter_mode=False):
+        gray = cv2.cvtColor(gt, cv2.COLOR_BGR2GRAY)
+        out = np.zeros_like(gray, dtype=np.uint8)
+
+        # Apply thresholding
+        _, thresh = cv2.threshold(gray, 40, 255, cv2.THRESH_BINARY)
+
+        # Find contours
+        contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+         # Calculate center of each contour
+        centers, contour_arr = [], []
+        for i, cnt in enumerate(contours):
+            M = cv2.moments(cnt)
+            if M['m00'] != 0:
+                cx = int(M['m10'] / M['m00'])
+                cy = int(M['m01'] / M['m00'])
+
+                cnt = cnt.squeeze(1)
+                cont_arr = torch.zeros(gray.shape)
+                cont_arr[[cnt[:, 1], cnt[:, 0]]] = 1
+
+                #check for intersection
+                get_out = False
+                for c in contour_arr:
+                    if torch.count_nonzero((c +cont_arr) >= 2) != 0: 
+                        get_out = True
+                        break
+                if get_out: continue # bad contour identification safeguard
+
+                centers.append((cx, cy))
+                contour_arr.append(cont_arr)    
+
+                out = cv2.circle(out, (cx, cy), 5, 255, 2)
+                out = cv2.drawContours(out, contours, i, color=255, thickness=2)
+                
+        if not len(centers) and filter_mode:
+            return False
+        elif filter_mode: return True
+
+        contour_arr = torch.stack(contour_arr, axis=0)
+        assert contour_arr.shape[0] == len(centers)
+
+        center_indices = [list(range(len(centers)))] + [list(list(zip(*centers))[0]), list(list(zip(*centers))[1])]
+        center_arr = torch.zeros((len(centers), gt.shape[0], gt.shape[1]))
+        try:
+            center_arr[list(range(len(centers))), list(list(zip(*centers))[0]), list(list(zip(*centers))[1])] = 1
+        except:
+            print(center_indices, center_arr.shape)
+            raise Exception
+
+        #sanity check
+        if len(torch.unique(contour_arr.sum(dim=0))) > 2:
+            #save the image somehwere
+            cv2.imwrite("example.png", out)
+            cv2.imwrite("example_gt.png", gt)
+        assert len(torch.unique(contour_arr.sum(dim=0))) <=2, f"{torch.unique(contour_arr.sum(dim=0))} {torch.unique(contour_arr)} {(len(centers))}"
+
+
+        return center_arr.to(dtype=torch.float32), contour_arr.to(dtype=torch.float32)
+
     def __getitem__(self, i):
         
         # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
@@ -84,6 +151,7 @@ class CaImagesDataset(torch.utils.data.Dataset):
             print(self.image_paths[i])
             raise Exception(self.image_paths[i])
         mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
+        if self.gen_gj_entities: centers, contours = self.centers_and_contours(cv2.imread(self.mask_paths[i]))
 
         # make sure each pixel is 0 or 255
         
@@ -130,8 +198,10 @@ class CaImagesDataset(torch.utils.data.Dataset):
         if self.neuron_paths: neurons = cv2.cvtColor(cv2.imread(self.neuron_paths[i]), cv2.COLOR_BGR2GRAY)
         if self.mito_mask: mitos = np.array(Image.open(self.mito_mask[i]))
         
-            
-        return image, ont_hot_mask,torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
+        if not self.gen_gj_entities:
+            return image, ont_hot_mask, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
+        else:
+            return image, ont_hot_mask, centers, contours, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
         
     def __len__(self):
         # return length of 
@@ -855,32 +925,41 @@ class SSLoss(nn.Module):
 
 class SpecialLoss(nn.Module):
     def __init__(self, bg_imp=0.2):
-        super(GenDLoss, self).__init__()
+        super(SpecialLoss, self).__init__()
         self.bg_imp = bg_imp
     
-    def forward(self, predictions, target_centers, targets, pad_mask):
-        _, _, center_rows, center_cols = torch.where(target_centers == 1)
-        pad_tensors = torch.zeros((target_centers.shape[-2:]))
-        pad_tensors[0, 0] = 1 # simply 
+    def forward(self, predictions, targets, neuron_mask=[], mito_mask=[]):
+        target_centers, targets, pad_mask = targets
 
+        pad_tensors = torch.zeros((target_centers.shape[-2:])).to(dtype=torch.bool).to(pad_mask.device)
+        pad_tensors[0, 0] = 1 # simply 
         target_centers[pad_mask] = pad_tensors # for now
 
         rows, cols = np.indices(target_centers.shape[-2:])
-        rows, cols = torch.from_numpy(rows), torch.from_numpy(cols)
+        rows, cols = torch.from_numpy(rows).to(predictions.device), torch.from_numpy(cols).to(predictions.device)
         #extend 
-        rows, cols = rows.expand(predictions.size(0), len(center_rows)//predictions.size(0), -1, -1), cols.expand(predictions.size(0), len(center_rows)//predictions.size(0), -1, -1)
-        center_rows, center_cols = center_rows.view(predictions.size(0), predictions.size(1), 1, 1), center_cols.view(predictions.size(0), predictions.size(1), 1, 1)
+        rows, cols = rows.expand(predictions.size(0), targets.size(1), -1, -1), cols.expand(predictions.size(0),targets.size(1), -1, -1)
+        center_rows, center_cols = (rows * target_centers).sum(dim = -1, keepdim=True).sum(dim=-1, keepdim=True), (cols * target_centers).sum(dim = -1, keepdim=True).sum(dim=-1, keepdim=True) 
         
         squared_dist = (rows - center_rows) ** 2 + (cols - center_cols) ** 2
         pixel_importance = (targets) * 1/((squared_dist)+1e-6)
         pixel_importance[pad_mask] = 0 # reset everything that was purely pad
 
         pixel_importance = pixel_importance.sum(dim=1)
-        importance_coeff = (~targets.sum(dim=1)) * 0.5
+        importance_coeff = (targets.sum(dim=1) == 0) * self.bg_imp
         pixel_importance += importance_coeff
+
+        assert torch.count_nonzero(pixel_importance <0 ) == 0
 
         bce_loss = F.binary_cross_entropy_with_logits(predictions, targets.sum(dim=1).to(dtype=torch.float32), reduction="none")
         bce_loss *= pixel_importance
+
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
+        if neuron_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            bce_loss *= loss_mask
 
         return torch.mean(bce_loss)
         

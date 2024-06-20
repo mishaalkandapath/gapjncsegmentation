@@ -41,7 +41,7 @@ DATASETS = {
     "test": r"/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split"
 }
                 
-def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=False):
+def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=False, gen_gj_entities=False):
     try:
         height, width = cv2.imread(os.path.join(x_new_dir, os.listdir(x_new_dir)[0])).shape[:2]
     except:
@@ -80,7 +80,8 @@ def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False,
             preprocessing=None,
             image_dim = (width, height), augmentation=augmentation if aug else None,
             mask_neurons= neuron_mask,
-            mask_mito = mito_mask
+            mask_mito = mito_mask,
+            gen_gj_entities=gen_gj_entities
         )
         valid = CaImagesDataset(
             dataset_dir,
@@ -88,12 +89,13 @@ def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False,
             image_dim = (width, height), augmentation=augmentation if aug else None,
             mask_neurons= neuron_mask,
             mask_mito = mito_mask, 
-            split=1
+            split=1,
+            gen_gj_entities=gen_gj_entities
         )
 
     return train, valid
 
-def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem_feat=False, epochs=30, decay=None):
+def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem_feat=False, epochs=30, decay=None, gen_gj_entities=True):
     global table, class_labels, model_folder, DEVICE, args
     
     print(f"Using device: {DEVICE}")
@@ -116,14 +118,21 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
         pbar = tqdm(total=len(train_loader))
         for i, data in enumerate(train_loader):
             pbar.set_description("Progress: {:.2%}".format(i/len(train_loader)))
-            inputs, labels, neuron_mask, mito_mask = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
+            if not gen_gj_entities: inputs, labels, neuron_mask, mito_mask = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
+            else:
+                inputs, labels, label_centers, label_contours, pad_mask, neuron_mask, mito_mask = data
+                label_centers, label_contours, pad_mask = label_centers.to(DEVICE), label_contours.to(DEVICE), pad_mask.to(DEVICE)
+
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             if neuron_mask != []: neuron_mask = neuron_mask.to(DEVICE)
             if mito_mask != []: mito_mask = mito_mask.to(DEVICE)
+
             pred = model(inputs) if not mem_feat else model(inputs, neuron_mask.to(torch.float32))
+            
             if args.focalweight == 0:
                 loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [], model.s1, model.s2)
-            else: loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [])
+            else: loss = criterion(pred.squeeze(1), labels.squeeze(1) if not gen_gj_entities else (label_centers, label_contours, pad_mask), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [])
+            
             loss.backward() # calculate gradients (backpropagation)
             
             # log some metrics
@@ -145,16 +154,21 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                     
             epoch_non_empty = False
 
-            for i, data in enumerate(valid_loader):
-                valid_inputs, valid_labels, valid_neuron_mask, valid_mito_mask = data
+            for i, data in enumerate(valid_loader):            
+                if gen_gj_entities:
+                    valid_inputs, valid_labels, valid_label_centers, valid_label_contours, valid_pad_mask, valid_neuron_mask, valid_mito_mask = data
+                    valid_label_centers, valid_label_contours, valid_pad_mask = valid_label_centers.to(DEVICE), valid_label_contours.to(DEVICE), valid_pad_mask.to(DEVICE)
+                else:
+                     valid_inputs, valid_labels, valid_neuron_mask, valid_mito_mask = data
                 valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
+
                 if valid_neuron_mask != []: valid_neuron_mask = valid_neuron_mask.to(DEVICE)
                 if valid_mito_mask != []: valid_mito_mask = valid_mito_mask.to(DEVICE)
                 valid_pred = model(valid_inputs) if not mem_feat else model(valid_inputs, valid_neuron_mask.to(torch.float32))
                 if args.focalweight == 0:
                     valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] and not mem_feat else [], valid_mito_mask if valid_mito_mask !=[] else [], model.s1, model.s2)
                 else:   
-                    valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] and not mem_feat else [], valid_mito_mask if valid_mito_mask !=[] else [])
+                    valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1) if not gen_gj_entities else (valid_label_centers, valid_label_contours, valid_pad_mask), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] and not mem_feat else [], valid_mito_mask if valid_mito_mask !=[] else [])
                 mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy()[0] if args.td else valid_inputs[0].squeeze(0).cpu().numpy(), 
                                         masks = {
                                             "predictions" : {
@@ -274,6 +288,34 @@ def setup_wandb(epochs, lr):
 
     table = wandb.Table(columns=['ID', 'Image'])
 
+def new_collate(batch):
+    inputs, labels, label_centers, label_contours, neuron_mask, mito_mask = zip(*batch) # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])label_centers, label_contours
+
+    label_centers_batched = torch.nn.utils.rnn.pad_sequence(label_centers, batch_first=True, padding_value = 15)
+    label_contours_batched = torch.nn.utils.rnn.pad_sequence(label_contours, batch_first=True, padding_value = 15)
+
+    labels = torch.stack(labels, axis=0)
+
+    pad_mask = label_centers_batched == 15
+
+    label_centers_batched[pad_mask] = 0
+    label_contours_batched[pad_mask] = 0
+
+
+    pad_mask = pad_mask.sum(dim=-1).sum(dim=-1) >= 1
+
+    if neuron_mask[0] != []:
+        neuron_mask = torch.stack(neuron_mask, axis=0)
+    else:
+        neuron_mask = []
+    if mito_mask[0] != []:
+        mito_mask = torch.stack(mito_mask, axis=0)
+    else: mito_mask = []
+
+    assert len(torch.unique(label_centers_batched.sum(dim=1))) <= 2, f"{torch.unique(label_centers_batched.sum(dim=1))} {(torch.unique(label_contours_batched))}"
+
+    return torch.stack(inputs, axis=0), labels, label_centers_batched.to(dtype=torch.bool), label_contours_batched.to(dtype=torch.bool), pad_mask, neuron_mask, mito_mask
+
 
 if __name__ == "__main__":
     import argparse
@@ -297,6 +339,7 @@ if __name__ == "__main__":
     parser.add_argument("--ss", action="store_true")
     parser.add_argument("--dicefocal", action="store_true")
     parser.add_argument("--tversky", action="store_true")
+    parser.add_argument("--customloss", action="store_true")
     parser.add_argument("--focalweight", default=0.5, type=float)
     parser.add_argument("--epochs", default=0, type=int)
     parser.add_argument("--mem_feat", action="store_true")
@@ -322,7 +365,7 @@ if __name__ == "__main__":
         
         if args.dataset is not None:
             train_dir = (DATASETS[args.dataset])
-            train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat, mito_mask=args.mask_mito, chain_length=args.td)
+            train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat, mito_mask=args.mask_mito, chain_length=args.td, gen_gj_entities=args.customloss)
         else: make_dataset_old(args.aug)
 
         if args.dataset is None: print("----WARNING: RUNNING OLD DATASET----")
@@ -334,18 +377,22 @@ if __name__ == "__main__":
         sample_preds_folder += args.dataset + "/" if not args.spatial else args.dataset+f"spatial{'_residual' if args.residual else ''}"+"/"
 
         
-        if "test" not in args.dataset: 
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
-            valid_loader = DataLoader(valid_dataset, batch_size=min(batch_size, 16), shuffle=False, num_workers=4)
-        else:
+
+        if "test" in args.dataset:
             print(len(train_dataset))
             train_old, _ = make_dataset_new(DATASETS["new"], aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat, mito_mask=args.mask_mito, chain_length=args.td)
             print(len(train_old))
             train_dataset, valid_dataset, test_dataset = torch.utils.data.random_split(train_dataset, [math.ceil(0.08*len(train_dataset)), math.ceil(0.12*len(train_dataset)), len(train_dataset) - math.ceil(0.08*len(train_dataset)) - math.ceil(0.12*len(train_dataset))])
             train_dataset = torch.utils.data.ConcatDataset([train_dataset, train_old]) 
-            print(len(train_dataset))          
+            print(len(train_dataset))  
+
+        if not args.customloss:
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
-            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, num_workers=12)      
+        else:
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12, collate_fn=new_collate)
+            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, num_workers=12, collate_fn=new_collate)        
+        
         print("Data loaders created.")
 
         DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
@@ -387,7 +434,10 @@ if __name__ == "__main__":
                 cls_weights = torch.Tensor([0.05, 0.95])
 
             #init oprtimizers
-            if args.gendice:
+            if args.customloss:
+                criterion = SpecialLoss()
+                model_folder = model_folder[:-1]+"custom"
+            elif args.gendice:
                 criterion = GenDLoss()
                 model_folder= model_folder[:-1] + "gendice"
             elif args.dice:
@@ -434,19 +484,11 @@ if __name__ == "__main__":
 
             print("SAVING MODELS TO {}".format(model_folder))
     
-            if not args.split:
-                print(f"running for {300 if not args.epochs else args.epochs} epochs")
-                train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=300 if not args.epochs else args.epochs, mem_feat=args.mem_feat)
-            else:
-                print(f"running for {200 if not args.epochs else args.epochs} epochs")
-                train_loop_split(model, train_loader, classifier_criterion, criterion, optimizer, valid_loader, epochs=200 if not args.epochs else args.epochs, mem_feat=args.mask_feat)
-                
-        else:
+            print(f"running for {300 if not args.epochs else args.epochs} epochs")
+            train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=300 if not args.epochs else args.epochs, mem_feat=args.mem_feat, gen_gj_entities=args.customloss)
 
-            if not args.split:
-                inference_save(model, train_dataset, valid_dataset)
-            else:
-                inference_save_split(model, train_dataset, valid_dataset)
+        else:
+            inference_save(model, train_dataset, valid_dataset)
 
     else:
         #--- Personal debug area ---
