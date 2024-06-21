@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
+import torchvision.transforms.v2 as v2
 # import segmentation_models_pytorch as smp
 # import albumentations as album
 import joblib
@@ -22,6 +23,9 @@ import torchvision.transforms as transforms
 from collections import OrderedDict
 from PIL import Image
 import re, math
+import pickle as p
+
+from resnet import ResNet, BasicBlock
 
 # import segmentation_models_pytorch.utils.metrics
 
@@ -47,18 +51,24 @@ class CaImagesDataset(torch.utils.data.Dataset):
             image_dim = (512, 512),
             mask_neurons=None,
             mask_mito=None,
+            gen_gj_entities=False,
             split=0 #0 for train, 1 for valid
     ):
-        
         prefix = "train" if not split else "valid"
         images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
         masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
-        self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_imgs"))) if "DS" not in image_id]
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts"))) if "DS" not in image_id]
+        
+        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts"))) if "DS" not in image_id and (True and self.centers_and_contours(cv2.imread(os.path.join(masks_dir, image_id)), filter_mode=True))]
+        self.image_paths = [os.path.join(images_dir, image_id) for image_id in self.mask_paths if "DS" not in image_id]
 
         if mask_neurons:
             assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "illegal naming, feds on the way"
-            self.neuron_paths = [os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_").replace(".png.png", ".png")) for neuron_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_imgs")))]
+            self.neuron_paths = []
+            for neuron_id in self.image_paths:
+                neuron_id = os.path.split(neuron_id)[-1]
+                item = os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_").replace(".png.png", ".png"))
+                self.neuron_paths.append(item)
+
         else: self.neuron_paths = None
 
         if mask_mito:
@@ -70,7 +80,68 @@ class CaImagesDataset(torch.utils.data.Dataset):
         self.augmentation = augmentation 
         self.preprocessing = preprocessing
         self.image_dim = image_dim
-    
+        self.gen_gj_entities=gen_gj_entities
+
+    def centers_and_contours(self, gt, filter_mode=False):
+        gray = cv2.cvtColor(gt, cv2.COLOR_BGR2GRAY)
+        out = np.zeros_like(gray, dtype=np.uint8)
+
+        # Apply thresholding
+        _, thresh = cv2.threshold(gray, 40, 255, cv2.THRESH_BINARY)
+
+        # Find contours
+        contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+         # Calculate center of each contour
+        centers, contour_arr = [], []
+        for i, cnt in enumerate(contours):
+            M = cv2.moments(cnt)
+            if M['m00'] != 0:
+                cx = int(M['m10'] / M['m00'])
+                cy = int(M['m01'] / M['m00'])
+
+                cnt = cnt.squeeze(1)
+                cont_arr = torch.zeros(gray.shape)
+                cont_arr[[cnt[:, 1], cnt[:, 0]]] = 1
+
+                #check for intersection
+                get_out = False
+                for c in contour_arr:
+                    if torch.count_nonzero((c +cont_arr) >= 2) != 0: 
+                        get_out = True
+                        break
+                if get_out: continue # bad contour identification safeguard
+
+                centers.append((cx, cy))
+                contour_arr.append(cont_arr)    
+
+                out = cv2.circle(out, (cx, cy), 5, 255, 2)
+                out = cv2.drawContours(out, contours, i, color=255, thickness=2)
+                
+        if not len(centers) and filter_mode:
+            return False
+        elif filter_mode: return True
+
+        contour_arr = torch.stack(contour_arr, axis=0)
+        assert contour_arr.shape[0] == len(centers)
+
+        center_indices = [list(range(len(centers)))] + [list(list(zip(*centers))[0]), list(list(zip(*centers))[1])]
+        center_arr = torch.zeros((len(centers), gt.shape[0], gt.shape[1]))
+        try:
+            center_arr[list(range(len(centers))), list(list(zip(*centers))[0]), list(list(zip(*centers))[1])] = 1
+        except:
+            print(center_indices, center_arr.shape)
+            raise Exception
+
+        #sanity check
+        if len(torch.unique(contour_arr.sum(dim=0))) > 2:
+            #save the image somehwere
+            cv2.imwrite("example.png", out)
+            cv2.imwrite("example_gt.png", gt)
+        assert len(torch.unique(contour_arr.sum(dim=0))) <=2, f"{torch.unique(contour_arr.sum(dim=0))} {torch.unique(contour_arr)} {(len(centers))}"
+
+
+        return center_arr.to(dtype=torch.float32), contour_arr.to(dtype=torch.float32)
+
     def __getitem__(self, i):
         
         # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
@@ -80,6 +151,7 @@ class CaImagesDataset(torch.utils.data.Dataset):
             print(self.image_paths[i])
             raise Exception(self.image_paths[i])
         mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
+        if self.gen_gj_entities: centers, contours = self.centers_and_contours(cv2.imread(self.mask_paths[i]))
 
         # make sure each pixel is 0 or 255
         
@@ -93,6 +165,7 @@ class CaImagesDataset(torch.utils.data.Dataset):
         # apply augmentations
         if self.augmentation:
             image, mask = self.augmentation(image, mask)
+            image = v2.RandomAutocontrast()(image)
         
         # apply preprocessing
         _transform = []
@@ -125,8 +198,10 @@ class CaImagesDataset(torch.utils.data.Dataset):
         if self.neuron_paths: neurons = cv2.cvtColor(cv2.imread(self.neuron_paths[i]), cv2.COLOR_BGR2GRAY)
         if self.mito_mask: mitos = np.array(Image.open(self.mito_mask[i]))
         
-            
-        return image, ont_hot_mask, neurons == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
+        if not self.gen_gj_entities:
+            return image, ont_hot_mask, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
+        else:
+            return image, ont_hot_mask, centers, contours, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
         
     def __len__(self):
         # return length of 
@@ -285,6 +360,90 @@ class SectionsDataset(torch.utils.data.Dataset):
         # return length of 
         return len(self.image_paths)
 
+class DebugDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset_dir, aug=False):
+        images = os.path.join(dataset_dir, "imgs")
+        gts = os.path.join(dataset_dir, "gts")
+        mems = os.path.join(dataset_dir, "neurons")
+
+        self.mask_paths = []
+        self.image_paths = []
+        self.neuron_paths = []
+        names = []
+
+        print("--Filtering")
+        # for image_id in tqdm(sorted(os.listdir(images))):
+        #     if "DS" in image_id:
+        #         continue
+        #     image_id = os.path.join(gts, image_id)
+        #     gt = cv2.cvtColor(cv2.imread(image_id), cv2.COLOR_BGR2GRAY)
+        #     gt[gt == 2] = 0
+        #     gt[gt == 15] = 0
+        #     if len(np.unique(gt)) < 2: continue
+        #     image_name = os.path.split(image_id)[-1]
+        #     names.append(image_name)
+        #     self.image_paths.append(os.path.join(images, image_name))
+        #     self.neuron_paths.append(os.path.join(mems, image_name))
+        #     self.mask_paths.append(os.path.join(gts, image_id))
+        with open("/home/mishaalk/projects/def-mzhen/mishaalk/gapjncsegmentation/names.p", "rb") as  f:
+            names = p.load(f)
+        for image_name in names:
+            self.image_paths.append(os.path.join(images, image_name))
+            self.neuron_paths.append(os.path.join(mems, image_name))
+            self.mask_paths.append(os.path.join(gts, image_name))
+        
+        self.augmentation = aug
+        
+
+        
+    def __getitem__(self, i):
+
+        # directory is arranged as before, current, future1, future2
+        mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY)
+        image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY)
+        neurons = cv2.cvtColor(cv2.imread(self.neuron_paths[i]), cv2.COLOR_BGR2GRAY) 
+        
+
+        # make sure each pixel is 0 or 255
+        # print(np.unique(mask))
+        
+        mask_labels = np.unique(mask)
+        mask[mask == 0] = 0
+        mask[mask == 255] = 1
+        
+        
+        # apply augmentations
+        if self.augmentation:
+            image, mask = self.augmentation(image, mask)
+            image = v2.RandomAutocontrast()(image)
+        
+        # apply preprocessing
+        _transform = []
+        _transform.append(transforms.ToTensor())
+
+        mask = transforms.Compose(_transform)(mask)
+        if len(mask_labels) == 1:
+            mask[:] = 0
+        else:
+            mask[mask != 0] = 1
+        ont_hot_mask = mask
+
+        _transform_img = _transform.copy()
+        image = transforms.Compose(_transform_img)(image)
+
+        # image = torch.permute(image, (1, 2, 0))     
+        if len(image.shape) >= 5: print(image.shape)
+        # print( torch.from_numpy(neurons[np.newaxis, :]).unsqueeze(0).shape)
+            
+        return image, ont_hot_mask, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], []
+
+    def __len__(self):
+        # return length of 
+        return len(self.image_paths)
+    
+
+
+
 class TestDataset(torch.utils.data.Dataset):
     def __init__(
             self, 
@@ -294,6 +453,7 @@ class TestDataset(torch.utils.data.Dataset):
             membrane=False
     ):      
         self.image_paths = [os.path.join(dataset_dir, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
+        self.mask_paths = [os.path.join(dataset_dir.replace("imgs", "gts"), image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
         if membrane:
             self.membrane_paths = [os.path.join(dataset_dir, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
         else: self.membrane_paths = None
@@ -304,6 +464,7 @@ class TestDataset(torch.utils.data.Dataset):
         if not self.td:
             try:
                 image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
+                mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY)
                 if self.membrane_paths: memb = cv2.cvtColor(cv2.imread(self.membrane_paths[i]), cv2.COLOR_BGR2GRAY)
             except Exception as e:
                 print(self.image_paths[i])
@@ -327,22 +488,26 @@ class TestDataset(torch.utils.data.Dataset):
         _transform_img = _transform.copy()
         # _transform_img.append(transforms.Normalize(mean=[0.5], std=[0.5]))
         image = transforms.Compose(_transform_img)(image)
+        mask = transforms.Compose(_transform_img)(mask)
         if self.td: 
             image = torch.permute(image, (1, 2, 0)) 
             if self.membrane_paths: memb = torch.permute(memb, (1, 2, 0)) 
         else: 
             image = image.squeeze(0) 
             memb = memb.squeeze(0)
+            mask = mask.squeeze(0)
 
 
         if image.shape[-1] != 512: 
             image = torch.zeros(image.shape[:-1]+(512,))
+            mask = torch.zeros(image.shape[:-1]+(512,))
             if self.membrane_paths: memb = torch.zeros(memb.shape[:-1]+(512,))
         if image.shape[-2] != 512: 
             image = torch.zeros(image.shape[:-2]+(512,512))
+            mask = torch.zeros(image.shape[:-1]+(512,))
             if self.membrane_paths: memb = torch.zeros(memb.shape[:-2]+(512,512))
 
-        return image.unsqueeze(0), image.unsqueeze(0) if not self.membrane_paths else memb.unsqueeze(0), image.unsqueeze(0), image.unsqueeze(0)
+        return image.unsqueeze(0), mask.unsqueeze(0), image.unsqueeze(0) if not self.membrane_paths else memb.unsqueeze(0), image.unsqueeze(0)
     def __len__(self):
         # return length of 
         return len(self.image_paths)
@@ -401,14 +566,14 @@ class DownBlock(nn.Module):
 
 class UpBlock(nn.Module):
     """Up Convolution (Upsampling followed by Double Convolution)"""
-    def __init__(self, in_channels, out_channels, up_sample_mode, three=False, dropout=0, residual=False):
+    def __init__(self, in_channels, out_channels, up_sample_mode, kernel_size=2, three=False, dropout=0, residual=False):
         super(UpBlock, self).__init__()
         if up_sample_mode == 'conv_transpose':
             if three: self.up_sample = nn.Sequential(
-                nn.ConvTranspose3d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2),
+                nn.ConvTranspose3d(in_channels-out_channels, in_channels-out_channels, kernel_size=kernel_size, stride=2),
                 nn.ReLU())       
             else: self.up_sample = nn.Sequential(
-                nn.ConvTranspose2d(in_channels-out_channels, in_channels-out_channels, kernel_size=2, stride=2),
+                nn.ConvTranspose2d(in_channels-out_channels, in_channels-out_channels, kernel_size=kernel_size, stride=2),
                 nn.ReLU())
         elif up_sample_mode == 'bilinear':
             self.up_sample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True, three=three)
@@ -471,6 +636,116 @@ class UNet(nn.Module):
         x = self.up_conv1(x, skip1_out) # x: (16, 64, 512, 512)
         x = self.conv_last(x) # x: (16, 1, 512, 512)
         return x
+
+class ResUNet(nn.Module):
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, dropout=0):
+        """Initialize the UNet model"""
+        super(ResUNet, self).__init__()
+        self.three = three
+        self.up_sample_mode = up_sample_mode
+        self.dropout=dropout
+
+        # Downsampling Path
+        self.resnet = ResNet(BasicBlock, [1, 4, 6, 3, 3], norm_layer = nn.BatchNorm2d if not three else nn.BatchNorm3d, three=three)
+        # Upsampling Path
+        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode, dropout=self.dropout, kernel_size=2) # 512 + 1024 input channels --> 512 output channels
+        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode, dropout=self.dropout, kernel_size=2)
+        self.up_conv2 = UpBlock(128+ 256, 128, self.up_sample_mode, dropout=self.dropout, kernel_size=2)
+        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode, kernel_size=2)
+
+        #extra convs:
+        self.m1 = nn.Sequential(
+                nn.ConvTranspose2d(64, 64,kernel_size=2, stride=2),
+                nn.ReLU())
+        self.m2 = nn.Sequential(
+                nn.ConvTranspose2d(64, 64, kernel_size=2, stride=2),
+                nn.ReLU())
+
+        self.add_conv1 = DoubleConv(64, 64)
+        self.add_conv2 = DoubleConv(64, 64)
+
+        # Final Convolution
+        self.conv_last = nn.Conv2d(64, 1, kernel_size=1)
+        # if scale:
+        #     self.s1, self.s2 = torch.nn.Parameter(torch.ones(1), requires_grad=True), torch.nn.Parameter(torch.ones(1), requires_grad=True) # learn scaling
+
+
+    def forward(self, x):
+        """Forward pass of the UNet model
+        x: (16, 1, 512, 512)
+        """
+        # print(x.shape)
+        x, skip1_out, skip2_out, skip3_out, skip4_out = self.resnet(x)
+        x = self.up_conv4(x, skip4_out) # x: (16, 512, 64, 64)
+        x = self.up_conv3(x, skip3_out) # x: (16, 256, 128, 128)
+        # if self.three: 
+        #     #attention_mode???
+        #     skip1_out = torch.mean(skip1_out, dim=2)
+            # skip2_out = torch.mean(skip2_out, dim=2)
+        x = self.up_conv2(x, skip2_out) # x: (16, 128, 256, 256)
+        x = self.up_conv1(x, skip1_out) # x: (16, 64, 512, 512)
+        x = self.m1(x)
+        x = self.add_conv1(x)
+        x = self.m2(x)
+        x = self.add_conv2(x)
+        x = self.conv_last(x) # x: (16, 1, 512, 512)
+        return x
+
+class MemResUNet(nn.Module):
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, dropout=0):
+        """Initialize the UNet model"""
+        super(MemResUNet, self).__init__()
+        self.three = three
+        self.up_sample_mode = up_sample_mode
+        self.dropout=dropout
+
+        # Downsampling Path
+        self.resnet = ResNet(BasicBlock, [1, 4, 6, 3, 3], norm_layer = nn.BatchNorm2d if not three else nn.BatchNorm3d, three=three, membrane=True)
+        # Upsampling Path
+        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode, dropout=self.dropout, kernel_size=2) # 512 + 1024 input channels --> 512 output channels
+        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode, dropout=self.dropout, kernel_size=2)
+        self.up_conv2 = UpBlock(128+ 256, 128, self.up_sample_mode, dropout=self.dropout, kernel_size=2)
+        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode, kernel_size=2)
+
+        #extra convs:
+        self.m1 = nn.Sequential(
+                nn.ConvTranspose2d(64, 64,kernel_size=2, stride=2),
+                nn.ReLU())
+        self.m2 = nn.Sequential(
+                nn.ConvTranspose2d(64, 64, kernel_size=2, stride=2),
+                nn.ReLU())
+
+        self.add_conv1 = DoubleConv(64, 64)
+        self.add_conv2 = DoubleConv(64, 64)
+
+        # Final Convolution
+        self.conv_last = nn.Conv2d(64, 1, kernel_size=1)
+        # if scale:
+        #     self.s1, self.s2 = torch.nn.Parameter(torch.ones(1), requires_grad=True), torch.nn.Parameter(torch.ones(1), requires_grad=True) # learn scaling
+
+
+    def forward(self, x, mem_x):
+        """Forward pass of the UNet model
+        x: (16, 1, 512, 512)
+        """
+        # print(x.shape)
+
+        x, skip1_out, skip2_out, skip3_out, skip4_out = self.resnet((x, mem_x))
+        x = self.up_conv4(x, skip4_out) # x: (16, 512, 64, 64)
+        x = self.up_conv3(x, skip3_out) # x: (16, 256, 128, 128)
+        if self.three: 
+            #attention_mode???
+            skip1_out = torch.mean(skip1_out, dim=2)
+            skip2_out = torch.mean(skip2_out, dim=2)
+        x = self.up_conv2(x, skip2_out) # x: (16, 128, 256, 256)
+        x = self.up_conv1(x, skip1_out) # x: (16, 64, 512, 512)
+        x = self.m1(x)
+        x = self.add_conv1(x)
+        x = self.m2(x)
+        x = self.add_conv2(x)
+        x = self.conv_last(x) # x: (16, 1, 512, 512)
+        return x
+
 
 class MemUNet(nn.Module):
     """UNet Architecture with membrane feature information"""
@@ -647,6 +922,48 @@ class SSLoss(nn.Module):
 
         return torch.mean(self.lmda * torch.sum(torch.pow((targets - inputs), 2) * targets, dim=-1)/(torch.sum(targets, dim=-1) + self.eps) +
                            (1-self.lamda) * torch.sum(torch.pow((targets - inputs), 2) * inv_targets, dim=-1)/ (torch.sum(inv_targets, dim=-1) + self.eps))
+
+class SpecialLoss(nn.Module):
+    def __init__(self, bg_imp=0.2):
+        super(SpecialLoss, self).__init__()
+        self.bg_imp = bg_imp
+    
+    def forward(self, predictions, targets, neuron_mask=[], mito_mask=[]):
+        target_centers, targets, pad_mask = targets
+
+        pad_tensors = torch.zeros((target_centers.shape[-2:])).to(dtype=torch.bool).to(pad_mask.device)
+        pad_tensors[0, 0] = 1 # simply 
+        target_centers[pad_mask] = pad_tensors # for now
+
+        rows, cols = np.indices(target_centers.shape[-2:])
+        rows, cols = torch.from_numpy(rows).to(predictions.device), torch.from_numpy(cols).to(predictions.device)
+        #extend 
+        rows, cols = rows.expand(predictions.size(0), targets.size(1), -1, -1), cols.expand(predictions.size(0),targets.size(1), -1, -1)
+        center_rows, center_cols = (rows * target_centers).sum(dim = -1, keepdim=True).sum(dim=-1, keepdim=True), (cols * target_centers).sum(dim = -1, keepdim=True).sum(dim=-1, keepdim=True) 
+        
+        squared_dist = (rows - center_rows) ** 2 + (cols - center_cols) ** 2
+        pixel_importance = (targets) * 1/((squared_dist)+1e-6)
+        pixel_importance[pad_mask] = 0 # reset everything that was purely pad
+
+        pixel_importance = pixel_importance.sum(dim=1)
+        importance_coeff = (targets.sum(dim=1) == 0) * self.bg_imp
+        pixel_importance += importance_coeff
+
+        assert torch.count_nonzero(pixel_importance <0 ) == 0
+
+        bce_loss = F.binary_cross_entropy_with_logits(predictions, targets.sum(dim=1).to(dtype=torch.float32), reduction="none")
+        bce_loss *= pixel_importance
+
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
+        if neuron_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            bce_loss *= loss_mask
+
+        return torch.mean(bce_loss)
+        
+
 
 class GenDLoss(nn.Module):
     def __init__(self):
