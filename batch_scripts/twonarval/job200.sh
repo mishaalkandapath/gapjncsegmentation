@@ -10,22 +10,48 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
+SEED=29
 LOSS_TYPE=focalt
-ALPHA=0.1
-BETA=0.9
-GAMMA=2
-EPOCHS=100
+ALPHA=0.01
+BETA=0.99
+GAMMA=1.5
+EPOCHS=800
 BATCH_SIZE=4
-NUM_WORKERS=2
+NUM_WORKERS=4
 LR=0.00001
 NUM_PREDICTIONS_TO_LOG=10
 AUGMENT=True
 LOAD_MODEL_NAME=model_job111
-LOAD_EPOCH=48
+LOAD_EPOCH=49
 LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_epoch_${LOAD_EPOCH}.pth
-DATA_DIR=/home/hluo/scratch/filtered_100_110_3x512x512_40
+TRAIN_X_DIR=/home/hluo/scratch/filtered_0_50_3x512x512
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
 LOSS_DIR=/home/hluo/scratch/losses
 MODEL_NAME="model_job200"
-python ~/gapjncsegmentation/train.py --loss_dir $LOSS_DIR --epochs $EPOCHS --batch_size $BATCH_SIZE --lr $LR --data_dir $DATA_DIR --model_name $MODEL_NAME --num_workers $NUM_WORKERS --model_dir $MODEL_DIR --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG --results_dir $RESULTS_DIR --augment $AUGMENT --load_model_path $LOAD_MODEL_PATH --alpha $ALPHA --beta $BETA --gamma $GAMMA --loss_type $LOSS_TYPE
+IMG_DIR_LIST="/home/hluo/scratch/filtered_0_50_3x512x512/original/train /home/hluo/scratch/filtered_100_110_3x512x512_40/original/train"
+GT_DIR_LIST="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/train /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/train"
+VALID_IMG_DIR_LIST="/home/hluo/scratch/filtered_0_50_3x512x512/original/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/original/valid"
+VALID_GT_DIR_LIST="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/valid"
+python ~/gapjncsegmentation/train.py \
+    --img_dir_list $IMG_DIR_LIST \
+    --gt_dir_list $GT_DIR_LIST \
+    --valid_img_dir_list $VALID_IMG_DIR_LIST \
+    --valid_gt_dir_list $VALID_GT_DIR_LIST \
+    --loss_dir $LOSS_DIR \
+    --epochs $EPOCHS \
+    --batch_size $BATCH_SIZE \
+    --lr $LR \
+    --data_dir $DATA_DIR \
+    --model_name $MODEL_NAME \
+    --num_workers $NUM_WORKERS \
+    --model_dir $MODEL_DIR \
+    --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG \
+    --results_dir $RESULTS_DIR \
+    --augment $AUGMENT \
+    --load_model_path $LOAD_MODEL_PATH \
+    --alpha $ALPHA \
+    --beta $BETA \
+    --gamma $GAMMA \
+    --loss_type $LOSS_TYPE \
+    --seed $SEED

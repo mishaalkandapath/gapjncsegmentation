@@ -17,41 +17,52 @@ from utilities.loss import *
 def parse_arguments():
     """ Parse command line arguments """
     parser = argparse.ArgumentParser(description="Train a 3D U-Net model on the tiniest dataset")
-    parser.add_argument("--pred3classes", type=lambda x: (str(x).lower() == 'true'), default=False, help="Whether to augment the data")
+    
+    # directory arguments
     parser.add_argument("--img_dir_list", type=str, nargs='+', default=None, help="Directories to get original images from")
     parser.add_argument("--gt_dir_list", type=str, nargs='+', default=None, help="Directories to get mask images from")
     parser.add_argument("--valid_img_dir_list", type=str, nargs='+', default=None, help="Directories to get original images from")
     parser.add_argument("--valid_gt_dir_list", type=str, nargs='+', default=None, help="Directories to get mask images from")
-    parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
+    parser.add_argument("--train_x_dir", type=str, help="Directory containing the tiniest dataset")
+    parser.add_argument("--train_y_dir", type=str, help="Directory containing the tiniest dataset")
+    parser.add_argument("--valid_x_dir", type=str, help="Directory containing the tiniest dataset")
+    parser.add_argument("--valid_y_dir", type=str, help="Directory containing the tiniest dataset")
     parser.add_argument("--loss_dir", type=str, help="Directory containing the tiniest dataset")
-    parser.add_argument("--train_x_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
-    parser.add_argument("--train_y_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
-    parser.add_argument("--valid_x_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
-    parser.add_argument("--valid_y_dir", type=str, default="data/tiniest_data_64", help="Directory containing the tiniest dataset")
     parser.add_argument("--train_cellmask_dir", type=str, default=None, help="Path to load cellmask from")
     parser.add_argument("--valid_cellmask_dir", type=str, default=None, help="Path to load cellmask from")
     parser.add_argument("--model_dir", type=str, default="models", help="Directory to save models")
     parser.add_argument("--results_dir", type=str, default="results", help="Directory to save results")
-    parser.add_argument("--freeze_model_start_layer", type=int, default=None, help="Layer to start unfreezing model from")
+    parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
+    
+    # model & training arguments
     parser.add_argument("--model_name", type=str, default="model1", help="Name of the model to save")
+    parser.add_argument("--load_model_path", type=str, default=None, help="Path to load model from")
+    parser.add_argument("--freeze_model_start_layer", type=int, default=None, help="Layer to start unfreezing model from")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate for training")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs to train for")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
     parser.add_argument("--num_workers", type=int, default=4, help="Number of workers for DataLoader")
-    parser.add_argument("--load_model_path", type=str, default=None, help="Path to load model from")
+    parser.add_argument("--num_predictions_to_log", type=int, default=5, help="Number of predictions to log per epoch")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    
+    # loss arguments
+    parser.add_argument("--pred3classes", type=lambda x: (str(x).lower() == 'true'), default=False, help="Whether to predict 3 classes")
+    parser.add_argument("--augment", type=lambda x: (str(x).lower() == 'true'), default=True, help="Whether to augment the data")
+    parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
+    parser.add_argument("--use_dice", type=lambda x: (str(x).lower() == 'true'), default=False, help="Whether to use Dice loss")
     parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
     parser.add_argument("--alpha", type=float, default=0.04, help="Weight for class 0 in Focal Loss")
     parser.add_argument("--beta", type=float, default=0.96, help="Weight for class 0 in Focal Loss")
     parser.add_argument("--ce_ratio", type=float, default=0.5, help="Weight in Combo Loss")
-    parser.add_argument("--wandb_log_path", type=str, default="wandb", help="Path to save wandb logs")
-    parser.add_argument("--num_predictions_to_log", type=int, default=5, help="Number of predictions to log per epoch")
-    parser.add_argument("--augment", type=lambda x: (str(x).lower() == 'true'), default=True, help="Whether to augment the data")
-    parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
-    parser.add_argument("--use_dice", type=lambda x: (str(x).lower() == 'true'), default=False, help="Type of loss function to use")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--height", type=int, default=512, help="height of input")
-    parser.add_argument("--width", type=int, default=512, help="width of input")
-    parser.add_argument("--depth", type=int, default=3, help="depth of input")
+    
+    # input arguments
+    parser.add_argument("--height", type=int, default=512, help="Height of input")
+    parser.add_argument("--width", type=int, default=512, help="Width of input")
+    parser.add_argument("--depth", type=int, default=3, help="Depth of input")
+
+
+
+
     args = parser.parse_args()
     return args
 
