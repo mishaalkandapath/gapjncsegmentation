@@ -402,8 +402,8 @@ def get_confusion_matrix(pred, target):
     Returns:
         confusion_matrix (torch.Tensor): confusion matrix
     """
-    pred = pred.view(-1) # flatten
-    target = target.view(-1) # flatten
+    pred = pred.reshape(-1) # flatten
+    target = target.reshape(-1) # flatten
     true_positives = torch.sum(pred * target) # pred and target are both 1
     false_positives = torch.sum(pred * (1 - target)) # pred is 1, target is 0
     false_negatives = torch.sum((1 - pred) * target) # pred is 0, target is 1
