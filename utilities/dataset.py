@@ -29,11 +29,11 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
         self.image_paths = []
         self.mask_paths = []
         self.downsample_factor=downsample_factor
+        self.augment = augment
         for images_dir in images_dir_lst:
             self.image_paths.extend([os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))])
         for masks_dir in masks_dir_lst:   
             self.mask_paths.extend([os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))])
-        self.augment = augment
     
     def __getitem__(self, i):
         """ 
@@ -115,12 +115,14 @@ class SliceDataset(torch.utils.data.Dataset):
             self, 
             images_dir, 
             masks_dir,
-            augment=False
+            augment=False,
+            downsample_factor=1
     ):
         
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
         self.augment = augment
+        self.downsample_factor=downsample_factor
     
     def __getitem__(self, i):
         """ 
@@ -143,7 +145,14 @@ class SliceDataset(torch.utils.data.Dataset):
         image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask[mask!=0]=1
-        image = tio.ZNormalization()(image)
+        
+        if self.downsample_factor > 1:
+            image = torch.nn.MaxPool3d(self.downsample_factor)(image)
+            
+        if torch.std(image) == 0:
+            print(f"Image at index {i} has zero standard deviation, skipping normalization")
+        else:
+            image = tio.ZNormalization()(image)
     
         # apply augmentations, if any
         if self.augment:
@@ -194,13 +203,15 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
             images_dir, 
             masks_dir,
             cellmasks_dir,
-            augment=False
+            augment=False,
+            downsample_factor=1
     ):
         
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))]
         self.cellmask_paths = [os.path.join(cellmasks_dir, image_id) for image_id in sorted(os.listdir(cellmasks_dir))]
         self.augment = augment
+        self.downsample_factor=downsample_factor
     
     def __getitem__(self, i):
         """ 
@@ -225,7 +236,13 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
         mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         cellmask = torch.tensor(cellmask).float().unsqueeze(0) 
         # combmask[combmask!=0]=1
-        image = tio.ZNormalization()(image)
+        if self.downsample_factor > 1:
+            image = torch.nn.MaxPool3d(self.downsample_factor)(image)
+            
+        if torch.std(image) == 0:
+            print(f"Image at index {i} has zero standard deviation, skipping normalization")
+        else:
+            image = tio.ZNormalization()(image)
     
         # apply augmentations, if any
         if self.augment:
@@ -368,12 +385,14 @@ class SliceDatasetWithFilename(torch.utils.data.Dataset):
             self, 
             images_dir, 
             masks_dir,
-            augment=False
+            augment=False,
+            downsample_factor=1
     ):
         
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir)) if image_id.endswith(".npy")]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if image_id.endswith(".npy")]
         self.augment = augment
+        self.downsample_factor = downsample_factor
     
     def __getitem__(self, i):
         """ 
@@ -399,9 +418,10 @@ class SliceDatasetWithFilename(torch.utils.data.Dataset):
         mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask[mask!=0]=1
         # Check if the standard deviation is zero
+        if self.downsample_factor > 1:
+            image = torch.nn.MaxPool3d(self.downsample_factor)(image)
+            
         if torch.std(image) == 0:
-            # Handle this case appropriately, either by skipping normalization
-            # or by taking an alternative action such as logging the issue
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
         else:
             image = tio.ZNormalization()(image)
@@ -425,7 +445,8 @@ class SliceDatasetWithFilenameAllSubfolders(torch.utils.data.Dataset):
             self, 
             images_dir, 
             masks_dir,
-            augment=False
+            augment=False,
+            downsample_factor=1
     ):
         
         self.image_paths = []
@@ -442,6 +463,7 @@ class SliceDatasetWithFilenameAllSubfolders(torch.utils.data.Dataset):
         self.image_paths.sort()
         self.mask_paths.sort()
         self.augment = augment
+        self.downsample_factor = downsample_factor
     
     def __getitem__(self, i):
         """ 
@@ -467,9 +489,10 @@ class SliceDatasetWithFilenameAllSubfolders(torch.utils.data.Dataset):
         mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask[mask!=0]=1
         # Check if the standard deviation is zero
+        if self.downsample_factor > 1:
+            image = torch.nn.MaxPool3d(self.downsample_factor)(image)
+            
         if torch.std(image) == 0:
-            # Handle this case appropriately, either by skipping normalization
-            # or by taking an alternative action such as logging the issue
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
         else:
             image = tio.ZNormalization()(image)

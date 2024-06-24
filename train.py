@@ -45,6 +45,7 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     num_workers = args.num_workers
     augment = args.augment
+    downsample_factor = args.downsample_factor
     pred3classes = args.pred3classes
     train_x_dirs = args.train_x_dirs
     train_y_dirs = args.train_y_dirs
@@ -56,8 +57,8 @@ if __name__ == "__main__":
     # if multiple directories are provided, use them to create the dataset
     if len(train_x_dirs) > 1:
         print("Setting up from lists")
-        train_dataset, train_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=train_x_dirs, mask_dir_list=train_y_dirs, batch_size=batch_size, num_workers=num_workers, augment=augment, shuffle=True)
-        valid_dataset, valid_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=valid_x_dirs, mask_dir_list=valid_y_dirs, batch_size=1, num_workers=num_workers, augment=False, shuffle=False)
+        train_dataset, train_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=train_x_dirs, mask_dir_list=train_y_dirs, batch_size=batch_size, num_workers=num_workers, augment=augment, shuffle=True, downsample_factor=downsample_factor)
+        valid_dataset, valid_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=valid_x_dirs, mask_dir_list=valid_y_dirs, batch_size=1, num_workers=num_workers, augment=False, shuffle=False, downsample_factor=downsample_factor)
     else:
         train_x_dirs = train_x_dirs[0]
         train_y_dirs = train_y_dirs[0]
@@ -65,11 +66,11 @@ if __name__ == "__main__":
         valid_y_dirs = valid_y_dirs[0]
         if args.train_cellmask_dir is not None:
             print("Using cell mask -- 2 class prediction")
-            train_dataset, train_loader = setup_datasets_and_dataloaders_withmemb(train_x_dirs, train_y_dirs, train_cellmask_dir, batch_size, num_workers, augment, use3classes=pred3classes, shuffle=True)
-            valid_dataset, valid_loader = setup_datasets_and_dataloaders_withmemb(valid_x_dirs, valid_y_dirs, valid_cellmask_dir, batch_size, num_workers, False, use3classes=pred3classes, shuffle=False)
+            train_dataset, train_loader = setup_datasets_and_dataloaders_withmemb(train_x_dirs, train_y_dirs, train_cellmask_dir, batch_size, num_workers, augment, use3classes=pred3classes, shuffle=True, downsample_factor=downsample_factor)
+            valid_dataset, valid_loader = setup_datasets_and_dataloaders_withmemb(valid_x_dirs, valid_y_dirs, valid_cellmask_dir, batch_size, num_workers, False, use3classes=pred3classes, shuffle=False, downsample_factor=downsample_factor)
         else:
-            train_dataset, train_loader = setup_datasets_and_dataloaders(train_x_dirs, train_y_dirs, batch_size, num_workers, augment, shuffle=True)
-            valid_dataset, valid_loader = setup_datasets_and_dataloaders(valid_x_dirs, valid_y_dirs, batch_size, num_workers, False, shuffle=False)
+            train_dataset, train_loader = setup_datasets_and_dataloaders(train_x_dirs, train_y_dirs, batch_size, num_workers, augment, shuffle=True, downsample_factor=downsample_factor)
+            valid_dataset, valid_loader = setup_datasets_and_dataloaders(valid_x_dirs, valid_y_dirs, batch_size, num_workers, False, shuffle=False, downsample_factor=downsample_factor)
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
     print(f"Data loaders created. Train dataset size: {len(train_dataset)}, Validation dataset size: {len(valid_dataset)}")
 

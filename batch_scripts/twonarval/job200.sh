@@ -18,9 +18,10 @@ BETA=0.99
 GAMMA=1.5
 EPOCHS=800
 BATCH_SIZE=4
-NUM_WORKERS=4
+NUM_WORKERS=2
 LR=0.00001
 NUM_PREDICTIONS_TO_LOG=10
+DOWNSAMPLE_FACTOR=2
 AUGMENT=True
 LOAD_MODEL_NAME=model_job111
 LOAD_EPOCH=49
@@ -33,6 +34,7 @@ TRAIN_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/train /hom
 VALID_X_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/original/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/original/valid"
 VALID_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/valid"
 python ~/gapjncsegmentation/train.py \
+    --downsample_factor $DOWNSAMPLE_FACTOR \
     --train_x_dirs $TRAIN_X_DIRS \
     --train_y_dirs $TRAIN_Y_DIRS \
     --valid_x_dirs $VALID_X_DIRS \

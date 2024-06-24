@@ -52,6 +52,7 @@ def parse_arguments():
     parser.add_argument("--ce_ratio", type=float, default=0.5, help="Weight in Combo Loss")
     
     # input arguments
+    parser.add_argument("--downsample_factor", type=int, default=1, help="factor to downsample the data by")
     parser.add_argument("--height", type=int, default=512, help="Height of input")
     parser.add_argument("--width", type=int, default=512, help="Width of input")
     parser.add_argument("--depth", type=int, default=3, help="Depth of input")
@@ -77,7 +78,7 @@ def log_predictions(input_img: np.ndarray, label_img: np.ndarray, pred_img: np.n
     mask_img = wandb.Image(fig)          
     table.add_data(f"Epoch {epoch} Step {step}", mask_img)
 
-def setup_datasets_and_dataloaders_from_lists(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True):
+def setup_datasets_and_dataloaders_from_lists(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True, downsample_factor: int=1):
     """ Setup datasets and dataloaders for training and validation"""
     print("Setting up: augment ", augment, " shuffle ", shuffle)
     my_dataset = SliceDatasetMultipleFolders(img_dir_list, mask_dir_list, augment=augment)
