@@ -312,7 +312,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             'train_recall': train_recall,
             'valid_precision': valid_precision,
             'valid_recall': valid_recall,
-        }, os.path.join(results_folder, f"losses_{model_name}.pth"))
+        }, os.path.join(loss_folder, f"losses_{model_name}.pth"))
         
         if savevis:
             fig, ax= plt.subplots(2,1,figsize=(10, 8))

@@ -10,17 +10,20 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-MODEL_NAME="model_job200"
+MODEL_NAME="model_job200c"
 SEED=29
 LOSS_TYPE=focalt
-ALPHA=0.01
-BETA=0.99
-GAMMA=1.5
+ALPHA=0.05
+BETA=0.95
+GAMMA=2.5
 EPOCHS=800
 BATCH_SIZE=4
 NUM_WORKERS=2
 LR=0.00001
 NUM_PREDICTIONS_TO_LOG=10
+DEPTH=3
+WIDTH=256
+HEIGHT=256
 DOWNSAMPLE_FACTOR=2
 AUGMENT=True
 LOAD_MODEL_NAME=model_job111
@@ -54,4 +57,7 @@ python ~/gapjncsegmentation/train.py \
     --beta $BETA \
     --gamma $GAMMA \
     --loss_type $LOSS_TYPE \
-    --seed $SEED
+    --seed $SEED \
+    --height $HEIGHT \
+    --width $WIDTH \
+    --depth $DEPTH
