@@ -173,6 +173,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
     
     # --- Training ---
     for epoch in range(epochs):
+        print(f"--------------------Epoch {epoch} (time: {time.time() - start} seconds)--------------------")
         epoch_train_precision = 0
         epoch_train_recall = 0
         epoch_train_loss = 0
@@ -239,8 +240,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         train_losses.append(epoch_train_loss)
         train_precision.append(epoch_train_precision)
         train_recall.append(epoch_train_recall)
-        print(f"Epoch: {epoch}, Loss: {loss} | processed {num_train_processed}")
-        print(f"Epoch train precision: {(epoch_train_precision/(num_train_processed)):.4f} recall: {(epoch_train_recall/(num_train_processed)):.4f}")
+        print(f"Train | loss: {epoch_train_loss:.5f} precision: {epoch_train_precision:.5f} recall: {epoch_train_recall:.5f}")
         
         # --- Validation ---
         epoch_valid_precision = 0
@@ -302,8 +302,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         valid_precision.append(epoch_valid_precision)
         valid_recall.append(epoch_valid_recall)
         valid_losses.append(epoch_valid_loss)
-        print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss} | num valid processed {num_valid_processed}")
-        print(f"Epoch valid precision: {(epoch_valid_precision/(num_valid_processed)):.4f} recall: {(epoch_valid_recall/(num_valid_processed)):.4f}")
+        print(f"Valid | loss: {epoch_valid_loss:.5f} precision: {epoch_valid_precision:.5f} recall: {epoch_valid_recall:.5f}")
         
         checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(0, 0), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
         torch.save({
