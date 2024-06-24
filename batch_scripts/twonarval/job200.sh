@@ -13,6 +13,9 @@ module load scipy-stack gcc cuda opencv
 MODEL_NAME="model_job200"
 SEED=29
 LOSS_TYPE=focalt
+DEPTH=3
+WIDTH=256
+HEIGHT=256
 ALPHA=0.01
 BETA=0.99
 GAMMA=1.5
@@ -54,4 +57,7 @@ python ~/gapjncsegmentation/train.py \
     --beta $BETA \
     --gamma $GAMMA \
     --loss_type $LOSS_TYPE \
-    --seed $SEED
+    --seed $SEED \
+    --height $HEIGHT \
+    --width $WIDTH \
+    --depth $DEPTH

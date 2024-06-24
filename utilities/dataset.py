@@ -58,8 +58,8 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
         mask[mask!=0]=1
             
         if self.downsample_factor > 1:
-            image = torch.nn.MaxPool3d(self.downsample_factor)(image)
-            mask = torch.nn.MaxPool3d(self.downsample_factor)(mask)
+            image = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(image)
+            mask = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(mask)
         if torch.std(image) == 0:
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
         else:
