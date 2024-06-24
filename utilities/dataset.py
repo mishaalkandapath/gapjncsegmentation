@@ -59,7 +59,7 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
             
         if self.downsample_factor > 1:
             image = torch.nn.MaxPool3d(self.downsample_factor)(image)
-            
+            mask = torch.nn.MaxPool3d(self.downsample_factor)(mask)
         if torch.std(image) == 0:
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
         else:
@@ -148,6 +148,7 @@ class SliceDataset(torch.utils.data.Dataset):
         
         if self.downsample_factor > 1:
             image = torch.nn.MaxPool3d(self.downsample_factor)(image)
+            mask = torch.nn.MaxPool3d(self.downsample_factor)(mask)
             
         if torch.std(image) == 0:
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
@@ -238,6 +239,8 @@ class SliceDatasetWithMemb(torch.utils.data.Dataset):
         # combmask[combmask!=0]=1
         if self.downsample_factor > 1:
             image = torch.nn.MaxPool3d(self.downsample_factor)(image)
+            mask = torch.nn.MaxPool3d(self.downsample_factor)(mask)
+
             
         if torch.std(image) == 0:
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
@@ -420,6 +423,7 @@ class SliceDatasetWithFilename(torch.utils.data.Dataset):
         # Check if the standard deviation is zero
         if self.downsample_factor > 1:
             image = torch.nn.MaxPool3d(self.downsample_factor)(image)
+            mask = torch.nn.MaxPool3d(self.downsample_factor)(mask)
             
         if torch.std(image) == 0:
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
@@ -491,6 +495,7 @@ class SliceDatasetWithFilenameAllSubfolders(torch.utils.data.Dataset):
         # Check if the standard deviation is zero
         if self.downsample_factor > 1:
             image = torch.nn.MaxPool3d(self.downsample_factor)(image)
+            mask = torch.nn.MaxPool3d(self.downsample_factor)(mask)
             
         if torch.std(image) == 0:
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
