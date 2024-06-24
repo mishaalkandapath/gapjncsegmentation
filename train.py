@@ -11,6 +11,11 @@ from utilities.utilities_train import *
 if __name__ == "__main__":
     # ----- Parse arguments -----
     args = parse_arguments()
+    
+    # print each of the arguments
+    print("------------------------------Arguments------------------------------")
+    for arg in vars(args):
+        print(f"{arg}: {getattr(args, arg)}")
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
    
@@ -18,7 +23,6 @@ if __name__ == "__main__":
     seed = args.seed
     torch.manual_seed(seed)
     np.random.seed(seed)
-    print("seed:", seed)
 
     # Define model directory
     model_name = args.model_name
@@ -37,9 +41,9 @@ if __name__ == "__main__":
         os.makedirs(loss_folder)
     
     # ----- Load data -----
+    print("------------------------------Loading Data------------------------------")
     batch_size = args.batch_size
     num_workers = args.num_workers
-    print("Augment", args.augment)
     
     img_dir_list = args.img_dir_list
     mask_dir_list = args.gt_dir_list
@@ -60,6 +64,7 @@ if __name__ == "__main__":
     print(f"Data loaders created. Train dataset size: {len(train_dataset)}, Validation dataset size: {len(valid_dataset)}")
 
     # ----- Initialize model & loss function-----
+    print("------------------------------Initializing Model------------------------------")
     # Initialize model
     lr = args.lr
     epochs = args.epochs
@@ -78,6 +83,7 @@ if __name__ == "__main__":
     model = freeze_model_layers(model, freeze_model_start_layer)
 
     # Initialize loss function
+    print("------------------------------Initializing Loss Function------------------------------")
     print("Args loss type", args.loss_type)
     if args.loss_type == "combo":
         criterion = ComboLoss(alpha=args.alpha, ce_ratio=args.ce_ratio)
@@ -97,6 +103,7 @@ if __name__ == "__main__":
         print("using dice loss")
     print("Loss function initialized.")
 
+    print("------------------------------TRAINING------------------------------")
     # ----- Train model -----
     train_log_local(model=model, 
           train_loader=train_loader, 
