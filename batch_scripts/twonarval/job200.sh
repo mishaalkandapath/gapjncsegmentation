@@ -33,10 +33,10 @@ TRAIN_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/train /hom
 VALID_X_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/original/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/original/valid"
 VALID_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/valid"
 python ~/gapjncsegmentation/train.py \
-    --train_x_dirs "$TRAIN_X_DIRS" \
-    --train_y_dirs "$TRAIN_Y_DIRS" \
-    --valid_x_dirs "$VALID_X_DIRS" \
-    --valid_y_dirs "$VALID_Y_DIRS" \
+    --train_x_dirs $TRAIN_X_DIRS \
+    --train_y_dirs $TRAIN_Y_DIRS \
+    --valid_x_dirs $VALID_X_DIRS \
+    --valid_y_dirs $VALID_Y_DIRS \
     --model_dir "$MODEL_DIR" \
     --loss_dir "$LOSS_DIR" \
     --results_dir "$RESULTS_DIR" \

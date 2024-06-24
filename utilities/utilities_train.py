@@ -186,10 +186,9 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
             print("Progress: {:.2%}".format(i/len(train_loader)), end="\r")
-            if (first_img):
+            if (i==0 and epoch==0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}") # (batch, channel, depth, height, width)
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
-                first_img = False     
             if inputs.shape[2:] != (depth, height, width):
                 print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
                 continue
