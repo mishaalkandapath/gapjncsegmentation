@@ -39,9 +39,13 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
 
                 try:
                     gt = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + ".png")), cv2.COLOR_BGR2GRAY) 
-                    pred = np.load(os.path.join(pred_dir, img_templ + suffix + ".png.npy"))
-                    # print(len(np.unique(pred)))
-                    pred = 1/(1+np.exp(-pred/255)) >= 0.5
+                    if True:
+                        pred = np.load(os.path.join(pred_dir, img_templ + suffix + ".png.npy"))
+                        # print(len(np.unique(pred)))
+                        pred = 1/(1+np.exp(-pred/255)) >= 0.5
+                    else:
+                        pred = cv2.cvtColor(cv2.imread(os.path.join(pred_dir, img_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
+                        pred = pred == 255
                     if gt.shape != pred.shape: pred = np.zeros_like(gt)  
                 except:
                     gt = np.zeros_like(im)
@@ -56,8 +60,12 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
                     try:
                         im1 = cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_templ +suffix + "off.png")), cv2.COLOR_BGR2GRAY)
                         gt1 = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
-                        pred1 = np.load(os.path.join(pred_dir, img_templ + suffix + "off.png.npy"))
-                        pred1 = 1/(1+np.exp(-pred1/255)) >= 0.5
+                        if True:
+                            pred1 = np.load(os.path.join(pred_dir, img_templ + suffix + "off.png.npy"))
+                            pred1 = 1/(1+np.exp(-pred1/255)) >= 0.5
+                        else:
+                             pred1 = cv2.cvtColor(cv2.imread(os.path.join(pred_dir, img_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
+                             pred1 = pred1 == 255
                         if im1 is None or gt1 is None or pred1 is None: raise Exception
                         if gt1.shape != pred1.shape: pred1 = np.zeros_like(gt1)  
                         y_acc_img1.append(im1)
@@ -366,19 +374,12 @@ def center_img(img):
         if M['m00'] != 0:
             cx = int(M['m10'] / M['m00'])
             cy = int(M['m01'] / M['m00'])
-            # print(cx, cy)
-            # img = cv2.circle(img, (cx, cy), 15, (0, 255, 0), 10)
             centers.append((cx, cy))
             color = random.randint(0, 255)
-            # while color in done:
-            #     color = random.randint(0, 255)
-            # done.add(color)
             gray = cv2.drawContours(gray, contours, i, color=30, thickness=-1)
             out[gray == 30] = i+1
             gray[gray == 30] = 1
             assert not np.count_nonzero(gray == 30)
-            # assert len(np.unique(out)) == i+1, str(i) + " " + str(len(np.unique(out)))
-            # assert np.count_nonzero(out == color), color
     return centers, out
 
 def entity_recall(gt_contour, pred):
@@ -386,17 +387,18 @@ def entity_recall(gt_contour, pred):
     contours = contours[contours != 0]
     num_right = 0
     for i , cnt in enumerate(contours):
+        if cnt == 0: continue
         num = np.count_nonzero(gt_contour == cnt)
         num_intersect = np.count_nonzero(pred[gt_contour == cnt] == 255)
         if num_intersect/num >= 0.5: 
             num_right +=1
-    return num_right/len(contours)
+    return num_right/(len(contours)-1)
 
 
 if __name__ == "__main__":
-    base = "/Volumes/Normal/gapjnc/resuklts/assembled_2d_membrane_del/"
+    base = "/Volumes/Normal/gapjnc/resuklts/assembled_2d_resnet_run1/"
     img = cv2.imread(base+"SEM_dauer_2_image_export_s101_Y16_X18_gt.png")
-    # print(len(center_img(img)[0]))
+
     files = glob.glob(base+"SEM_dauer_2_image_export_*pred.png")
     rec = []
     for file in tqdm(files):
@@ -405,5 +407,5 @@ if __name__ == "__main__":
         pred = cv2.cvtColor(cv2.imread(file), cv2.COLOR_BGR2GRAY)
         recall = entity_recall(gt_cont, pred)
         print(recall)
-        rec.append(rec)
+        rec.append(recall)
     print(np.nanmean(rec))

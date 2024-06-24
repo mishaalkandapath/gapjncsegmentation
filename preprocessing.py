@@ -1,5 +1,6 @@
 import cv2, re, os, sys, shutil, numpy as np
 from tqdm import tqdm
+from postprocessing import center_img
 
 
 """
@@ -270,11 +271,104 @@ def create_train_val_split(dataset_dir, output_dir, td=False, filter_neurons=Fal
         for j in extras:
             copyfn(os.path.join(dataset_dir, f"{j}", valid_adds[j][i]), os.path.join(output_dir, f"{j}", valid_adds[j][i]))
     
+def create_entity_sequence_dataset(imgs_dir, output_dir, seg_dir=None, img_size=512, image_to_seg_name_map=None, add_dir=None, add_dir_maps=None, seg_ignore=(2, 15)):
+    assert (add_dir is None and add_dir_maps is None or add_dir is not None and add_dir_maps is not None), "Missing additional directory name mapping for additional data directories, or vice versa"
+    if image_to_seg_name_map is None:
+        print("WARNING: No image to segmentation name mapping provided, assuming the default naming convention")
+        image_to_seg_name_map = lambda x: x.replace('img', 'seg')
 
+    if os.path.isdir(output_dir):
+        print("WARNING: Output directory already exists, deleting it")
+        response = input("Do you want to continue? (y/n): ")
+        if response.lower() == 'y':
+            os.system(f"rm -rf {output_dir}")
+        else:
+            sys.exit(0)
     
-
-
+    os.makedirs(output_dir)
+    #make subdirs
+    os.makedirs(os.path.join(output_dir, "gts_mod"))
+    os.makedirs(os.path.join(output_dir, "gts_mod_centers"))
+    gj_set = set()
+    imgs = sorted(os.listdir(imgs_dir))
+    
+    prev_gt = None
+    for i in tqdm(range(len(imgs))):
+        img = cv2.imread(os.path.join(imgs_dir, imgs[i]))
+        gt = cv2.imread(os.path.join(seg_dir, image_to_seg_name_map(imgs[i])))
         
+        #filter unwanted gts
+        for ig in seg_ignore:
+            gt[gt == ig] = 0
+        # get the contours and centers:
+        gt_contours, gt_centers = center_img(gt)
+        
+        if i != 0:
+            #trace 
+            new_gt_contours = np.zeros_like(gt_contours)
+            new_gt_centers = np.zeros_like(gt_centers)
+            for c in gj_set:
+                temp_gt = gt_contours != 0
+                temp_prev_gt = prev_gt == c
+                
+                #which center do they belong to?
+                curr_no = np.unique(gt_contours[temp_gt == temp_prev_gt])[1:]
+                for element in curr_no:
+                    new_gt_contours[gt_contours == element] = c
+                    new_gt_centers[gt_centers == element] = c
+
+            
+            #everything has been assigned, what is leftover?
+            leftover = np.unique(gt_contours * (new_gt_contours == 0))
+            leftover = leftover[leftover != 0]
+            if len(leftover) >= 0:
+                for element in leftover:
+                    gj_set.add(len(gj_set) + 1)
+                    new_gt_contours[gt_contours == element] = len(gj_set) + 1
+                    new_gt_centers[gt_centers == element] = len(gj_set) + 1
+            cv2.imwrite(os.path.join(output_dir, f"gts_mod/{imgs[i]}"), new_gt_contours)
+            cv2.imwrite(os.path.join(output_dir, f"gts_mod_centers/{imgs[i]}"), new_gt_centers)
 
 
+        else:
+            contours = np.unique(gt_contours)
+            contours = contours[contours != 0]
+            gj_set = set(contours)
+            prev_gt = gt_contours
+            cv2.imwrite(os.path.join(output_dir, f"gts_mod/{imgs[i]}"), gt_contours)
+            cv2.imwrite(os.path.join(output_dir, f"gts_mod_centers/{imgs[i]}"), gt_centers)
+    f = open("gj_set.txt", "w")
+    f.write(str(gj_set))
+    f.close()
 
+    #split stuff lesgo 
+    os.makedirs(os.path.join(output_dir, "imgs"))
+    os.makedirs(os.path.join(output_dir, "gts"))
+    if add_dir:
+        for i in (add_dir):
+            os.makedirs(os.path.join(output_dir, os.path.split(i)[-1]))
+        
+    for i in range(len(gj_set)):
+        os.makedirs(os.path.join(output_dir, f"gts/{i}"))
+        os.make_dirs(os.path.join(output_dir, f"imgs/{i}"))
+        if add_dir:
+            for j in (add_dir):
+                os.makedirs(os.path.join(output_dir, os.path.split(j)[-1], str(i)))
+    
+    for i in tqdm(range(len(imgs))):
+        gt_contours, gt_centers = cv2.imread(os.path.join(output_dir, f"gts_mod/{imgs[i]}"), cv2.COLOR_BGR2GRAY), cv2.imread(os.path.join(output_dir, f"gts_mod_centers/{imgs[i]}"), cv2.COLOR_BGR2GRAY)
+        #contours
+        contours = np.unique(gt_contours)
+        contours = contours[contours != 0]
+        for c in contours:
+            #center location
+            row, col = np.where(gt_centers == c)
+            split_img = img[row[0]-img_size//2:row[0]+img_size//2, col[0]-img_size//2:col[0]+img_size//2]
+            cv2.imwrite(os.path.join(output_dir, f"imgs/{c}/{imgs[i]}"), split_img)
+            split_gt = gt_contours[row[0]-img_size//2:row[0]+img_size//2, col[0]-img_size//2:col[0]+img_size//2] != 0
+            cv2.imwrite(os.path.join(output_dir, f"gts/{c}/{imgs[i]}"), split_gt)
+            if add_dir:
+                for j in (add_dir):
+                    dat = cv2.imread(os.path.join(add_dir[j], add_dir_maps[j](imgs[i])))
+                    split_dat = dat[row[0]-img_size//2:row[0]+img_size//2, col[0]-img_size//2:col[0]+img_size//2]
+                    cv2.imwrite(os.path.join(output_dir, os.path.split(j)[-1], str(c), imgs[i]), split_dat)
