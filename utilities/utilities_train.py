@@ -56,9 +56,6 @@ def parse_arguments():
     parser.add_argument("--width", type=int, default=512, help="Width of input")
     parser.add_argument("--depth", type=int, default=3, help="Depth of input")
 
-
-
-
     args = parser.parse_args()
     return args
 

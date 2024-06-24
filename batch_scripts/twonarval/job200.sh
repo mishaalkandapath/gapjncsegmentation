@@ -28,27 +28,26 @@ LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
 LOSS_DIR=/home/hluo/scratch/losses
-IMG_DIR_LIST="/home/hluo/scratch/filtered_0_50_3x512x512/original/train /home/hluo/scratch/filtered_100_110_3x512x512_40/original/train"
-GT_DIR_LIST="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/train /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/train"
-VALID_IMG_DIR_LIST="/home/hluo/scratch/filtered_0_50_3x512x512/original/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/original/valid"
-VALID_GT_DIR_LIST="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/valid"
+TRAIN_X_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/original/train /home/hluo/scratch/filtered_100_110_3x512x512_40/original/train"
+TRAIN_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/train /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/train"
+VALID_X_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/original/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/original/valid"
+VALID_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/valid"
 python ~/gapjncsegmentation/train.py \
-    --img_dir_list $IMG_DIR_LIST \
-    --gt_dir_list $GT_DIR_LIST \
-    --valid_img_dir_list $VALID_IMG_DIR_LIST \
-    --valid_gt_dir_list $VALID_GT_DIR_LIST \
-    --loss_dir $LOSS_DIR \
+    --train_x_dirs "$TRAIN_X_DIRS" \
+    --train_y_dirs "$TRAIN_Y_DIRS" \
+    --valid_x_dirs "$VALID_X_DIRS" \
+    --valid_y_dirs "$VALID_Y_DIRS" \
+    --model_dir "$MODEL_DIR" \
+    --loss_dir "$LOSS_DIR" \
+    --results_dir "$RESULTS_DIR" \
+    --load_model_path "$LOAD_MODEL_PATH" \
     --epochs $EPOCHS \
     --batch_size $BATCH_SIZE \
     --lr $LR \
-    --data_dir $DATA_DIR \
     --model_name $MODEL_NAME \
     --num_workers $NUM_WORKERS \
-    --model_dir $MODEL_DIR \
     --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG \
-    --results_dir $RESULTS_DIR \
     --augment $AUGMENT \
-    --load_model_path $LOAD_MODEL_PATH \
     --alpha $ALPHA \
     --beta $BETA \
     --gamma $GAMMA \
