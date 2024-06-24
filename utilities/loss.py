@@ -13,9 +13,9 @@ import torchvision.transforms as transforms
 import torchio as tio
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha, gamma=3, device=torch.device("cpu")):
+    def __init__(self, alpha, gamma=3):
         super(FocalLoss, self).__init__()
-        self.device = device
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.gamma = torch.tensor(gamma).to(device)
         self.alpha = torch.tensor(alpha).to(device)
     
@@ -26,28 +26,6 @@ class FocalLoss(nn.Module):
         focal_loss = self.alpha[targets] * (1-pt)**self.gamma * bce_loss
         return focal_loss.mean()
 
-# class FocalTverskyLoss(nn.Module):
-#     """ 
-#     alpha: larger alpha penalize FP more
-#     beta: larger beta penalize FN more
-#     """
-#     def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu")):
-#         super(FocalTverskyLoss, self).__init__()
-#         self.device = device
-#         self.gamma = gamma
-#         self.alpha = torch.Tensor([alpha]).to(device)
-#         self.beta = torch.Tensor([beta]).to(device)
-    
-#     def forward(self, inputs, targets, smooth=1):
-#         true_pos = torch.sum(targets * inputs, dim=(1,2,3,4))
-#         false_neg = torch.sum(targets * (1-inputs), dim=(1,2,3,4))
-#         false_pos = torch.sum((1-targets) * inputs, dim=(1,2,3,4))
-#         tversky = (true_pos + smooth) / (true_pos + self.alpha * false_neg + self.beta * false_pos + smooth)
-#         tversky_loss = 1 - tversky
-#         focal_tversky_loss = torch.pow(tversky_loss, self.gamma)
-#         return focal_tversky_loss.mean()
-
-
 class FocalTverskyLoss(nn.Module):
     def __init__(self, alpha, beta, gamma, weight=None, size_average=True):
         super(FocalTverskyLoss, self).__init__()
@@ -57,9 +35,8 @@ class FocalTverskyLoss(nn.Module):
         self.gamma = torch.tensor(gamma).to(device)
 
     def forward(self, inputs, targets, smooth=1):
-        
         #comment out if your model contains a sigmoid or equivalent activation layer
-        inputs = F.sigmoid(inputs)       
+        # inputs = F.sigmoid(inputs)       
         
         #flatten label and prediction tensors
         inputs = inputs.view(-1)
@@ -76,47 +53,34 @@ class FocalTverskyLoss(nn.Module):
         return FocalTversky
 
 class FocalTverskyLossWith2d3d(nn.Module):
-    def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, device=torch.device("cpu"), intermediate_weight = 0.33):
+    def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, intermediate_weight = 0.33):
         super(FocalTverskyLoss, self).__init__()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.intermediate_weight = torch.Tensor([intermediate_weight]).to(device) # constant that weighs importance of intermediate 2D class predictions in the loss function
         self.intermediate_loss = FocalTverskyLoss(alpha, beta, gamma, device)
         self.final_loss = FocalTverskyLoss(alpha, beta, gamma, device)
-    
     def forward(self, preds_2d, preds_3d, targets):
         loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss
         loss_3d = self.final_loss(preds_3d, targets) # final 3D class predictions
-        return loss_3d + self.c_2d * loss_2d
+        return loss_3d + self.intermediate_weight * loss_2d
     
 class FocalLossWith2d3d(nn.Module):
-    def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
+    def __init__(self, alpha, gamma=2, intermediate_weight=0.33):
         """ 
         Args:
             alpha: tensor of shape (2,) with the alpha values for the focal loss
         """
         super(FocalLossWith2d3d, self).__init__()
-        self.c_2d = 0.33 # constant that weighs importance of intermediate 2D class predictions in the loss function
-        self.c_2d = torch.Tensor([self.c_2d]).to(device)
-        self.alpha = alpha
-        self.gamma = gamma
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.intermediate_weight = torch.Tensor([intermediate_weight]).to(device) # constant that weighs importance of intermediate 2D class predictions in the loss function
         self.intermediate_loss = FocalLoss(alpha, gamma, device)
         self.final_loss = FocalLoss(alpha, gamma, device)
     
     def forward(self, preds_2d, preds_3d, targets):
         loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss
         loss_3d = self.final_loss(preds_3d, targets)
-        return loss_3d + self.c_2d * loss_2d
+        return loss_3d + self.intermediate_weight * loss_2d
 
-# class DiceLoss(nn.Module):
-#     def __init__(self):
-#         super(DiceLoss, self).__init__()
-    
-#     def forward(self, inputs, targets, smooth=1e-6):
-#         inputs = inputs.view(-1) # flatten
-#         targets = targets.view(-1) # flatten
-#         intersection = (inputs * targets).sum() # (pred * target) is 1 if both are 1, 0 otherwise
-#         dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
-#         dice_loss = 1 - dice
-#         return dice_loss
-    
 class DiceLoss(nn.Module):
     def __init__(self, weight=None, size_average=True):
         super(DiceLoss, self).__init__()

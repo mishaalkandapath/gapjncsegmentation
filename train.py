@@ -96,19 +96,30 @@ if __name__ == "__main__":
     # Initialize loss function
     print("------------------------------Initializing Loss Function------------------------------")
     print("Args loss type", args.loss_type)
+    use2d3d = args.use2d3d
     if args.loss_type == "combo":
         criterion = ComboLoss(alpha=args.alpha, ce_ratio=args.ce_ratio)
         print("using combo loss", "alpha:", args.alpha, "ce_ratio", args.ce_ratio)
     elif args.loss_type == "focalt":
-        criterion = FocalTverskyLoss(alpha=args.alpha, beta=args.beta, gamma=args.gamma)
-        print("using focal tverskys loss", "alpha:", args.alpha, "beta:", args.beta, "gamma:", args.gamma)
+        if use2d3d:
+            print("using focal tverskys loss with 2d3d")
+            criterion = FocalTverskyLossWith2d3d(alpha=args.alpha, beta=args.beta, gamma=args.gamma)
+        else:
+            criterion = FocalTverskyLoss(alpha=args.alpha, beta=args.beta, gamma=args.gamma)
+            print("using focal tverskys loss")
+        print("alpha:", args.alpha, "beta:", args.beta, "gamma:", args.gamma)
     elif args.loss_type == "dicebce":
         criterion = DiceBCELoss()
         print("using dicebce loss")
     elif args.loss_type == "focal":
         alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
-        criterion = FocalLoss(alpha=alpha, gamma=args.gamma, device=DEVICE)
-        print(f"using focal loss", "alpha:", args.alpha, "gamma:", args.gamma)
+        if use2d3d:
+            print("using focal loss with 2d3d")
+            criterion = FocalLossWith2d3d(alpha=args.alpha, gamma=args.gamma)
+        else:
+            criterion = FocalLoss(alpha=alpha, gamma=args.gamma, device=DEVICE)
+            print(f"using focal loss")
+        print("alpha:", args.alpha, "gamma:", args.gamma)
     else:
         criterion = DiceLoss()
         print("using dice loss")
@@ -131,4 +142,5 @@ if __name__ == "__main__":
           num_predictions_to_log=args.num_predictions_to_log,
           depth=args.depth,
           height=args.height,
-          width=args.width)
+          width=args.width,
+          use2d3d=use2d3d)
