@@ -1,3 +1,14 @@
+""" 
+remove_invalid_samples.py
+Given a directory of subvolumes, this script will remove any subvolumes that do not have the correct shape.
+
+Sample usage:
+DATA_DIR="data/tiniest_data_64"
+DEPTH=64
+HEIGHT=64
+WIDTH=64
+python remove_invalid_samples.py --data_dir $DATA_DIR --depth $DEPTH --height $HEIGHT --width $WIDTH
+"""
 import os
 import numpy as np
 import argparse

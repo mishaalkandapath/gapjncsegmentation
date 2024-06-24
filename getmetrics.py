@@ -1,11 +1,10 @@
 import numpy as np
 import os
 import argparse
-from dataset import *
+from utilities.dataset import *
 from models import *
-from utilities_train import *
-from utilities import *
-from randomstuff import *
+from utilities.utilities_train import *
+from utilities.utilities import *
 from matplotlib.colors import ListedColormap
 
 print("starting test")
@@ -94,7 +93,7 @@ for i in range(len(valid_dataset)):
     
     # save the results
     ## original
-    combined_volume = np.asarray((mask[1] * 2 + pred).detach().cpu())
+    combined_volume = np.asarray((mask[1] * 2 + pred).detach())
     colored_combined_volume = get_colored_image(combined_volume)
     fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
     visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")
@@ -105,7 +104,7 @@ for i in range(len(valid_dataset)):
     plt.close("all")
     
     ## expanded mask
-    combined_volume = np.asarray((expanded_mask * 2 + pred).detach().cpu())
+    combined_volume = np.asarray((expanded_mask * 2 + pred).detach())
     colored_combined_volume = get_colored_image(combined_volume)
     fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
     visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")
@@ -116,7 +115,7 @@ for i in range(len(valid_dataset)):
     plt.close("all")
     
     ## expanded pred
-    combined_volume = np.asarray((mask[1] * 2 + expanded_pred).detach().cpu())
+    combined_volume = np.asarray((mask[1] * 2 + expanded_pred).detach())
     colored_combined_volume = get_colored_image(combined_volume)
     fig, ax = plt.subplots(4, depth, figsize=(15, 5), num=1)
     visualize_3d_slice(image[0].cpu().numpy(), ax[0], "Input")

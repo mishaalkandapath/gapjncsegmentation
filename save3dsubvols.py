@@ -1,14 +1,22 @@
+""" 
+save3dsubvols.py:
+Given a directory of 2D images, this script will slice the full volume into subvolumes and save them.
+
+Sample usage:
+MASK_DIR="/Volumes/LaCie/sem_dauer_2_gj_gt"
+IMG_DIR="/Volumes/LaCie/SEM_dauer_2_em"
+SAVE_DIR="/Volumes/LaCie/sem_dauer_2_gj_gt"
+MODEL_PATH="model_job84"
+python save3dsubvols.py --mask_dir $MASK_DIR --img_dir $IMG_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH
+"""
 import torchio as tio
 import torch
 import os
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import re
-import tqdm
 import argparse
-from models import *
-from utilities import *
+from utilities.models import *
+from utilities.utilities import *
 
 print("starting...")
 # Adding arguments with default values

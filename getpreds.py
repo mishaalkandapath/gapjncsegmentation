@@ -1,10 +1,22 @@
+""" 
+getpreds.py
+Given a directory of subvolumes, this script will load the model and predict on each subvolume, and generate test metrics such as precision and recall.
+
+Sample usage:
+X_DIR="data/tiniest_data_64"
+Y_DIR="data/tiniest_data_64"
+SAVE_DIR="data/tiniest_data_64"
+MODEL_PATH="model_job84"
+python getpreds.py --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH
+"""
+
 import os
 from torch.utils.data import DataLoader
-from dataset import SliceDatasetWithFilename, SliceDatasetWithFilenameAllSubfolders
+from utilities.dataset import SliceDatasetWithFilename, SliceDatasetWithFilenameAllSubfolders
 import argparse
 import time
 from models import *
-from utilities import *
+from utilities.utilities import *
 import torchio as tio
 
 def main():

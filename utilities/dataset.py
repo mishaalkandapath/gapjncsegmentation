@@ -22,11 +22,13 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
             self, 
             images_dir_lst, 
             masks_dir_lst,
-            augment=False
+            augment=False,
+            downsample_factor=1
     ):
         
         self.image_paths = []
         self.mask_paths = []
+        self.downsample_factor=downsample_factor
         for images_dir in images_dir_lst:
             self.image_paths.extend([os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))])
         for masks_dir in masks_dir_lst:   
@@ -54,10 +56,11 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
         image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask[mask!=0]=1
-    
+            
+        if self.downsample_factor > 1:
+            image = torch.nn.MaxPool3d(self.downsample_factor)(image)
+            
         if torch.std(image) == 0:
-            # Handle this case appropriately, either by skipping normalization
-            # or by taking an alternative action such as logging the issue
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
         else:
             image = tio.ZNormalization()(image)
