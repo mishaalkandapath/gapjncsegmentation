@@ -97,13 +97,14 @@ if __name__ == "__main__":
     print("------------------------------Initializing Loss Function------------------------------")
     print("Args loss type", args.loss_type)
     use2d3d = args.use2d3d
+    intermediate_weight = args.intermediate_weight
     if args.loss_type == "combo":
         criterion = ComboLoss(alpha=args.alpha, ce_ratio=args.ce_ratio)
         print("using combo loss", "alpha:", args.alpha, "ce_ratio", args.ce_ratio)
     elif args.loss_type == "focalt":
         if use2d3d:
             print("using focal tverskys loss with 2d3d")
-            criterion = FocalTverskyLossWith2d3d(alpha=args.alpha, beta=args.beta, gamma=args.gamma)
+            criterion = FocalTverskyLossWith2d3d(alpha=args.alpha, beta=args.beta, gamma=args.gamma, intermediate_weight=intermediate_weight)
         else:
             criterion = FocalTverskyLoss(alpha=args.alpha, beta=args.beta, gamma=args.gamma)
             print("using focal tverskys loss")
@@ -115,7 +116,7 @@ if __name__ == "__main__":
         alpha = torch.Tensor([args.alpha, 1-args.alpha]).to(DEVICE)
         if use2d3d:
             print("using focal loss with 2d3d")
-            criterion = FocalLossWith2d3d(alpha=args.alpha, gamma=args.gamma)
+            criterion = FocalLossWith2d3d(alpha=args.alpha, gamma=args.gamma, intermediate_weight=intermediate_weight)
         else:
             criterion = FocalLoss(alpha=alpha, gamma=args.gamma, device=DEVICE)
             print(f"using focal loss")

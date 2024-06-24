@@ -46,6 +46,7 @@ def parse_arguments():
     parser.add_argument("--augment", type=lambda x: (str(x).lower() == 'true'), default=True, help="Whether to augment the data")
     parser.add_argument("--use2d3d", type=lambda x: (str(x).lower() == 'true'), default=True, help="Whether to use 2d3d loss")
     parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
+    parser.add_argument("--intermediate_weight", type=float, default=0.33, help="Intermediate weight parameter for 2d3d loss")
     parser.add_argument("--gamma", type=float, default=3, help="Gamma parameter for Focal Loss")
     parser.add_argument("--alpha", type=float, default=0.04, help="Weight for class 0 in Focal Loss")
     parser.add_argument("--beta", type=float, default=0.96, help="Weight for class 0 in Focal Loss")
