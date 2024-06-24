@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader
 from utilities.utilities import *
-from models import *
+from utilities.models import *
 from utilities.dataset import *
-from loss import *
+from utilities.loss import *
 
 def parse_arguments():
     """ Parse command line arguments """
