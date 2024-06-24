@@ -95,6 +95,16 @@ def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False,
 
     return train, valid
 
+def write_valid_imgs(batch, batch_gt, batch_no, epoch):
+    global model_folder
+    sample_folder = model_folder + "images"
+    os.makedirs(sample_folder, exist_ok=True)
+
+    for im in range(batch.size(0)):
+        assert cv2.imwrite(os.path.join(sample_folder, f"epoch{epoch}_b{batch_no}_{im}.png"), batch[im].cpu().expand(3, -1, -1).permute(1,2,0).detach().numpy() * 255)
+        assert cv2.imwrite(os.path.join(sample_folder, f"epoch{epoch}_b{batch_no}_{im}_gt.png"), batch_gt[im].cpu().expand(3, -1, -1).permute(1,2,0).detach().numpy() * 255)
+
+
 def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem_feat=False, epochs=30, decay=None, gen_gj_entities=True):
     global table, class_labels, model_folder, DEVICE, args
     
@@ -193,6 +203,117 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                     epoch_non_empty = False
                 val_prec_avg.append(precision_f(valid_pred >= 0.5, valid_labels).detach().item())
                 val_recall_avg.append(recall_f(valid_pred >= 0.5, valid_labels).detach().item())
+
+                #save it locally:
+                write_valid_imgs(valid_pred, valid_labels, i, epoch)
+            # log some metrics
+            valid_loss = np.sum(np.array(val_loss_avg) * np.array(val_count))/sum(val_count)
+            wandb.log({"valid_loss": val_loss_avg})
+            val_prec_avg = np.sum(np.array(val_prec_avg) * np.array(val_count))/sum(val_count)
+            val_recall_avg = np.sum(np.array(val_recall_avg) * np.array(val_count))/sum(val_count)
+            wandb.log({"valid_precision": val_prec_avg})
+            wandb.log({"valid_recall": val_recall_avg})
+        if decay is not None: decay.step(valid_loss)
+
+        print(f"Epoch: {epoch} | Loss: {loss} | Valid Loss: {valid_loss} | Valid Prec: {val_prec_avg} | Valid Recall: {val_recall_avg}")
+        print(f"Time elapsed: {time.time() - start} seconds")
+        temp_name = model_name+"_epoch"+str(epoch)
+        joblib.dump(model, os.path.join(model_folder, f"{temp_name}.pk1"))
+    print(f"Total time: {time.time() - start} seconds")
+    wandb.log({"Table" : table})
+    joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
+    wandb.finish()
+    try:
+        joblib.dump(loss_list, os.path.join(model_folder, "loss_list_1.pkl"))
+    except:
+        print("Failed to save loss list")
+
+def extend_train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem_feat=False, epochs=30, decay=None, gen_gj_entities=True):
+    global table, class_labels, model_folder, DEVICE, args
+    
+    print(f"Using device: {DEVICE}")
+    model_name = "model5"
+    def sigint_handler(sig, frame):
+        if table is not None:
+            print("logging to WANDB")
+            wandb.log({"Table" : table})
+            joblib.dump(model, os.path.join(model_folder, f"{model_name}.pk1"))
+            wandb.finish()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, sigint_handler)
+    signal.signal(signal.SIGUSR1, sigint_handler)
+
+    recall_f = lambda pred, gt: torch.nansum(pred[(pred == 1) & (gt == 1)])/torch.nansum(gt[gt == 1])
+    precision_f = lambda pred, gt: torch.nansum(pred[(pred == 1) & (gt == 1)])/torch.nansum(pred[pred == 1])
+
+    for epoch in range(epochs):
+        pbar = tqdm(total=len(train_loader))
+        for i, data in enumerate(train_loader):
+            pbar.set_description("Progress: {:.2%}".format(i/len(train_loader)))
+            inputs, pred_image, pred_mask, labels = data # (inputs: [batch_size, 1, 512, 512], labels: [batch_size, 1, 512, 512])
+
+            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            pred_image, pred_mask = pred_mask.to(DEVICE), pred_mask.to(DEVICE)
+
+            pred = model(inputs, pred_image, pred_mask)
+            
+            criterion(pred.squeeze(1), labels.squeeze(1), )            
+            loss.backward() 
+            
+            # log some metrics
+            wandb.log({"train_precision": precision_f(pred >= 0.5, labels)})
+            wandb.log({"train_recall": recall_f(pred >= 0.5, labels)})
+
+            if args.mask_neurons and args.gendice: torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+            optimizer.step() 
+            pbar.set_postfix(step = f"Step: {i}", loss = f"Loss: {loss}")
+            loss_list.append(loss)
+            wandb.log({"loss": loss})
+            pbar.update(1)
+            pbar.refresh()
+            # break
+
+        val_loss_avg, val_count = [], []
+        val_prec_avg, val_recall_avg = [], []
+        with torch.no_grad():
+                    
+            epoch_non_empty = False
+
+            for i, data in enumerate(valid_loader):            
+                valid_inputs, valid_pred_image, valid_pred_mask, valid_labels = data
+                valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
+                valid_pred_mask, valid_pred_image = valid_pred_mask.to(DEVICE), valid_pred_image.to(DEVICE)
+
+                valid_pred = model(valid_inputs, valid_pred_image, valid_pred_mask)
+                valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1))
+                mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy()[0] if args.td else valid_inputs[0].squeeze(0).cpu().numpy(), 
+                                        masks = {
+                                            "predictions" : {
+                                "mask_data" : (torch.round(nn.Sigmoid()(valid_pred[0].squeeze(0))) * 255).cpu().detach().numpy(),
+                                "class_labels" : class_labels
+                            },
+                            "ground_truth" : {
+                                "mask_data" : (valid_labels[0].squeeze(0) * 255).cpu().numpy(),
+                                "class_labels" : class_labels
+                            }}
+                )
+                table.add_data(f"Epoch {epoch} Step {i}", mask_img)
+                # wandb.log({"valid_loss": valid_loss})
+                val_loss_avg.append(valid_loss.detach().item())
+                val_count.append(valid_inputs.shape[0])
+                uniques = np.unique(torch.round(nn.Sigmoid()(valid_pred[0].squeeze(0))).detach().cpu().numpy())
+                if len(uniques) == 2:
+                    if not epoch_non_empty:
+                        epoch_non_empty = True
+                        print("UNIQUE OUTPUTS!")
+                else:
+                    epoch_non_empty = False
+                val_prec_avg.append(precision_f(valid_pred >= 0.5, valid_labels).detach().item())
+                val_recall_avg.append(recall_f(valid_pred >= 0.5, valid_labels).detach().item())
+
+                #save it locally:
+                write_valid_imgs(valid_pred, valid_labels, i, epoch)
             # log some metrics
             valid_loss = np.sum(np.array(val_loss_avg) * np.array(val_count))/sum(val_count)
             wandb.log({"valid_loss": val_loss_avg})
@@ -347,6 +468,7 @@ if __name__ == "__main__":
     parser.add_argument("--spatial", action="store_true", help="Spatial Pyramid")
     parser.add_argument("--residual", action="store_true")
     parser.add_argument("--resnet", action="store_true")
+    parser.add_argument("--extend", action="store_true")
 
     args = parser.parse_args()
 
@@ -364,7 +486,7 @@ if __name__ == "__main__":
 
         
         if args.dataset is not None:
-            train_dir = (DATASETS[args.dataset])
+            train_dir = (DATASETS[args.dataset if not args.extend else "extend"])
             train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat, mito_mask=args.mask_mito, chain_length=args.td, gen_gj_entities=args.customloss)
         else: make_dataset_old(args.aug)
 
@@ -376,7 +498,9 @@ if __name__ == "__main__":
         model_folder += args.dataset+f"{'_residual' if args.residual else ''}"+"/" if not args.spatial else args.dataset+f"spatial{'_residual' if args.residual else ''}"+"/"
         sample_preds_folder += args.dataset + "/" if not args.spatial else args.dataset+f"spatial{'_residual' if args.residual else ''}"+"/"
 
-        
+        #extend?
+        model_folder += model_folder[:-1]+"extend/"
+        sample_preds_folder += sample_preds_folder[:-1]+"extend/"
 
         if "test" in args.dataset:
             print(len(train_dataset))
@@ -388,16 +512,18 @@ if __name__ == "__main__":
 
         if not args.customloss:
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12)
-            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, num_workers=12)      
+            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=12)      
         else:
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=12, collate_fn=new_collate)
-            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, num_workers=12, collate_fn=new_collate)        
+            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=12, collate_fn=new_collate)        
         
         print("Data loaders created.")
 
         DEVICE = torch.device("cuda") if torch.cuda.is_available() or not args.cpu else torch.device("cpu")
 
-        if args.model_name is None and not args.resnet:
+        if args.extend:
+            model = ExtendUNet().to(DEVICE)        
+        elif args.model_name is None and not args.resnet:
             model = UNet(three=args.td, scale=args.focalweight == 0, spatial=args.spatial, dropout=args.dropout, residual=args.residual).to(DEVICE) if not args.mem_feat else MemUNet().to(DEVICE)
         elif args.model_name is None and args.resnet:
             model = ResUNet(three=args.td).to(DEVICE) if not args.mem_feat else MemResUNet(three=args.td).to(DEVICE)
@@ -407,7 +533,7 @@ if __name__ == "__main__":
 
             print("Current dataset {}".format(args.dataset))
 
-            if args.dataset != "tiny" and args.dataset != "erased" and args.dataset != "new" and args.dataset != "new3d" and args.dataset != "test":
+            if args.dataset != "tiny" and args.dataset != "erased" and args.dataset != "new" and args.dataset != "new3d" and args.dataset != "test" and not args.extend:
                 print("MASKING NEURONS IS SET TO {}".format(args.mask_neurons))
 
                 #calc focal weighting:
@@ -431,7 +557,7 @@ if __name__ == "__main__":
             elif args.dataset == "erased":
                 cls_weights = torch.Tensor([1, 15])
             else:
-                cls_weights = torch.Tensor([0.05, 0.95])
+                cls_weights = torch.Tensor([0.2, 0.8])
 
             #init oprtimizers
             if args.customloss:
@@ -485,7 +611,9 @@ if __name__ == "__main__":
             print("SAVING MODELS TO {}".format(model_folder))
     
             print(f"running for {300 if not args.epochs else args.epochs} epochs")
-            train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=300 if not args.epochs else args.epochs, mem_feat=args.mem_feat, gen_gj_entities=args.customloss)
+            
+            train_wrapper = train_loop if not args.extend else extend_train_loop
+            train_wrapper(model, train_loader, criterion, optimizer, valid_loader, epochs=300 if not args.epochs else args.epochs, mem_feat=args.mem_feat, gen_gj_entities=args.customloss)
 
         else:
             inference_save(model, train_dataset, valid_dataset)

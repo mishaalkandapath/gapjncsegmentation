@@ -22,7 +22,7 @@ import torchvision.transforms as transforms
 # from torchvision.ops import DropBlock2D, DropBlock3D
 from collections import OrderedDict
 from PIL import Image
-import re, math
+import re, math, random
 import pickle as p
 
 from resnet import ResNet, BasicBlock
@@ -59,14 +59,14 @@ class CaImagesDataset(torch.utils.data.Dataset):
         masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
         
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts"))) if "DS" not in image_id and (True and self.centers_and_contours(cv2.imread(os.path.join(masks_dir, image_id)), filter_mode=True))]
-        self.image_paths = [os.path.join(images_dir, image_id) for image_id in self.mask_paths if "DS" not in image_id]
+        self.image_paths = [os.path.join(images_dir, os.path.split(image_id.replace("sem2dauer_gj_2d_training.vsseg_export_", "SEM_dauer_2_image_export_"))[-1]) for image_id in self.mask_paths if "DS" not in image_id]
 
         if mask_neurons:
             assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "illegal naming, feds on the way"
             self.neuron_paths = []
             for neuron_id in self.image_paths:
                 neuron_id = os.path.split(neuron_id)[-1]
-                item = os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_").replace(".png.png", ".png"))
+                item = os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), os.path.split(neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_"))[-1].replace(".png.png", ".png"))
                 self.neuron_paths.append(item)
 
         else: self.neuron_paths = None
@@ -512,6 +512,92 @@ class TestDataset(torch.utils.data.Dataset):
         # return length of 
         return len(self.image_paths)
 
+class ExtendDataset(torch.utils.data.Dataset):
+
+    """Calcium imaging images dataset. Read images, apply augmentation and preprocessing transformations.
+    
+    Args:
+        images_dir (str): path to images folder
+        masks_dir (str): path to segmentation masks folder
+        augmentation (albumentations.Compose): data transfromation pipeline 
+            (e.g. flip, scale, etc.)
+        preprocessing (albumentations.Compose): data preprocessing 
+            (e.g. noralization, shape manipulation, etc.)
+    
+    """
+    
+    def __init__(
+            self, 
+            dataset_dir,  
+            image_dim = (512, 512),
+            split=0 #0 for train, 1 for valid
+    ):
+        prefix = "train" if not split else "valid"
+        images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
+        masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
+        
+        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts"))) if "DS" not in image_id and (True and self.centers_and_contours(cv2.imread(os.path.join(masks_dir, image_id)), filter_mode=True))]
+        self.image_paths = [os.path.join(images_dir, os.path.split(image_id.replace("sem2dauer_gj_2d_training.vsseg_export_", "SEM_dauer_2_image_export_"))[-1]) for image_id in self.mask_paths if "DS" not in image_id]
+
+        self.image_dim = image_dim
+
+    def __getitem__(self, i):
+
+        # read the directories
+        img_files = os.listdir(self.image_paths[i])
+        mask_files = os.listdir(self.mask_paths[i])
+
+        # read the input EM image and its target label
+        try:
+            image = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], self.image_paths[i]+".png")), cv2.COLOR_BGR2GRAY) # each pixel is 
+            image_files.remove(self.image_paths[i]+".png")
+        except Exception as e:
+            print(self.image_paths[i])
+            raise Exception(self.image_paths[i])
+            
+        mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], self.mask_paths[i]+".png")), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
+        mask_files.remove(self.mask_paths[i]+".png")
+
+        #read the previous/next section's prediction and EM
+        pred_image = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], image_files[0])), cv2.COLOR_BGR2GRAY)
+        pred_mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], mask_files[1])), cv2.COLOR_BGR2GRAY)
+
+        mask[mask == 0] = 0
+        mask[mask == 255] = 1
+        pred_mask[pred_mask == 0] = 0
+        pred_mask[pred_mask == 255] = 1
+        
+        # apply augmentations
+        if random.random() >= 0.5:
+            # image, mask = self.augmentation(image, mask)
+            # image = v2.RandomAutocontrast()(image)
+            augmentation = v2.Compose([
+                v2.RandomHorizontalFlip(p=0.5),
+                v2.RandomVerticalFlip(p=0.5),
+                v2.RandomApply([v2.RandomRotation(degrees=(0, 180))], p=0.5),
+                v2.ColorJitter(contrast=(0, 0.5))
+            ])
+            image, mask, pred_image, pred_mask = augmentation(image, mask, pred_image, pred_mask)
+        
+        # apply preprocessing
+        _transform = []
+        _transform.append(transforms.ToTensor())
+
+        mask = transforms.Compose(_transform)(mask)
+        ont_hot_mask = mask
+        
+
+        _transform_img = _transform.copy()
+        image = transforms.Compose(_transform_img)(image)
+        pred_mask = torch.from_numpy(pred_mask)
+        pred_image = torch.from_numpy(pred_image)
+        
+        return image, pred_image, pred_mask, mask
+        
+    def __len__(self):
+        # return length of 
+        return len(self.image_paths)
+
 class DoubleConv(nn.Module):
     """(Conv2d -> BN -> ReLU) * 2"""
     def __init__(self, in_channels, out_channels, three=False, spatial=False, residual=False, dropout=0):
@@ -746,7 +832,6 @@ class MemResUNet(nn.Module):
         x = self.conv_last(x) # x: (16, 1, 512, 512)
         return x
 
-
 class MemUNet(nn.Module):
     """UNet Architecture with membrane feature information"""
     def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, scale=False):
@@ -802,6 +887,59 @@ class MemUNet(nn.Module):
         x = self.conv_last(x) # x: (16, 1, 512, 512)
         return x
 
+class ExtendUNet(nn.Module):
+    """UNet Architecture with membrane feature information"""
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, scale=False):
+        """Initialize the UNet model"""
+        super(MemUNet, self).__init__()
+        self.three = three
+        self.up_sample_mode = up_sample_mode
+        # Downsampling Path
+        self.down_conv1 = DownBlock(1, 64, three=three) # 3 input channels --> 64 output channels
+        self.down_conv2 = DownBlock(64, 128, three=three) # 64 input channels --> 128 output channels
+
+        self.down_conv1_pimg = DownBlock(1, 64, three=three) # 3 input channels --> 64 output channels
+        self.down_conv2_pimg = DownBlock(64, 128, three=three) # 64 input channels --> 128 output channels
+        self.down_conv1_pmask = DownBlock(1, 64, three=three) # 3 input channels --> 64 output channels
+        self.down_conv2_pmask = DownBlock(64, 128, three=three) # 64 input channels --> 128 output channels
+
+        self.down_conv3 = DownBlock(128, 256) # 128 input channels --> 256 output channels
+        self.down_conv4 = DownBlock(256, 512) # 256 input channels --> 512 output channels
+        # Bottleneck
+        self.double_conv = DoubleConv(512, 1024)
+        # Upsampling Path
+        self.up_conv4 = UpBlock(512 + 1024, 512, self.up_sample_mode) # 512 + 1024 input channels --> 512 output channels
+        self.up_conv3 = UpBlock(256 + 512, 256, self.up_sample_mode)
+        self.up_conv2 = UpBlock(128+ 256, 128, self.up_sample_mode)
+        self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
+        # Final Convolution
+        self.conv_last = nn.Conv2d(64, 1, kernel_size=1)
+
+
+    def forward(self, x, pimg, pmask):
+        """Forward pass of the UNet model
+        x: (16, 1, 512, 512)
+        """
+        # print(x.shape)
+        x, skip1_out = self.down_conv1(x) # x: (16, 64, 256, 256), skip1_out: (16, 64, 512, 512) (batch_size, channels, height, width) 
+        x_pimg, skip1_out_pimg = self.down_conv1_mem(pimg)   
+        x_pmask, skip1_out_pmask = self.down_conv1_mem(pmask)   
+
+
+        x, skip2_out = self.down_conv2(x+x_mem) # x: (16, 128, 128, 128), skip2_out: (16, 128, 256, 256)
+        x_pimg, skip2_out_pimg = self.down_conv2_pimg(x_pimg)   
+        x_pmask, skip2_out_pmask = self.down_conv2_pmask(x_pmask)   
+
+        x, skip3_out = self.down_conv3(x+x_pimg+x_pmask) # x: (16, 256, 64, 64), skip3_out: (16, 256, 128, 128)
+        x, skip4_out = self.down_conv4(x) # x: (16, 512, 32, 32), skip4_out: (16, 512, 64, 64)
+        x = self.double_conv(x) # x: (16, 1024, 32, 32)
+        x = self.up_conv4(x, skip4_out) # x: (16, 512, 64, 64)
+        x = self.up_conv3(x, skip3_out) # x: (16, 256, 128, 128)
+        x = self.up_conv2(x, skip2_out+skip2_out_pimg+skip2_out_pmask) # x: (16, 128, 256, 256)
+        x = self.up_conv1(x, skip1_out+skip1_out_pimg+skip1_out_pmask) # x: (16, 64, 512, 512)
+        x = self.conv_last(x) # x: (16, 1, 512, 512)
+        return x
+
     
 class FocalLoss(nn.Module):
     def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
@@ -812,10 +950,12 @@ class FocalLoss(nn.Module):
         self.alpha = alpha.to(device)
     
     def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
-        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-        pt = torch.exp(-bce_loss)
+        # bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+
         targets = targets.to(torch.int64)
-        loss = self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape) * (1-pt) ** self.gamma * bce_loss
+        # loss = self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape) * (1-pt) ** self.gamma * bce_loss
+        loss = ((1 - torch.nn.Sigmoid()(inputs)) ** self.gamma) * self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape)* (torch.log(1+torch.exp(-inputs)) +torch.log(1+torch.exp(inputs)))
+
         if mito_mask != []:
             #first modify loss_mask, neuron_mask is always on.
             loss_mask = loss_mask | mito_mask
@@ -924,7 +1064,7 @@ class SSLoss(nn.Module):
                            (1-self.lamda) * torch.sum(torch.pow((targets - inputs), 2) * inv_targets, dim=-1)/ (torch.sum(inv_targets, dim=-1) + self.eps))
 
 class SpecialLoss(nn.Module):
-    def __init__(self, bg_imp=0.2):
+    def __init__(self, bg_imp=2e-2):
         super(SpecialLoss, self).__init__()
         self.bg_imp = bg_imp
     
@@ -957,9 +1097,9 @@ class SpecialLoss(nn.Module):
         if mito_mask != []:
             loss_mask = loss_mask | mito_mask 
         if neuron_mask != []:
-            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
-            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
-            bce_loss *= loss_mask
+            if len(targets.shape) > len(neuron_mask.shape): neuron_mask.unsqueeze(-1)
+            # neuron_mask = neuron_mask.view(neuron_mask.shape[0], -1)
+            bce_loss *= neuron_mask
 
         return torch.mean(bce_loss)
         
