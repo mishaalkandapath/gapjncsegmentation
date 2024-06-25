@@ -3,6 +3,7 @@ Utility functions for visualization, processing data, and saving/loading models
 """
 import os
 import cv2
+import sys
 import torchio as tio
 import random
 import re
@@ -383,31 +384,25 @@ def assemble_one_slice(preds_dir, filename_regex,start_y=0, start_x=0, end_s=6, 
     for y in range(start_y, end_y, 512):
         y_acc_pred = []
         for x in range(start_x, end_x, 512):
-            suffix = filename_regex.format(y, x)
-            # print(f"Processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {(slice_num)/total_slices}", end="\r")
+            suffix = filename_regex.format(x,y)
             # load preds
             try:
                 fp=os.path.join(preds_dir, suffix)
-                print(fp)
-                pred_vol = np.load(fp)
-                pred_vol = np.argmax(pred_vol[0], 0) 
+                pred_slice = cv2.imread(fp, cv2.IMREAD_GRAYSCALE)
+                h,w= pred_slice.shape[0], pred_slice.shape[1]
+                if (h < tile_height) or (w < tile_width):
+                    pred_slice = tio.CropOrPad((tile_height, tile_width))(pred_slice)
+                print(f"processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}", end="\r")
             except:
-                print("no pred vol")
-                pred_vol = np.zeros((3, 512,512))
-            d,h,w= pred_vol.shape
-            if (d < tile_depth) or (h < tile_height) or (w < tile_width):
-                pred_vol = tio.CropOrPad((tile_depth, tile_height, tile_width))(pred_vol)
-                
-            small_3d_pred = []
-            for k in range(3):
-                pred = pred_vol[k]
-                small_3d_pred += [pred]
-            small_3d_pred = np.array(small_3d_pred) # (tile depth, tile height, tile width)
-            y_acc_pred += [small_3d_pred]
+                print(f"invalid no volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}", end="\r")
+                pred_slice = np.zeros((512,512))
+            pred_slice = np.array(pred_slice) # (tile depth, tile height, tile width)
+            y_acc_pred += [pred_slice] # y_acc_pred: (num_y_tiles, tile height, tile width)
             slice_num+=1
-        print(f"Processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {(slice_num)/total_slices}")
-        s_acc_pred += [np.concatenate(y_acc_pred, axis=2)]
-    new_pred = np.concatenate(s_acc_pred, axis=1)
+        y_acc_pred = np.concatenate(y_acc_pred, axis=0) # (entire height, tile width = 512)
+        s_acc_pred += [y_acc_pred] # (num_x_tiles, entire height, tile width = 512)
+    print(f"finished processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}")
+    new_pred = np.concatenate(s_acc_pred, axis=1) # (entire height, entire width)
     return new_pred
     
 

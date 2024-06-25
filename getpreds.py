@@ -150,7 +150,7 @@ def main():
         recall=tp/(tp+fn) if (tp + fn) != 0 else 0
         print(vals, counts)
         print(f"comb precision {precision}, recall {recall}")
-        print(vals, counts)
+        
         if args.savecomb:
             color_combined_volume = get_colored_image(combined_volume)
         binary_pred[binary_pred!=0]=255 # to visualize
@@ -161,29 +161,6 @@ def main():
                 cv2.imwrite(os.path.join(save_dir, "binarypreds", f"{filenames[0]}_{k}.png"), np.array(binary_pred[k]))
                 if args.savecomb:
                     cv2.imwrite(os.path.join(save_dir, "combinedpreds", f"{filenames[0]}_{k}.png"), np.array(color_combined_volume[k]))
-                    
-        elif args.save3d:
-            print(f"Saving {filenames[0]} 3D")
-            np.save(os.path.join(save_dir, "probpreds", f"{filenames[0]}.npy"), pred)
-            np.save(os.path.join(save_dir, "binarypreds", f"{filenames[0]}.npy"), binary_pred)
-            if args.save_vis:
-                if i==0:
-                    print("Saving visualizations", args.save_vis)
-                fig, ax = plt.subplots(4, depth, figsize=(15, 8), num=1)
-                for j in range(depth):
-                    ax[0, j].imshow(inputs[0, 0, j].detach().cpu(), cmap="gray")
-                    ax[1, j].imshow(labels[j], cmap="gray")
-                    ax[2, j].imshow(binary_pred[j], cmap="gray")
-                    im = ax[3, j].imshow(pred[j], cmap="viridis")
-                cbar = fig.colorbar(im, ax=ax[3, :])
-                ax[0, 0].set_ylabel("Input")
-                ax[1, 0].set_ylabel("Ground Truth")
-                ax[2, 0].set_ylabel("Prediction")
-                ax[3, 0].set_ylabel("Prediction (probability)")
-                plt.savefig(os.path.join(save_dir, "visualize", f"{filenames[0]}.png"))
-        else:
-            pass
-                
             
         avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 0
         avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 0

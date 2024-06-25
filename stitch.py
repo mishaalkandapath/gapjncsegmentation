@@ -53,15 +53,38 @@ alpha = args.alpha
 line_width = args.line_width
 yellow = [255, 255, 0]
 
+start_s = args.start_s
+end_s = args.end_s
+start_x = args.start_x
+end_x = args.end_x
+start_y = args.start_y
+end_y = args.end_y
 
 # Just assemble the predictions
 if args.gt_dir is None:
-    for s in range(args.start_s, args.end_s, 3):
-        for s_num in range(3):
+    for s in range(start_s, end_s, 3):
+        num_slices = (s%3) if (s%3 > 0) else 3
+        for s_num in range(num_slices):
             filename_regex = "z"+str(s)+"_y{}_x{}_"+str(s_num)+".png"
-            print("Assembling slice", s, s_num)
-            new_pred = assemble_one_slice(pred_dir, filename_regex=filename_regex, start_x=args.start_x, start_y=args.start_y, end_x=args.end_x, end_y=args.end_y)
-            plt.imsave(os.path.join(save_dir, f"slice{s}.png"), new_pred, cmap="gray")
+            print(f"---------------------------Started slice {s+s_num}/{end_s} ---------------------------")
+            new_pred = assemble_one_slice(pred_dir, filename_regex=filename_regex, start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y)
+            # if use_lines, draw horizontal and vertical lines every 512 pixels for better visualization
+            # Note: new_pred is of shape (height, width) and is in grayscale
+            print("drawing lines...")
+            if use_lines:
+                # convert new_pred to RGB
+                new_pred = plt.cm.gray(new_pred)
+                new_pred = (new_pred * 255).astype("uint8")
+                new_pred = new_pred[:, :, :3]
+                # draw horizontal lines
+                for i in range(0, new_pred.shape[0], 512):
+                    new_pred[i, :] = yellow
+                # draw vertical lines
+                for i in range(0, new_pred.shape[1], 512):
+                    new_pred[:, i] = yellow
+        
+            plt.imsave(os.path.join(save_dir, f"slice{s+s_num}.png"), new_pred, cmap="gray")
+            print(f"---------------------------Finished slice {s+s_num}---------------------------")
     exit(0)
 
 # Compare with gt and assemble tp, fp, tn, fn
