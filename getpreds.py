@@ -109,7 +109,7 @@ def main():
             del tmp
 
         # pad labels if necessary
-        subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
+        # subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
         d, h, w = labels.shape[2:]
         if (h < subvol_height) or (w < subvol_width) or (d < subvol_depth):
             tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(labels[0].detach().cpu())
@@ -135,14 +135,14 @@ def main():
             
             # binary_pred (depth, height, width)
         # downsample so upsample
-        if downsample_factor > 1:
-            print("before", binary_pred.shape)
-            # convert to float, not long
-            binary_pred = binary_pred.float().unsqueeze(0) # (batch_size, channels, depth, height, width) -> (channels, depth, height, width)
-            print(binary_pred.shape)
-            binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred) # (upsample takes 4D input)
-            binary_pred = binary_pred[0]
-            print("upsampled", binary_pred.shape) # (depth, height, width)
+        # if downsample_factor > 1:
+        #     print("before", binary_pred.shape)
+        #     # convert to float, not long
+        #     binary_pred = binary_pred.float().unsqueeze(0) # (batch_size, channels, depth, height, width) -> (channels, depth, height, width)
+        #     print(binary_pred.shape)
+        #     binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred) # (upsample takes 4D input)
+        #     binary_pred = binary_pred[0]
+        #     print("upsampled", binary_pred.shape) # (depth, height, width)
         
         labels = labels[0,0].detach().cpu()
         combined_volume = np.asarray((labels * 2 + binary_pred))
