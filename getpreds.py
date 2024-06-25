@@ -90,7 +90,6 @@ def main():
 
     print("----------------------------Generating predictions----------------------------")
     start_time = time.time()
-    subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
     total_tp=0
     total_fp=0
     total_fn=0
@@ -99,18 +98,23 @@ def main():
         inputs, labels, filenames = data
         inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
         print(inputs.shape)
-        sub_vol_depth, sub_vol_height, sub_vol_width = inputs.shape[2:]
-        
-        # pad image and label
-        if (sub_vol_height < subvol_height) or (sub_vol_width < subvol_width) or (sub_vol_depth < subvol_depth):
+            
+        # pad image
+        subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
+        if downsample_factor > 1:
+            subvol_depth, subvol_height, subvol_width = subvol_depth // downsample_factor, subvol_height // downsample_factor, subvol_width // downsample_factor
+        d, h, w = inputs.shape[2:]
+        if (h < subvol_height) or (w < subvol_width) or (d < subvol_depth):
             tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(inputs[0].detach().cpu())
             inputs = tmp.unsqueeze(0)
             inputs = inputs.to(DEVICE)
             print("Padded to", inputs.shape)
             del tmp
 
-        sub_vol_depth, sub_vol_height, sub_vol_width = labels.shape[2:]
-        if (sub_vol_height < subvol_height) or (sub_vol_width < subvol_width) or (sub_vol_depth < subvol_depth):
+        # pad labels if necessary
+        subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
+        d, h, w = labels.shape[2:]
+        if (h < subvol_height) or (w < subvol_width) or (d < subvol_depth):
             tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(labels[0].detach().cpu())
             labels = tmp.unsqueeze(0)
             labels = labels.to(DEVICE)
