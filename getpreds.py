@@ -72,7 +72,8 @@ def main():
         test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir, downsample_factor=downsample_factor)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
-    print(f"Data loaders created. Train dataset size: {len(test_dataset)}")
+    total_imgs = len(test_dataset)
+    print(f"Data loaders created. Train dataset size: {total_imgs}")
 
 
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -174,9 +175,9 @@ def main():
                 if args.savecomb:
                     cv2.imwrite(os.path.join(save_dir, "combinedpreds", f"{filenames[0]}_{k}.png"), np.array(color_combined_volume[k]))
             
-        avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 0
-        avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 0
-        print(f"----------------------loaded {i} imgs: avg precision {avg_precision:.3f}, avg recall {avg_recall:.3f}----------------------")
+        avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 100
+        avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 100
+        print(f"----------------------loaded {i}/{total_imgs} imgs: avg precision {avg_precision:.3f}, avg recall {avg_recall:.3f}----------------------")
         print(f"Time: {time.time()-start_time:.3f}s")
 
 if __name__ == '__main__':
