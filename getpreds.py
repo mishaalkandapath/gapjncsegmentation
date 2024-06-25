@@ -102,7 +102,7 @@ def main():
         # pad image
         subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
         if downsample_factor > 1:
-            subvol_depth, subvol_height, subvol_width = subvol_depth // downsample_factor, subvol_height // downsample_factor, subvol_width // downsample_factor
+            subvol_height, subvol_width = subvol_height // downsample_factor, subvol_width // downsample_factor
         d, h, w = inputs.shape[2:]
         if (h < subvol_height) or (w < subvol_width) or (d < subvol_depth):
             tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(inputs[0].detach().cpu())
