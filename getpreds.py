@@ -46,17 +46,18 @@ def main():
 
     # make save dir
     save_dir = args.save_dir
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    if not os.path.exists(os.path.join(save_dir, "binarypreds")):
-        os.makedirs(os.path.join(save_dir, "binarypreds"))
-    if not os.path.exists(os.path.join(save_dir, "probpreds")):
-        os.makedirs(os.path.join(save_dir, "probpreds"))
-    if not os.path.exists(os.path.join(save_dir, "visualize")):
-        os.makedirs(os.path.join(save_dir, "visualize"))
-    if not os.path.exists(os.path.join(save_dir, "combinedpreds")):
-        os.makedirs(os.path.join(save_dir, "combinedpreds"))
-    
+    if args.save2d:
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        if not os.path.exists(os.path.join(save_dir, "binarypreds")):
+            os.makedirs(os.path.join(save_dir, "binarypreds"))
+        if not os.path.exists(os.path.join(save_dir, "probpreds")):
+            os.makedirs(os.path.join(save_dir, "probpreds"))
+        if not os.path.exists(os.path.join(save_dir, "visualize")):
+            os.makedirs(os.path.join(save_dir, "visualize"))
+        if not os.path.exists(os.path.join(save_dir, "combinedpreds")):
+            os.makedirs(os.path.join(save_dir, "combinedpreds"))
+        
 
     print("----------------------------Loading data dir----------------------------")
     batch_size = args.batch_size
@@ -97,8 +98,6 @@ def main():
     for i, data in enumerate(test_loader):
         inputs, labels, filenames = data
         inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-        if i == 0:
-            _, _, depth, height, width = inputs.shape # batch size, channels, depth, height, width
         print(inputs.shape)
         sub_vol_depth, sub_vol_height, sub_vol_width = inputs.shape[2:]
         
@@ -137,6 +136,7 @@ def main():
             # convert to float, not long
             binary_pred = binary_pred.float()
             binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred)
+            print("upsampled", binary_pred.shape)
         
         labels = labels[0,0].detach().cpu()
         combined_volume = np.asarray((labels * 2 + binary_pred))
