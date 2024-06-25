@@ -3,10 +3,10 @@ remove_invalid_samples.py
 Given a directory of subvolumes, this script will remove any subvolumes that do not have the correct shape.
 
 Sample usage:
-DATA_DIR="data/tiniest_data_64"
-DEPTH=64
-HEIGHT=64
-WIDTH=64
+DATA_DIR="/home/hluo/scratch/111_120_3x512x512_no_overlap/ground_truth"
+DEPTH=3
+HEIGHT=512
+WIDTH=512
 python remove_invalid_samples.py --data_dir $DATA_DIR --depth $DEPTH --height $HEIGHT --width $WIDTH
 """
 import os
@@ -17,7 +17,7 @@ parser.add_argument("--data_dir", type=str, default="data/tiniest_data_64", help
 parser.add_argument("--depth", type=int, help="Directory containing the tiniest dataset")
 parser.add_argument("--height", type=int, help="Directory containing the tiniest dataset")
 parser.add_argument("--width", type=int, help="Directory containing the tiniest dataset")
-parser.add_argument("--print",type=int, default=0, help="Directory containing the tiniest dataset")
+parser.add_argument("--print",type=int, default=1, help="Directory containing the tiniest dataset")
 args = parser.parse_args()
 data_dir = args.data_dir
 depth, height, width = args.depth, args.height, args.width
