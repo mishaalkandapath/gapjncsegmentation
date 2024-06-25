@@ -153,11 +153,13 @@ def main():
         fp = res.get(1, 0)
         fn = res.get(2, 0)
         tp = res.get(3, 0)
+        tn = res.get(0, 0)
         total_tp+=tp
         total_fp+=fp
         total_fn+=fn
-        precision=tp/(tp+fp) if (tp + fp) != 0 else 0
-        recall=tp/(tp+fn) if (tp + fn) != 0 else 0
+        total_tn+=tn
+        precision=tp/(tp+fp) if (tp + fp) != 0 else 100
+        recall=tp/(tp+fn) if (tp + fn) != 0 else 100
         print(vals, counts)
         print(f"comb precision {precision}, recall {recall}")
         
