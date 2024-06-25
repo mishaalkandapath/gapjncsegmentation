@@ -372,50 +372,43 @@ def assemble_predictions(images_dir, preds_dir, gt_dir, start_s=0, start_y=0, st
         
         return new_img, new_pred, new_gt
     
-def assemble_predictions(preds_dir, start_s=0, start_y=0, start_x=0, end_s=6, end_y=8192, end_x=9216):
+def assemble_one_slice(preds_dir, filename_regex,start_y=0, start_x=0, end_s=6, end_y=8192, end_x=9216):
     tile_depth=3
     tile_width=512
     tile_height=512
     total_slices = ((end_s//tile_depth) * ((end_y-start_y)//tile_height )* ((end_x-start_x)//tile_width))
     slice_num = 0
     print(total_slices, "total slices")
-    for s in range(start_s, end_s, 3):
-        s_acc_img, s_acc_pred, s_acc_gt = [], [], []
-        for y in range(start_y, end_y, 512):
-            y_acc_img, y_acc_pred, y_acc_gt = [], [], []
-            for x in range(start_x, end_x, 512):
-                print(f"Processing volume {s,y,x} | Progress:{slice_num+1}/{total_slices} {(slice_num)/total_slices}", end="\r")
-                suffix = r"z{}_y{}_x{}".format(s, y, x)
-
+    s_acc_pred = []
+    for y in range(start_y, end_y, 512):
+        y_acc_pred = []
+        for x in range(start_x, end_x, 512):
+            suffix = filename_regex.format(y, x)
+            # print(f"Processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {(slice_num)/total_slices}", end="\r")
+            # load preds
+            try:
+                fp=os.path.join(preds_dir, suffix)
+                print(fp)
+                pred_vol = np.load(fp)
+                pred_vol = np.argmax(pred_vol[0], 0) 
+            except:
+                print("no pred vol")
+                pred_vol = np.zeros((3, 512,512))
+            d,h,w= pred_vol.shape
+            if (d < tile_depth) or (h < tile_height) or (w < tile_width):
+                pred_vol = tio.CropOrPad((tile_depth, tile_height, tile_width))(pred_vol)
                 
-                # load pred
-                try:
-                    pred_vol = np.load(os.path.join(preds_dir, f"{suffix}.npy"))
-                    pred_vol = np.argmax(pred_vol[0], 0) 
-                except:
-                    print("no pred vol")
-                    pred_vol = np.zeros((3, 512,512))
-                if (d < tile_depth) or (h < tile_height) or (w < tile_width):
-                    pred_vol = tio.CropOrPad((tile_depth, tile_height, tile_width))(pred_vol)
-                    
-                small_3d_pred = []
-                for k in range(3):
-                    pred = pred_vol[k]
-                    small_3d_pred += [pred]
-                    
-                small_3d_pred = np.array(small_3d_pred) # (tile depth, tile height, tile width)
-                y_acc_pred += [small_3d_pred]
-                slice_num+=1
-            print(f"Processing volume {s,y,x} | Progress:{slice_num+1}/{total_slices} {(slice_num)/total_slices}")
-            s_acc_img += [np.concatenate(y_acc_img, axis=2)]
-            s_acc_pred += [np.concatenate(y_acc_pred, axis=2)]
-            s_acc_gt += [np.concatenate(y_acc_gt, axis=2)]
-
-        new_img = np.concatenate(s_acc_img, axis=1)
-        new_pred = np.concatenate(s_acc_pred, axis=1)
-        new_gt = np.concatenate(s_acc_gt, axis=1)
-        
-        return new_img, new_pred, new_gt
+            small_3d_pred = []
+            for k in range(3):
+                pred = pred_vol[k]
+                small_3d_pred += [pred]
+            small_3d_pred = np.array(small_3d_pred) # (tile depth, tile height, tile width)
+            y_acc_pred += [small_3d_pred]
+            slice_num+=1
+        print(f"Processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {(slice_num)/total_slices}")
+        s_acc_pred += [np.concatenate(y_acc_pred, axis=2)]
+    new_pred = np.concatenate(s_acc_pred, axis=1)
+    return new_pred
     
 
 # --- evaluation metrics ---

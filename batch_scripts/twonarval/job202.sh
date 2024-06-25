@@ -12,13 +12,14 @@ source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
 MODEL_NAME="model_job201c"
 SEED=29
+INTERMEDIATE_WEIGHT=0.2
 USE2d3d=True
 LOSS_TYPE=focalt
 ALPHA=0.02
 BETA=0.98
 GAMMA=1
 EPOCHS=800
-BATCH_SIZE=8
+BATCH_SIZE=4
 NUM_WORKERS=2
 LR=0.00001
 NUM_PREDICTIONS_TO_LOG=10
@@ -38,6 +39,7 @@ TRAIN_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/train /hom
 VALID_X_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/original/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/original/valid"
 VALID_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/valid"
 python ~/gapjncsegmentation/train.py \
+    --intermediate_weight $INTERMEDIATE_WEIGHT \
     --use2d3d $USE2d3d \
     --downsample_factor $DOWNSAMPLE_FACTOR \
     --train_x_dirs $TRAIN_X_DIRS \

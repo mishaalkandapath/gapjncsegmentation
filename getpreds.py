@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from utilities.dataset import SliceDatasetWithFilename, SliceDatasetWithFilenameAllSubfolders
 import argparse
 import time
-from models import *
+from utilities.models import *
 from utilities.utilities import *
 import torchio as tio
 
@@ -38,11 +38,13 @@ def main():
     parser.add_argument('--subvol_depth', type=int, default=3, help='num workers')
     parser.add_argument('--subvol_height', type=int, default=512, help='num workers')
     parser.add_argument('--subvol_width', type=int, default=512, help='num workers')
+    parser.add_argument('--downsample_factor', type=int, default=1, help='num workers')
     args = parser.parse_args()
     
-    print(f"Use2d {args.save2d}, savevis {args.save_vis}, predmemb {args.pred_memb}")
-    print(f"Args threshold: {args.threshold}")
+    for arg in vars(args):
+        print(f"{arg}: {getattr(args, arg)}")
 
+    # make save dir
     save_dir = args.save_dir
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -54,17 +56,19 @@ def main():
         os.makedirs(os.path.join(save_dir, "visualize"))
     if not os.path.exists(os.path.join(save_dir, "combinedpreds")):
         os.makedirs(os.path.join(save_dir, "combinedpreds"))
+    
+
+    print("----------------------------Loading data dir----------------------------")
     batch_size = args.batch_size
     num_workers = args.num_workers
-
-    print("Loading data dir")
+    downsample_factor = args.downsample_factor
     x_test_dir = args.x_dir
     y_test_dir = args.y_dir
     if args.useallsubfolders:
         print("using all subfolders")
-        test_dataset = SliceDatasetWithFilenameAllSubfolders(x_test_dir, y_test_dir)
+        test_dataset = SliceDatasetWithFilenameAllSubfolders(x_test_dir, y_test_dir, downsample_factor=downsample_factor)
     else:
-        test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir)
+        test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir, downsample_factor=downsample_factor)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
     print(f"Data loaders created. Train dataset size: {len(test_dataset)}")
@@ -82,8 +86,8 @@ def main():
     print(f"Model is on device {next(model.parameters()).device}")
     model = model.eval()
 
-    total_precision = 0
-    total_recall = 0
+
+    print("----------------------------Generating predictions----------------------------")
     start_time = time.time()
     subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
     total_tp=0
@@ -95,10 +99,10 @@ def main():
         inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
         if i == 0:
             _, _, depth, height, width = inputs.shape # batch size, channels, depth, height, width
-
-        # pad as needed
         print(inputs.shape)
         sub_vol_depth, sub_vol_height, sub_vol_width = inputs.shape[2:]
+        
+        # pad image and label
         if (sub_vol_height < subvol_height) or (sub_vol_width < subvol_width) or (sub_vol_depth < subvol_depth):
             tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(inputs[0].detach().cpu())
             inputs = tmp.unsqueeze(0)
@@ -116,6 +120,7 @@ def main():
             
         interm_pred, pred = model(inputs)
         
+        # take argmax
         if args.pred_memb:
             threshold=args.threshold
             binary_pred = pred[0, 1].detach().cpu()
@@ -127,6 +132,12 @@ def main():
             pred=pred[0, 1].detach().cpu()
             binary_pred=binary_pred[0].detach().cpu()
             binary_pred[binary_pred != 0] = 1
+            
+        # downsample so upsample
+        if downsample_factor > 1:
+            
+            
+        
         labels = labels[0,0].detach().cpu()
         combined_volume = np.asarray((labels * 2 + binary_pred))
         vals, counts = np.unique(combined_volume, return_counts=True)
