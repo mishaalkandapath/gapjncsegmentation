@@ -117,6 +117,7 @@ def main():
             print("Padded to", labels.shape)
             del tmp
             
+        # inputs: (batch_size=1, channels=1, depth, height, width)
         interm_pred, pred = model(inputs)
         
         # take argmax
@@ -134,9 +135,9 @@ def main():
         # downsample so upsample
         if downsample_factor > 1:
             # convert to float, not long
-            binary_pred = binary_pred.float()
-            binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred)
-            print("upsampled", binary_pred.shape)
+            binary_pred = binary_pred[0].float() # (batch_size, channels, depth, height, width) -> (channels, depth, height, width)
+            binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred) # (upsample takes 4D input)
+            print("upsampled", binary_pred.shape) # (depth, height, width)
         
         labels = labels[0,0].detach().cpu()
         combined_volume = np.asarray((labels * 2 + binary_pred))
