@@ -420,11 +420,11 @@ class SliceDatasetWithFilename(torch.utils.data.Dataset):
         image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
         mask[mask!=0]=1
+        
         # Check if the standard deviation is zero
         if self.downsample_factor > 1:
-            image = torch.nn.MaxPool3d(self.downsample_factor)(image)
-            mask = torch.nn.MaxPool3d(self.downsample_factor)(mask)
-            
+            image = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(image)
+            mask = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(mask)
         if torch.std(image) == 0:
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
         else:
@@ -494,8 +494,8 @@ class SliceDatasetWithFilenameAllSubfolders(torch.utils.data.Dataset):
         mask[mask!=0]=1
         # Check if the standard deviation is zero
         if self.downsample_factor > 1:
-            image = torch.nn.MaxPool3d(self.downsample_factor)(image)
-            mask = torch.nn.MaxPool3d(self.downsample_factor)(mask)
+            image = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(image)
+            mask = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(mask)
             
         if torch.std(image) == 0:
             print(f"Image at index {i} has zero standard deviation, skipping normalization")

@@ -119,18 +119,16 @@ DOWNSAMPLE_FACTOR=2
 python /home/hluo/gapjncsegmentation/getpreds.py --downsample_factor $DOWNSAMPLE_FACTOR --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
 
 
-
+# 100-110
 MODEL_NAME=model_job200c
-EPOCH=247
+EPOCH=240
 MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
 X_DIR=/home/hluo/scratch/100_110_3x512x512/original
 Y_DIR=/home/hluo/scratch/100_110_3x512x512/ground_truth
 SAVE_DIR=/home/hluo/scratch/100_110_${MODEL_NAME}_epoch${EPOCH}
 BATCH_SIZE=1
 NUM_WORKERS=4
-SAVE_VIS=false
 SAVE2D=false
-SAVE3D=false
 SAVECOMB=false
 SUBVOL_DEPTH=3
 SUBVOL_HEIGHT=512
@@ -138,9 +136,10 @@ SUBVOL_WIDTH=512
 USEALLSUBFOLDERS=false
 DOWNSAMPLE_FACTOR=2
 PRED_MEMB=false
-python /home/hluo/gapjncsegmentation/getpreds.py --downsample_factor $DOWNSAMPLE_FACTOR --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save_vis $SAVE_VIS --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
+python /home/hluo/gapjncsegmentation/getpreds.py --downsample_factor $DOWNSAMPLE_FACTOR --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
 
 
+# 0-50
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
