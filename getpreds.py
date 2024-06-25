@@ -132,10 +132,12 @@ def main():
             binary_pred=binary_pred[0].detach().cpu()
             binary_pred[binary_pred != 0] = 1
             
+        # binary_pred (depth, height, width)
         # downsample so upsample
         if downsample_factor > 1:
+            print("before", binary_pred.shape)
             # convert to float, not long
-            binary_pred = binary_pred[0].float() # (batch_size, channels, depth, height, width) -> (channels, depth, height, width)
+            binary_pred = binary_pred.float().unsqueeze(0) # (batch_size, channels, depth, height, width) -> (channels, depth, height, width)
             print(binary_pred.shape)
             binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred) # (upsample takes 4D input)
             print("upsampled", binary_pred.shape) # (depth, height, width)
