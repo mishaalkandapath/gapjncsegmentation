@@ -30,9 +30,7 @@ def main():
     parser.add_argument('--num_workers', type=int, default=4, help='num workers')
     parser.add_argument('--threshold', type=int, default=0.5, help='threshold for binary pred')
     parser.add_argument('--pred_memb', type=lambda x: (str(x).lower() == 'true'), default=False, help='if model also predicts membrane')
-    parser.add_argument('--save_vis', type=lambda x: (str(x).lower() == 'true'), default=True, help='save vis')
     parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
-    parser.add_argument('--save3d', type=lambda x: (str(x).lower() == 'true'), default=False, help='save 3d')
     parser.add_argument('--savecomb', type=lambda x: (str(x).lower() == 'true'), default=False, help='save combined')
     parser.add_argument('--useallsubfolders', type=lambda x: (str(x).lower() == 'true'), default=False, help='use all subfolders')
     parser.add_argument('--subvol_depth', type=int, default=3, help='num workers')
@@ -51,10 +49,8 @@ def main():
             os.makedirs(save_dir)
         if not os.path.exists(os.path.join(save_dir, "binarypreds")):
             os.makedirs(os.path.join(save_dir, "binarypreds"))
-        if not os.path.exists(os.path.join(save_dir, "probpreds")):
-            os.makedirs(os.path.join(save_dir, "probpreds"))
-        if not os.path.exists(os.path.join(save_dir, "visualize")):
-            os.makedirs(os.path.join(save_dir, "visualize"))
+        # if not os.path.exists(os.path.join(save_dir, "probpreds")):
+            # os.makedirs(os.path.join(save_dir, "probpreds"))
         if not os.path.exists(os.path.join(save_dir, "combinedpreds")):
             os.makedirs(os.path.join(save_dir, "combinedpreds"))
         
@@ -137,7 +133,7 @@ def main():
             binary_pred=binary_pred[0].detach().cpu()
             binary_pred[binary_pred != 0] = 1
             
-        # binary_pred (depth, height, width)
+            # binary_pred (depth, height, width)
         # downsample so upsample
         if downsample_factor > 1:
             print("before", binary_pred.shape)
