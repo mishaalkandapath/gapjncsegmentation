@@ -126,7 +126,6 @@ def main():
             binary_pred = pred[0, 1].detach().cpu()
             binary_pred[binary_pred >= threshold] = 1
             binary_pred[binary_pred < threshold] = 0
-            pred = pred[0, 0].detach().cpu()
         else:
             binary_pred = torch.argmax(pred, dim=1) 
             pred=pred[0, 1].detach().cpu()
@@ -135,8 +134,7 @@ def main():
             
         # downsample so upsample
         if downsample_factor > 1:
-            
-            
+            binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred)
         
         labels = labels[0,0].detach().cpu()
         combined_volume = np.asarray((labels * 2 + binary_pred))
