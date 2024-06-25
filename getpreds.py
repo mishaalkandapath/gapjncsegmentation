@@ -136,6 +136,7 @@ def main():
         if downsample_factor > 1:
             # convert to float, not long
             binary_pred = binary_pred[0].float() # (batch_size, channels, depth, height, width) -> (channels, depth, height, width)
+            print(binary_pred.shape)
             binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred) # (upsample takes 4D input)
             print("upsampled", binary_pred.shape) # (depth, height, width)
         
