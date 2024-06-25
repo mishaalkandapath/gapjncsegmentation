@@ -145,6 +145,7 @@ def main():
             binary_pred = binary_pred.float().unsqueeze(0) # (batch_size, channels, depth, height, width) -> (channels, depth, height, width)
             print(binary_pred.shape)
             binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred) # (upsample takes 4D input)
+            binary_pred = binary_pred[0]
             print("upsampled", binary_pred.shape) # (depth, height, width)
         
         labels = labels[0,0].detach().cpu()
