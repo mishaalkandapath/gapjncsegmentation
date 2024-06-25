@@ -94,7 +94,7 @@ def main():
     for i, data in enumerate(test_loader):
         inputs, labels, filenames = data
         inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-        print(inputs.shape)
+        print(inputs.shape, labels.shape)
             
         # pad image
         subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
@@ -120,6 +120,7 @@ def main():
             
         # inputs: (batch_size=1, channels=1, depth, height, width)
         interm_pred, pred = model(inputs)
+        print("pred", pred.shape)
         
         # take argmax
         if args.pred_memb:
@@ -132,6 +133,7 @@ def main():
             pred=pred[0, 1].detach().cpu()
             binary_pred=binary_pred[0].detach().cpu()
             binary_pred[binary_pred != 0] = 1
+            print("binary_pred", binary_pred.shape)
             
             # binary_pred (depth, height, width)
         # downsample so upsample
