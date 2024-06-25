@@ -159,8 +159,8 @@ def main():
         total_fp+=fp
         total_fn+=fn
         total_tn+=tn
-        precision=tp/(tp+fp) if (tp + fp) != 0 else 100
-        recall=tp/(tp+fn) if (tp + fn) != 0 else 100
+        precision=tp/(tp+fp) if (tp + fp) != 0 else 999
+        recall=tp/(tp+fn) if (tp + fn) != 0 else 999
         print(vals, counts)
         print(f"comb precision {precision}, recall {recall}")
         
@@ -170,13 +170,13 @@ def main():
 
         if args.save2d:
             for k in range(subvol_depth):
-                cv2.imwrite(os.path.join(save_dir, "probpreds", f"{filenames[0]}_{k}.png"), np.array(pred[k]))
+                # cv2.imwrite(os.path.join(save_dir, "probpreds", f"{filenames[0]}_{k}.png"), np.array(pred[k]))
                 cv2.imwrite(os.path.join(save_dir, "binarypreds", f"{filenames[0]}_{k}.png"), np.array(binary_pred[k]))
                 if args.savecomb:
                     cv2.imwrite(os.path.join(save_dir, "combinedpreds", f"{filenames[0]}_{k}.png"), np.array(color_combined_volume[k]))
             
-        avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 100
-        avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 100
+        avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 999
+        avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 999
         print(f"----------------------loaded {i}/{total_imgs} imgs: avg precision {avg_precision:.3f}, avg recall {avg_recall:.3f}----------------------")
         print(f"Time: {time.time()-start_time:.3f}s")
 
