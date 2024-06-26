@@ -218,7 +218,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             epoch_tn += tn
 
             # Save predictions for each epoch
-            if num_train_logged < num_predictions_to_log:
+            if (num_train_logged < num_predictions_to_log) and (epoch % 10 == 0):
                 input_img = inputs[0][0].cpu().numpy()
                 label_img = labels[0][1].cpu().numpy()
                 pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
@@ -279,7 +279,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             epoch_tn += tn
 
             # Save predictions
-            if num_logged < num_predictions_to_log:
+            if (num_logged < num_predictions_to_log) and (epoch % 10 == 0):
                 input_img = valid_inputs[0][0].cpu().numpy()
                 label_img = valid_labels[0][1].cpu().numpy()
                 pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()

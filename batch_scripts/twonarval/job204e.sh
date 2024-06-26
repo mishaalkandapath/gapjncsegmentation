@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job204
+#SBATCH --job-name=job204e
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -10,9 +10,9 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-MODEL_NAME="model_job204"
+MODEL_NAME="model_job204e"
 SEED=29
-INTERMEDIATE_WEIGHT=0.2
+INTERMEDIATE_WEIGHT=1
 USE2d3d=True
 LOSS_TYPE=focalt
 ALPHA=0.02
