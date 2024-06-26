@@ -93,7 +93,7 @@ def create_train_valid_test_dir(data_dir):
     if not os.path.exists(os.path.join(mask_dir, "test")):
         os.makedirs(os.path.join(mask_dir, "test"))
 
-def visualize_3d_slice(img: np.array, fig_ax: plt.Axes, title: str = "", cmap="gray"):
+def visualize_3d_slice(img: np.array, fig_ax: plt.Axes, title: str = "", cmap="gray", alpha=1):
     """
     Takes in a 3d image of shape (depth, height, width) and plots each z-slice as a row of 2D images on the given axis.
 
@@ -110,8 +110,9 @@ def visualize_3d_slice(img: np.array, fig_ax: plt.Axes, title: str = "", cmap="g
     """
     depth = img.shape[0]
     for i in range(depth):
-        fig_ax[i].imshow(img[i], cmap=cmap)
+        fig_ax[i].imshow(img[i], cmap=cmap, alpha=alpha)
     fig_ax[0].set_ylabel(title)
+    
 
 def get_z_y_x(file_name, pattern) -> Tuple[int, int, int]:
     """ Get z, y, x from file name using pattern

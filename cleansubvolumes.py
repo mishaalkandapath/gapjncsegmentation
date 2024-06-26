@@ -3,11 +3,11 @@ remove_invalid_samples.py
 Given a directory of subvolumes, this script will remove any subvolumes that do not have the correct shape.
 
 Sample usage:
-DATA_DIR="/home/hluo/scratch/111_120_3x512x512_no_overlap/ground_truth"
+DATA_DIR="/home/hluo/scratch/111_120_3x512x512_no_overlap/original"
 DEPTH=3
 HEIGHT=512
 WIDTH=512
-python remove_invalid_samples.py --data_dir $DATA_DIR --depth $DEPTH --height $HEIGHT --width $WIDTH
+python cleansubvolumes.py --data_dir $DATA_DIR --depth $DEPTH --height $HEIGHT --width $WIDTH
 """
 import os
 import numpy as np

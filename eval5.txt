@@ -1,0 +1,121 @@
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >0.00% of pred component intersect with gt component)
+Entity precision (175/175): 1.000
+Entity recall (175/175): 1.000
+---------------------------------
+(criteria: pred component covers >0.00% of gt component)
+Entity precision (88/88): 1.000
+Entity recall (88/88): 1.000
+=========================================== entity thresh: 0 (time: 7.87s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >10.00% of pred component intersect with gt component)
+Entity precision (101/175): 0.577
+Entity recall (101/142): 0.711
+---------------------------------
+(criteria: pred component covers >10.00% of gt component)
+Entity precision (47/121): 0.388
+Entity recall (47/88): 0.534
+=========================================== entity thresh: 0.1 (time: 15.59s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >20.00% of pred component intersect with gt component)
+Entity precision (101/175): 0.577
+Entity recall (101/144): 0.701
+---------------------------------
+(criteria: pred component covers >20.00% of gt component)
+Entity precision (45/119): 0.378
+Entity recall (45/88): 0.511
+=========================================== entity thresh: 0.2 (time: 20.77s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >30.00% of pred component intersect with gt component)
+Entity precision (100/175): 0.571
+Entity recall (100/149): 0.671
+---------------------------------
+(criteria: pred component covers >30.00% of gt component)
+Entity precision (39/114): 0.342
+Entity recall (39/88): 0.443
+=========================================== entity thresh: 0.3 (time: 25.41s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >40.00% of pred component intersect with gt component)
+Entity precision (100/175): 0.571
+Entity recall (100/153): 0.654
+---------------------------------
+(criteria: pred component covers >40.00% of gt component)
+Entity precision (35/110): 0.318
+Entity recall (35/88): 0.398
+=========================================== entity thresh: 0.4 (time: 29.66s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >50.00% of pred component intersect with gt component)
+Entity precision (100/175): 0.571
+Entity recall (100/159): 0.629
+---------------------------------
+(criteria: pred component covers >50.00% of gt component)
+Entity precision (29/104): 0.279
+Entity recall (29/88): 0.330
+=========================================== entity thresh: 0.5 (time: 34.24s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >60.00% of pred component intersect with gt component)
+Entity precision (100/175): 0.571
+Entity recall (100/164): 0.610
+---------------------------------
+(criteria: pred component covers >60.00% of gt component)
+Entity precision (24/99): 0.242
+Entity recall (24/88): 0.273
+=========================================== entity thresh: 0.6 (time: 38.86s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >70.00% of pred component intersect with gt component)
+Entity precision (97/175): 0.554
+Entity recall (97/173): 0.561
+---------------------------------
+(criteria: pred component covers >70.00% of gt component)
+Entity precision (12/90): 0.133
+Entity recall (12/88): 0.136
+=========================================== entity thresh: 0.7 (time: 43.18s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >80.00% of pred component intersect with gt component)
+Entity precision (94/175): 0.537
+Entity recall (94/174): 0.540
+---------------------------------
+(criteria: pred component covers >80.00% of gt component)
+Entity precision (8/89): 0.090
+Entity recall (8/88): 0.091
+=========================================== entity thresh: 0.8 (time: 47.20s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >90.00% of pred component intersect with gt component)
+Entity precision (82/175): 0.469
+Entity recall (82/170): 0.482
+---------------------------------
+(criteria: pred component covers >90.00% of gt component)
+Entity precision (0/93): 0.000
+Entity recall (0/88): 0.000
+=========================================== entity thresh: 0.9 (time: 51.36s)===========================================
+Number of entities found in pred: 175
+Number of entities found in gt: 88
+---------------------------------
+(criteria: >100.00% of pred component intersect with gt component)
+Entity precision (51/175): 0.291
+Entity recall (51/139): 0.367
+---------------------------------
+(criteria: pred component covers >100.00% of gt component)
+Entity precision (0/124): 0.000
+Entity recall (0/88): 0.000
+=========================================== entity thresh: 1 (time: 55.63s)===========================================
