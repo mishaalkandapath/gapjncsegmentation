@@ -33,10 +33,10 @@ LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
 LOSS_DIR=/home/hluo/scratch/losses
-TRAIN_X_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/original/train /home/hluo/scratch/filtered_100_110_3x512x512_40/original/train"
-TRAIN_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/train /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/train"
-VALID_X_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/original/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/original/valid"
-VALID_Y_DIRS="/home/hluo/scratch/filtered_0_50_3x512x512/ground_truth/valid /home/hluo/scratch/filtered_100_110_3x512x512_40/ground_truth/valid"
+TRAIN_X_DIRS="/home/hluo/scratch/0_50_3x512x512_filtered/original/train /home/hluo/scratch/100_110_3x512x512_filtered40/original/train"
+TRAIN_Y_DIRS="/home/hluo/scratch/0_50_3x512x512_filtered/ground_truth/train /home/hluo/scratch/100_110_3x512x512_filtered40/ground_truth/train"
+VALID_X_DIRS="/home/hluo/scratch/0_50_3x512x512_filtered/original/valid /home/hluo/scratch/100_110_3x512x512_filtered40/original/valid"
+VALID_Y_DIRS="/home/hluo/scratch/0_50_3x512x512_filtered/ground_truth/valid /home/hluo/scratch/100_110_3x512x512_filtered40/ground_truth/valid"
 python ~/gapjncsegmentation/train.py \
     --intermediate_weight $INTERMEDIATE_WEIGHT \
     --use2d3d $USE2d3d \
