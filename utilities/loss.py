@@ -54,7 +54,7 @@ class FocalTverskyLoss(nn.Module):
 
 class FocalTverskyLossWith2d3d(nn.Module):
     def __init__(self, alpha=0.8, beta=0.2, gamma=0.75, intermediate_weight = 0.33):
-        super(FocalTverskyLoss, self).__init__()
+        super(FocalTverskyLossWith2d3d, self).__init__()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.intermediate_weight = torch.Tensor([intermediate_weight]).to(device) # constant that weighs importance of intermediate 2D class predictions in the loss function
         self.intermediate_loss = FocalTverskyLoss(alpha, beta, gamma, device)
