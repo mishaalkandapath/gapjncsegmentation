@@ -100,14 +100,14 @@ python /home/hluo/gapjncsegmentation/getpreds.py --pred_memb $PRED_MEMB --useall
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-MODEL_NAME=model_job200c
-EPOCH=240
+MODEL_NAME=model_job203b
+EPOCH=329
 MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
-X_DIR=/home/hluo/scratch/111_120_3x512x512_no_overlap/original
-Y_DIR=/home/hluo/scratch/111_120_3x512x512_no_overlap/ground_truth
-SAVE_DIR=/home/hluo/scratch/111_120_preds/111_120_${MODEL_NAME}_epoch_${EPOCH}
-SAVE2D=true
-SAVECOMB=true
+X_DIR=/home/hluo/scratch/data/111_120_3x512x512/original
+Y_DIR=/home/hluo/scratch/data/111_120_3x512x512/ground_truth
+SAVE_DIR=/home/hluo/scratch/preds/111_120_${MODEL_NAME}_epoch_${EPOCH}
+SAVE2D=false
+SAVECOMB=false
 USEALLSUBFOLDERS=false
 PRED_MEMB=false
 BATCH_SIZE=1
@@ -120,8 +120,8 @@ python /home/hluo/gapjncsegmentation/getpreds.py --downsample_factor $DOWNSAMPLE
 
 
 # 100-110
-MODEL_NAME=model_job200c
-EPOCH=240
+MODEL_NAME=model_job203
+EPOCH=327
 MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
 X_DIR=/home/hluo/scratch/100_110_3x512x512/original
 Y_DIR=/home/hluo/scratch/100_110_3x512x512/ground_truth

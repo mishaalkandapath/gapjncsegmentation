@@ -176,6 +176,7 @@ def main():
             
         avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 999
         avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 999
+        print(f"---------------------- (tn) {tn}(fp) {fp} (fn) {fn} (tp) {tp}")
         print(f"----------------------loaded {i}/{total_imgs} imgs: avg precision {avg_precision:.3f}, avg recall {avg_recall:.3f}----------------------")
         print(f"Time: {time.time()-start_time:.3f}s")
 

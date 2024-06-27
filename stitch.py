@@ -14,6 +14,22 @@ START_Y=0
 END_X=9216
 END_Y=8192
 python stitch.py --pred_dir $PRED_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG --use_lines $USE_LINES --start_s $START_S --end_s $END_S --start_x $START_X --end_x $END_X --start_y $START_Y --end_y $END_Y
+
+
+
+PRED_DIR="/Users/huayinluo/Documents/binarypreds"
+GT_DIR=
+IMG_DIR=
+SAVE_DIR="/Users/huayinluo/Documents/stitchedpreds"
+USE_LINES=false
+SHOW_IMG=false
+START_S=0
+END_S=6
+START_X=0
+START_Y=0
+END_X=9216
+END_Y=8192
+python stitch.py --pred_dir $PRED_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG --use_lines $USE_LINES --start_s $START_S --end_s $END_S --start_x $START_X --end_x $END_X --start_y $START_Y --end_y $END_Y
 """
 import os
 import numpy as np
