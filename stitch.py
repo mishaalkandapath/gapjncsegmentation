@@ -17,21 +17,25 @@ python stitch.py --pred_dir $PRED_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG 
 
 
 # 100-110
+SLICES="111_120"
 MODELNAME="job202"
 EPOCH="325"
-PRED_DIR="/home/hluo/scratch/preds/100_110_model_${MODELNAME}_epoch${EPOCH}"
-GT_DIR="/home/hluo/scratch/data/100_110_3x512x512/ground_truth"
-IMG_DIR="/home/hluo/scratch/data/100_110_3x512x512/original"
-SAVE_DIR="/home/hluo/scratch/stitchedpreds/100_110_model_${MODELNAME}_epoch${EPOCH}"
+PRED_DIR="/home/hluo/scratch/preds/${SLICES}_model_${MODELNAME}_epoch${EPOCH}_binary"
+GT_DIR="/home/hluo/scratch/data/${SLICES}_3x512x512/ground_truth"
+IMG_DIR="/home/hluo/scratch/data/${SLICES}_3x512x512/original"
+SAVE_DIR="/home/hluo/scratch/stitchedpreds/${SLICES}_model_${MODELNAME}_epoch${EPOCH}"
 USE_LINES=false
 SHOW_IMG=false
+STITCH2d=true
 START_S=0
 END_S=4
 START_X=0
 START_Y=0
 END_X=9216
 END_Y=8192
-python stitch.py --pred_dir $PRED_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG --use_lines $USE_LINES --start_s $START_S --end_s $END_S --start_x $START_X --end_x $END_X --start_y $START_Y --end_y $END_Y
+python ~/gapjncsegmentation/stitch.py --stitch2d $STITCH2d --pred_dir $PRED_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG --use_lines $USE_LINES --start_s $START_S --end_s $END_S --start_x $START_X --end_x $END_X --start_y $START_Y --end_y $END_Y
+
+
 """
 import os
 import numpy as np
@@ -45,8 +49,9 @@ parser.add_argument("--pred_dir", type=str, required=True, help="Path to the mod
 parser.add_argument("--gt_dir", type=str, default=None, help="Path to the model file")
 parser.add_argument("--img_dir", type=str, default=None, help="Path to the model file")
 parser.add_argument("--save_dir", type=str, required=True, help="Path to the data directory")
-parser.add_argument("--use_lines", type=bool, default=False, help="Path to the results directory")
-parser.add_argument("--show_img", type=bool, default=False, help="Whether this is train, test, or valid folder")
+parser.add_argument("--use_lines", type=lambda x: (str(x).lower() == 'true'), default=False, help="Path to the results directory")
+parser.add_argument("--show_img", type=lambda x: (str(x).lower() == 'true'), default=False, help="Whether this is train, test, or valid folder")
+parser.add_argument("--stitch2d", type=lambda x: (str(x).lower() == 'true'), default=False, help="Whether this is train, test, or valid folder")
 parser.add_argument("--alpha", type=float, default=0.4, help="Whether this is train, test, or valid folder")
 parser.add_argument("--line_width", type=int, default=3, help="Whether this is train, test, or valid folder")
 parser.add_argument("--start_s", type=int, default=0, help="Whether this is train, test, or valid folder")
@@ -57,6 +62,8 @@ parser.add_argument("--start_y", type=int, default=0, help="Whether this is trai
 parser.add_argument("--end_y", type=int, default=1, help="Whether this is train, test, or valid folder")
 args = parser.parse_args()
 
+for arg in vars(args):
+    print(f"{arg}: {getattr(args, arg)}")
 
 # constants
 save_dir = args.save_dir
@@ -79,7 +86,8 @@ start_y = args.start_y
 end_y = args.end_y
 
 # Just assemble the predictions
-if args.gt_dir is None:
+if args.stitch2d:
+    print("=================Just stitching preds=================")
     for s in range(start_s, end_s, 3):
         num_slices = (s%3) if (s%3 > 0) else 3
         for s_num in range(num_slices):
@@ -107,6 +115,7 @@ if args.gt_dir is None:
 
 # Compare with gt and assemble tp, fp, tn, fn
 else:    
+    print("=================Stitching preds with gt and img=================")
     # stich together preds
     new_img, new_pred, new_gt = assemble_predictions(img_dir, pred_dir, gt_dir)
     volume_depth = new_img.shape[0]
