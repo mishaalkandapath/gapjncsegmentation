@@ -17,16 +17,16 @@ python stitch.py --pred_dir $PRED_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG 
 
 
 # 100-110
-MODELNAME="job200"
-EPOCH="247"
+MODELNAME="job202"
+EPOCH="325"
 PRED_DIR="/home/hluo/scratch/preds/100_110_model_${MODELNAME}_epoch${EPOCH}"
 GT_DIR="/home/hluo/scratch/data/100_110_3x512x512/ground_truth"
 IMG_DIR="/home/hluo/scratch/data/100_110_3x512x512/original"
-SAVE_DIR="/home/hluo/scratch/stitchedpreds/100_110_model_${MODELNAME}_epoch${EPOCH"
+SAVE_DIR="/home/hluo/scratch/stitchedpreds/100_110_model_${MODELNAME}_epoch${EPOCH}"
 USE_LINES=false
 SHOW_IMG=false
 START_S=0
-END_S=6
+END_S=4
 START_X=0
 START_Y=0
 END_X=9216

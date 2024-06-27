@@ -3,11 +3,25 @@ getpreds.py
 Given a directory of subvolumes, this script will load the model and predict on each subvolume, and generate test metrics such as precision and recall.
 
 Sample usage:
-X_DIR="data/tiniest_data_64"
-Y_DIR="data/tiniest_data_64"
-SAVE_DIR="data/tiniest_data_64"
-MODEL_PATH="model_job84"
-python getpreds.py --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH
+MODEL_NAME=model_job202
+EPOCH=325
+MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
+X_DIR=/home/hluo/scratch/data/111_120_3x512x512/original
+Y_DIR=/home/hluo/scratch/data/111_120_3x512x512/ground_truth
+SAVE_DIR=/home/hluo/scratch/preds/111_120_${MODEL_NAME}_epoch_${EPOCH}
+SAVE2D=false
+SAVECOMB=false
+USEALLSUBFOLDERS=false
+PRED_MEMB=false
+BATCH_SIZE=1
+NUM_WORKERS=4
+SUBVOL_DEPTH=3
+SUBVOL_HEIGHT=512
+SUBVOL_WIDTH=512
+DOWNSAMPLE_FACTOR=2
+python /home/hluo/gapjncsegmentation/getpreds.py --downsample_factor $DOWNSAMPLE_FACTOR --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
+
+
 """
 
 import os
@@ -44,15 +58,12 @@ def main():
 
     # make save dir
     save_dir = args.save_dir
-    if args.save2d:
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        if not os.path.exists(os.path.join(save_dir, "binarypreds")):
-            os.makedirs(os.path.join(save_dir, "binarypreds"))
-        # if not os.path.exists(os.path.join(save_dir, "probpreds")):
-            # os.makedirs(os.path.join(save_dir, "probpreds"))
-        if not os.path.exists(os.path.join(save_dir, "combinedpreds")):
-            os.makedirs(os.path.join(save_dir, "combinedpreds"))
+    save_dir_binary = f"{save_dir}_binary"
+    save_dir_comb = f"{save_dir}_comb"
+    if args.save2d and not os.path.exists(save_dir_binary):
+        os.makedirs(save_dir_binary)
+    if args.savecomb and not os.path.exists(save_dir_comb):
+        os.makedirs(save_dir_comb)
         
 
     print("----------------------------Loading data dir----------------------------")
@@ -166,13 +177,6 @@ def main():
         if args.savecomb:
             color_combined_volume = get_colored_image(combined_volume)
         binary_pred[binary_pred!=0]=255 # to visualize
-
-        save_dir_binary = f"{save_dir}_binary"
-        save_dir_comb = f"{save_dir}_comb"
-        if not os.path.exists(save_dir_binary):
-            os.makedirs(save_dir_binary)
-        if not os.path.exists(save_dir_comb):
-            os.makedirs(save_dir_comb)
         if args.save2d:
             for k in range(subvol_depth):
                 cv2.imwrite(os.path.join(save_dir_binary, f"{filenames[0]}_{k}.png"), np.array(binary_pred[k]))
