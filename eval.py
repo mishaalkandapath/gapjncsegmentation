@@ -1,14 +1,21 @@
 """ 
 
+PRED_FP="/Users/huayinluo/Documents/stitchedpreds"
+GT_FP="/Users/huayinluo/Documents/gj_seg"
 Sample usage:
+
+SLICES="111_120"
+MODELNAME="job202"
+EPOCH="325"
+PRED_FP="/home/hluo/scratch/stitchedpreds/${SLICES}_model_${MODELNAME}_epoch_${EPOCH}"
+GT_FP="/home/hluo/scratch/data/${SLICES}_fullimgs/ground_truth"
+SAVE_DIR="/home/hluo/scratch/stitchedpreds/${SLICES}_model_${MODELNAME}_epoch_${EPOCH}"
 START_Z=0
 END_Z=3
 START_X=2048
 END_X=7168
 START_Y=2048
 END_Y=6144
-PRED_FP="/Users/huayinluo/Documents/stitchedpreds"
-GT_FP="/Users/huayinluo/Documents/gj_seg"
 python eval.py --pred_fp $PRED_FP \
                --gt_fp $GT_FP \
                --start_z $START_Z \
@@ -150,6 +157,7 @@ def get_precision_recall_2d(pred_vol, gt_vol, entity_thresh=0.5):
 parser = argparse.ArgumentParser()
 parser.add_argument("--pred_fp", type=str, help="Path to the directory containing predicted images")
 parser.add_argument("--gt_fp", type=str, help="Path to the directory containing ground truth images")
+parser.add_argument("--save_dir", type=str, help="Path to the directory to save images")
 parser.add_argument("--start_z", type=int, help="Starting z-coordinate")
 parser.add_argument("--start_x", type=int, help="Starting x-coordinate")
 parser.add_argument("--start_y", type=int, help="Starting y-coordinate")
@@ -161,6 +169,7 @@ parser.add_argument("--end_y", type=int, help="Ending y-coordinate")
 args = parser.parse_args()
 pred_fp = args.pred_fp
 gt_fp = args.gt_fp
+save_dir=args.save_dir
 start_z = args.start_z
 start_x = args.start_x
 start_y = args.start_y
@@ -185,7 +194,7 @@ print(tmp.shape, tmp_gt.shape)
 tmp_gt[start_y:end_y, start_x:end_x] = 255 # draw a red box from start_x to end_x, start_y to end_y
 plt.imshow(tmp_gt, cmap="gray")
 plt.imshow(tmp, alpha=0.5)
-plt.savefig(f"section.png")
+plt.savefig(os.path.join(save_dir, f"section.png"))
 plt.close("all")
 
 # slices 100-110
@@ -231,7 +240,7 @@ for entity_thresh in entity_threshes:
     suffix=f"100_103_x{start_x}-{end_x}_y{start_y}-{end_y}_height{height}xwidth{width}"
     fig, ax = plt.subplots(1, depth, figsize=(15, 5), num=1)
     visualize_3d_slice(all_components_vol, ax)
-    plt.savefig(f"all_components_{suffix}.png")
+    plt.savefig(os.path.join(save_dir, f"all_components_{suffix}.png"))
     plt.close("all")
 
     # plot the pred components (different colors for tp, fp, fn)
@@ -249,7 +258,7 @@ for entity_thresh in entity_threshes:
     fp_patch = mpatches.Patch(color='red', label='False Positive')
     fn_patch = mpatches.Patch(color='blue', label='False Negative')
     fig.legend(handles=[tp_patch, fp_patch, fn_patch], loc='upper left')
-    plt.savefig(f"tp_{suffix}_{entity_thresh}.png")
+    plt.savefig(os.path.join(save_dir, f"tp_{suffix}_{entity_thresh}.png"))
     plt.close("all")
     
     # plot the pred gt components (different colors for tp, fp, fn)
@@ -267,7 +276,7 @@ for entity_thresh in entity_threshes:
     fp_patch = mpatches.Patch(color='red', label='False Positive')
     fn_patch = mpatches.Patch(color='blue', label='False Negative')
     fig.legend(handles=[tp_patch, fp_patch, fn_patch], loc='upper left')
-    plt.savefig(f"tp_gt_{suffix}_{entity_thresh}.png")
+    plt.savefig(os.path.join(save_dir, f"tp_gt_{suffix}_{entity_thresh}.png"))
     plt.close("all")
     
 # plot chnge
@@ -279,7 +288,7 @@ plt.plot(recall_gt_dict.keys(), recall_gt_dict.values(), label="recall (>x% of g
 plt.xlabel("Entity Threshold")
 plt.ylabel("Value")
 plt.legend()
-plt.savefig(f"graph_{suffix}.png")
+plt.savefig(os.path.join(save_dir, f"graph_{suffix}.png"))
 
 # ===== 2d =====
 print("==========================================")
@@ -316,7 +325,7 @@ for entity_thresh in entity_threshes:
     fp_patch = mpatches.Patch(color='red', label='False Positive')
     fn_patch = mpatches.Patch(color='blue', label='False Negative')
     fig.legend(handles=[tp_patch, fp_patch, fn_patch], loc='upper left')
-    plt.savefig(f"2dtp_{suffix}_{entity_thresh}.png")
+    plt.savefig(os.path.join(save_dir, f"2dtp_{suffix}_{entity_thresh}.png"))
     plt.close("all")
 
     # plot the components (different colors for tp, fp, fn)
@@ -335,7 +344,7 @@ for entity_thresh in entity_threshes:
     fp_patch = mpatches.Patch(color='red', label='False Positive')
     fn_patch = mpatches.Patch(color='blue', label='False Negative')
     fig.legend(handles=[tp_patch, fp_patch, fn_patch], loc='upper left')
-    plt.savefig(f"tp_gt_{suffix}_{entity_thresh}.png")
+    plt.savefig(os.path.join(save_dir, f"tp_gt_2d_{suffix}_{entity_thresh}.png"))
     plt.close("all")
 
 suffix=f"100_103_x{start_x}-{end_x}_y{start_y}-{end_y}_height{height}xwidth{width}"
@@ -347,4 +356,4 @@ plt.plot(recall_gt_dict.keys(), recall_gt_dict.values(), label="recall (>x% of g
 plt.xlabel("Entity Threshold")
 plt.ylabel("Value")
 plt.legend()
-plt.savefig(f"graph2d_{suffix}.png")
+plt.savefig(os.path.join(save_dir, f"graph2d_{suffix}.png"))
