@@ -62,6 +62,7 @@ parser.add_argument("--start_y", type=int, default=0, help="Whether this is trai
 parser.add_argument("--end_y", type=int, default=1, help="Whether this is train, test, or valid folder")
 args = parser.parse_args()
 
+print("starting script")
 for arg in vars(args):
     print(f"{arg}: {getattr(args, arg)}")
 
