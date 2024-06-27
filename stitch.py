@@ -20,10 +20,10 @@ python stitch.py --pred_dir $PRED_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG 
 SLICES="111_120"
 MODELNAME="job202"
 EPOCH="325"
-PRED_DIR="/home/hluo/scratch/preds/${SLICES}_model_${MODELNAME}_epoch${EPOCH}_binary"
+PRED_DIR="/home/hluo/scratch/preds/${SLICES}_model_${MODELNAME}_epoch_${EPOCH}_binary"
 GT_DIR="/home/hluo/scratch/data/${SLICES}_3x512x512/ground_truth"
 IMG_DIR="/home/hluo/scratch/data/${SLICES}_3x512x512/original"
-SAVE_DIR="/home/hluo/scratch/stitchedpreds/${SLICES}_model_${MODELNAME}_epoch${EPOCH}"
+SAVE_DIR="/home/hluo/scratch/stitchedpreds/${SLICES}_model_${MODELNAME}_epoch_${EPOCH}"
 USE_LINES=false
 SHOW_IMG=false
 STITCH2d=true
@@ -85,6 +85,9 @@ start_x = args.start_x
 end_x = args.end_x
 start_y = args.start_y
 end_y = args.end_y
+
+num_imgs = os.listdir(pred_dir)
+print("num imgs", num_imgs)
 
 # Just assemble the predictions
 if args.stitch2d:
