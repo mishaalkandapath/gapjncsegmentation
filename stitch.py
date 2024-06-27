@@ -86,7 +86,7 @@ end_x = args.end_x
 start_y = args.start_y
 end_y = args.end_y
 
-num_imgs = os.listdir(pred_dir)
+img_ = os.listdir(pred_dir)
 print("num imgs", num_imgs)
 
 # Just assemble the predictions

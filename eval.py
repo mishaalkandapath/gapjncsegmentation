@@ -194,13 +194,13 @@ for i in range(depth):
     fp=os.path.join(pred_fp, pred_imgs[i])
     tmp = cv2.imread(fp, cv2.IMREAD_GRAYSCALE)
     pred_vol[i] = tmp[start_y:end_y, start_x:end_x]
-    print("read pred", i)
+    print("read pred", i, "from ", fp)
 gt_vol = np.zeros((depth, height, width), dtype=np.uint8)
 for i in range(depth):
     fp=os.path.join(gt_fp, gt_imgs[i])
     tmp = cv2.imread(fp, cv2.IMREAD_GRAYSCALE)
     gt_vol[i] = tmp[start_y:end_y, start_x:end_x]
-    print("read gt", i)  
+    print("read gt", i, "from ", fp)  
 gt_vol[gt_vol != 0] = 255
 print(np.unique(gt_vol, return_counts=True))
 
