@@ -16,11 +16,13 @@ END_Y=8192
 python stitch.py --pred_dir $PRED_DIR --save_dir $SAVE_DIR --show_img $SHOW_IMG --use_lines $USE_LINES --start_s $START_S --end_s $END_S --start_x $START_X --end_x $END_X --start_y $START_Y --end_y $END_Y
 
 
-
-PRED_DIR="/Users/huayinluo/Documents/binarypreds"
-GT_DIR=
-IMG_DIR=
-SAVE_DIR="/Users/huayinluo/Documents/stitchedpreds"
+# 100-110
+MODELNAME="job200"
+EPOCH="247"
+PRED_DIR="/home/hluo/scratch/preds/100_110_model_${MODELNAME}_epoch${EPOCH}"
+GT_DIR="/home/hluo/scratch/data/100_110_3x512x512/ground_truth"
+IMG_DIR="/home/hluo/scratch/data/100_110_3x512x512/original"
+SAVE_DIR="/home/hluo/scratch/stitchedpreds/100_110_model_${MODELNAME}_epoch${EPOCH"
 USE_LINES=false
 SHOW_IMG=false
 START_S=0

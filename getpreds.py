@@ -167,12 +167,17 @@ def main():
             color_combined_volume = get_colored_image(combined_volume)
         binary_pred[binary_pred!=0]=255 # to visualize
 
+        save_dir_binary = f"{save_dir}_binary"
+        save_dir_comb = f"{save_dir}_comb"
+        if not os.path.exists(save_dir_binary):
+            os.makedirs(save_dir_binary)
+        if not os.path.exists(save_dir_comb):
+            os.makedirs(save_dir_comb)
         if args.save2d:
             for k in range(subvol_depth):
-                # cv2.imwrite(os.path.join(save_dir, "probpreds", f"{filenames[0]}_{k}.png"), np.array(pred[k]))
-                cv2.imwrite(os.path.join(save_dir, "binarypreds", f"{filenames[0]}_{k}.png"), np.array(binary_pred[k]))
+                cv2.imwrite(os.path.join(save_dir_binary, f"{filenames[0]}_{k}.png"), np.array(binary_pred[k]))
                 if args.savecomb:
-                    cv2.imwrite(os.path.join(save_dir, "combinedpreds", f"{filenames[0]}_{k}.png"), np.array(color_combined_volume[k]))
+                    cv2.imwrite(os.path.join(save_dir_comb, f"{filenames[0]}_{k}.png"), np.array(color_combined_volume[k]))
             
         avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 999
         avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 999
