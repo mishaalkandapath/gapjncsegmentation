@@ -16,7 +16,7 @@ START_X=2048
 END_X=7168
 START_Y=2048
 END_Y=6144
-python eval.py --pred_fp $PRED_FP \
+python ~/gapjncsegmentation/eval.py --pred_fp $PRED_FP \
                --gt_fp $GT_FP \
                --start_z $START_Z \
                --start_x $START_X \
@@ -185,9 +185,11 @@ pred_imgs = sorted(pred_imgs)
 gt_imgs = os.listdir(gt_fp)
 gt_imgs = sorted(gt_imgs)
 print(len(pred_imgs), len(gt_imgs))
+print(pred_imgs, gt_imgs)
 
 tmp_fp=os.path.join(pred_fp, pred_imgs[0])
 tmp_gt_fp=os.path.join(gt_fp, gt_imgs[0])
+print(tmp_fp, tmp_gt_fp)
 tmp = cv2.imread(tmp_fp, cv2.IMREAD_GRAYSCALE)
 tmp_gt = cv2.imread(tmp_gt_fp, cv2.IMREAD_GRAYSCALE)
 print(tmp.shape, tmp_gt.shape)
