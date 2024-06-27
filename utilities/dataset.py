@@ -389,13 +389,15 @@ class SliceDatasetWithFilename(torch.utils.data.Dataset):
             images_dir, 
             masks_dir,
             augment=False,
-            downsample_factor=1
+            downsample_factor=1,
+            downsample_mask=True
     ):
         
         self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir)) if image_id.endswith(".npy")]
         self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if image_id.endswith(".npy")]
         self.augment = augment
         self.downsample_factor = downsample_factor
+        self.downsample_mask = downsample_mask
     
     def __getitem__(self, i):
         """ 
@@ -424,7 +426,8 @@ class SliceDatasetWithFilename(torch.utils.data.Dataset):
         # Check if the standard deviation is zero
         if self.downsample_factor > 1:
             image = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(image)
-            mask = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(mask)
+            if self.downsample_mask:
+                mask = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(mask)
         if torch.std(image) == 0:
             print(f"Image at index {i} has zero standard deviation, skipping normalization")
         else:

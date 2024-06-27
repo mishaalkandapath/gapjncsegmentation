@@ -9,7 +9,7 @@ MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.
 X_DIR=/home/hluo/scratch/data/111_120_3x512x512/original
 Y_DIR=/home/hluo/scratch/data/111_120_3x512x512/ground_truth
 SAVE_DIR=/home/hluo/scratch/preds/111_120_${MODEL_NAME}_epoch_${EPOCH}
-SAVE2D=false
+SAVE2D=true
 SAVECOMB=false
 USEALLSUBFOLDERS=false
 PRED_MEMB=false
@@ -19,6 +19,7 @@ SUBVOL_DEPTH=3
 SUBVOL_HEIGHT=512
 SUBVOL_WIDTH=512
 DOWNSAMPLE_FACTOR=2
+UPSAMPLE=true
 python /home/hluo/gapjncsegmentation/getpreds.py --downsample_factor $DOWNSAMPLE_FACTOR --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
 """
 
@@ -45,6 +46,7 @@ def main():
     parser.add_argument('--save2d', type=lambda x: (str(x).lower() == 'true'), default=True, help='save 2d')
     parser.add_argument('--savecomb', type=lambda x: (str(x).lower() == 'true'), default=False, help='save combined')
     parser.add_argument('--useallsubfolders', type=lambda x: (str(x).lower() == 'true'), default=False, help='use all subfolders')
+    parser.add_argument('--upsample', type=lambda x: (str(x).lower() == 'true'), default=False, help='use all subfolders')
     parser.add_argument('--subvol_depth', type=int, default=3, help='num workers')
     parser.add_argument('--subvol_height', type=int, default=512, help='num workers')
     parser.add_argument('--subvol_width', type=int, default=512, help='num workers')
@@ -74,7 +76,10 @@ def main():
         print("using all subfolders")
         test_dataset = SliceDatasetWithFilenameAllSubfolders(x_test_dir, y_test_dir, downsample_factor=downsample_factor)
     else:
-        test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir, downsample_factor=downsample_factor)
+        if args.upsample:
+            test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir, downsample_factor=downsample_factor, downsample_mask=False)
+        else:
+            test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir, downsample_factor=downsample_factor, downsample_mask=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
     total_imgs = len(test_dataset)
@@ -118,8 +123,9 @@ def main():
             del tmp
 
         # pad labels if necessary
-        # subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
         d, h, w = labels.shape[2:]
+        if args.upsample:
+            subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width # keep mask original shape
         if (h < subvol_height) or (w < subvol_width) or (d < subvol_depth):
             tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(labels[0].detach().cpu())
             labels = tmp.unsqueeze(0)
@@ -146,14 +152,16 @@ def main():
             
             # binary_pred (depth, height, width)
         # downsample so upsample
-        # if downsample_factor > 1:
-        #     print("before", binary_pred.shape)
-        #     # convert to float, not long
-        #     binary_pred = binary_pred.float().unsqueeze(0) # (batch_size, channels, depth, height, width) -> (channels, depth, height, width)
-        #     print(binary_pred.shape)
-        #     binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred) # (upsample takes 4D input)
-        #     binary_pred = binary_pred[0]
-        #     print("upsampled", binary_pred.shape) # (depth, height, width)
+        if args.upsample:
+            print("before", binary_pred.shape)
+            # convert to float, not long
+            binary_pred = binary_pred.float().unsqueeze(0) # (batch_size, channels, depth, height, width) -> (channels, depth, height, width)
+            print(binary_pred.shape)
+            binary_pred = nn.Upsample(scale_factor=downsample_factor, mode='nearest')(binary_pred) # (upsample takes 4D input)
+            binary_pred = binary_pred[0]
+            print("upsampled", binary_pred.shape) # (depth, height, width)
+            
+            
         
         labels = labels[0,0].detach().cpu()
         combined_volume = np.asarray((labels * 2 + binary_pred))
