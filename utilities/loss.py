@@ -57,8 +57,8 @@ class FocalTverskyLossWith2d3d(nn.Module):
         super(FocalTverskyLossWith2d3d, self).__init__()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.intermediate_weight = torch.Tensor([intermediate_weight]).to(device) # constant that weighs importance of intermediate 2D class predictions in the loss function
-        self.intermediate_loss = FocalTverskyLoss(alpha, beta, gamma, device)
-        self.final_loss = FocalTverskyLoss(alpha, beta, gamma, device)
+        self.intermediate_loss = FocalTverskyLoss(alpha, beta, gamma)
+        self.final_loss = FocalTverskyLoss(alpha, beta, gamma)
     def forward(self, preds_2d, preds_3d, targets):
         loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss
         loss_3d = self.final_loss(preds_3d, targets) # final 3D class predictions
@@ -73,8 +73,8 @@ class FocalLossWith2d3d(nn.Module):
         super(FocalLossWith2d3d, self).__init__()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.intermediate_weight = torch.Tensor([intermediate_weight]).to(device) # constant that weighs importance of intermediate 2D class predictions in the loss function
-        self.intermediate_loss = FocalLoss(alpha, gamma, device)
-        self.final_loss = FocalLoss(alpha, gamma, device)
+        self.intermediate_loss = FocalLoss(alpha, gamma)
+        self.final_loss = FocalLoss(alpha, gamma)
     
     def forward(self, preds_2d, preds_3d, targets):
         loss_2d = self.intermediate_loss(preds_2d, targets) # intermediate 2D class predictions loss

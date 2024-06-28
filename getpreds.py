@@ -3,8 +3,8 @@ getpreds.py
 Given a directory of subvolumes, this script will load the model and predict on each subvolume, and generate test metrics such as precision and recall.
 
 Sample usage:
-MODEL_NAME=model_job202
-EPOCH=325
+MODEL_NAME=model_job203b
+EPOCH=310
 MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
 X_DIR=/home/hluo/scratch/data/111_120_3x512x512/original
 Y_DIR=/home/hluo/scratch/data/111_120_3x512x512/ground_truth
@@ -21,6 +21,30 @@ SUBVOL_WIDTH=512
 DOWNSAMPLE_FACTOR=2
 UPSAMPLE=true
 python /home/hluo/gapjncsegmentation/getpreds.py --upsample $UPSAMPLE --downsample_factor $DOWNSAMPLE_FACTOR --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
+
+
+(no downsample)
+module purge
+source ~/py39/bin/activate
+module load scipy-stack gcc cuda opencv
+MODEL_NAME=model_job204c
+EPOCH=52
+SLICES="100_110"
+MODEL_PATH=/home/hluo/scratch/models/${MODEL_NAME}/${MODEL_NAME}_epoch_${EPOCH}.pth
+X_DIR=/home/hluo/scratch/data/${SLICES}_3x512x512/original
+Y_DIR=/home/hluo/scratch/data/${SLICES}_3x512x512/ground_truth
+SAVE_DIR=/home/hluo/scratch/preds/${SLICES}_${MODEL_NAME}_epoch_${EPOCH}
+SAVE2D=true
+SAVECOMB=false
+USEALLSUBFOLDERS=false
+PRED_MEMB=false
+BATCH_SIZE=1
+NUM_WORKERS=4
+SUBVOL_DEPTH=3
+SUBVOL_HEIGHT=512
+SUBVOL_WIDTH=512
+python /home/hluo/gapjncsegmentation/getpreds.py --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
+
 """
 
 import os
@@ -31,6 +55,39 @@ import time
 from utilities.models import *
 from utilities.utilities import *
 import torchio as tio
+from scipy.ndimage import label
+
+
+
+def get_entity_metrics(pred_vol, gt_vol, entity_thresh=0.1):
+    """ returns fp, fn, tp """
+    labeled_array, num_features = label(pred_vol)
+    print(f"Number of entities found in pred: {num_features}")
+    tp = 0
+    fp = 0
+    fn = 0
+    for i in range(1, num_features + 1):
+        component = (labeled_array == i).astype(np.uint8) * 255
+        num_intersect = np.count_nonzero(component[gt_vol != 0]) # nonzero pixels in component where gt is also nonzero
+        num_pred = np.count_nonzero(component)
+        proportion_intersect = num_intersect/num_pred
+        if proportion_intersect >= entity_thresh:
+            tp += 1
+        else:
+            fp += 1
+
+    labeled_array, num_gt_features = label(gt_vol)
+    print(f"Number of entities found in gt: {num_gt_features}")
+    tp_intersect_gt = 0
+    for i in range(1, num_gt_features + 1):
+        component = (labeled_array == i).astype(np.uint8) * 255
+        num_intersect = np.count_nonzero(component[pred_vol != 0])
+        num_gt = np.count_nonzero(component)
+        if num_intersect/num_gt >= entity_thresh:
+            tp_intersect_gt += 1
+        else:
+            fn += 1
+    return fp, fn, tp
 
 def main():
     print("starting...")
@@ -47,6 +104,7 @@ def main():
     parser.add_argument('--savecomb', type=lambda x: (str(x).lower() == 'true'), default=False, help='save combined')
     parser.add_argument('--useallsubfolders', type=lambda x: (str(x).lower() == 'true'), default=False, help='use all subfolders')
     parser.add_argument('--upsample', type=lambda x: (str(x).lower() == 'true'), default=False, help='use all subfolders')
+    parser.add_argument('--use_entity_metrics', type=lambda x: (str(x).lower() == 'true'), default=False, help='use all subfolders')
     parser.add_argument('--subvol_depth', type=int, default=3, help='num workers')
     parser.add_argument('--subvol_height', type=int, default=512, help='num workers')
     parser.add_argument('--subvol_width', type=int, default=512, help='num workers')
@@ -161,6 +219,9 @@ def main():
             binary_pred = binary_pred[0]
             print("upsampled", binary_pred.shape) # (depth, height, width)
             
+            
+        if args.use_entity_metrics:
+            entity_fp, entity_fn, entity_tp = get_entity_metrics(binary_pred, labels, args.entity_thresh)
             
         
         labels = labels[0,0].detach().cpu()

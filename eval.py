@@ -18,6 +18,7 @@ START_Y=2048
 END_Y=6144
 python ~/gapjncsegmentation/eval.py --pred_fp $PRED_FP \
                --gt_fp $GT_FP \
+                --save_dir $SAVE_DIR \
                --start_z $START_Z \
                --start_x $START_X \
                --start_y $START_Y \
