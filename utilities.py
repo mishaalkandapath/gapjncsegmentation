@@ -532,12 +532,13 @@ class ExtendDataset(torch.utils.data.Dataset):
             image_dim = (512, 512),
             split=0 #0 for train, 1 for valid
     ):
+        print("--extend dataset--")
         prefix = "train" if not split else "valid"
         images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
         masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
         
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts"))) if "DS" not in image_id and (True and self.centers_and_contours(cv2.imread(os.path.join(masks_dir, image_id)), filter_mode=True))]
-        self.image_paths = [os.path.join(images_dir, os.path.split(image_id.replace("sem2dauer_gj_2d_training.vsseg_export_", "SEM_dauer_2_image_export_"))[-1]) for image_id in self.mask_paths if "DS" not in image_id]
+        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if "DS" not in image_id]
+        self.image_paths = [os.path.join(images_dir, os.path.split(image_id)[-1]) for image_id in self.mask_paths if "DS" not in image_id]
 
         self.image_dim = image_dim
 
@@ -549,50 +550,54 @@ class ExtendDataset(torch.utils.data.Dataset):
 
         # read the input EM image and its target label
         try:
-            image = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], self.image_paths[i]+".png")), cv2.COLOR_BGR2GRAY) # each pixel is 
-            image_files.remove(self.image_paths[i]+".png")
+            s = re.findall(r"s\d\d\d", self.image_paths[i])[0][1:]
+            if int(s) <= 50: extra= ".png.png"
+            else: extra = ".png"
+            image = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], os.path.split(self.image_paths[i])[-1].replace("_before", "").replace("_after", "")+extra)), cv2.COLOR_BGR2GRAY) # each pixel is 
+            img_files.remove(os.path.split(self.image_paths[i])[-1].replace("_before", "").replace("_after", "")+extra)
         except Exception as e:
             print(self.image_paths[i])
-            raise Exception(self.image_paths[i])
+            raise Exception(e)
             
-        mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], self.mask_paths[i]+".png")), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
-        mask_files.remove(self.mask_paths[i]+".png")
+        mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], os.path.split(self.mask_paths[i])[-1].replace("_before", "").replace("_after", "")+extra)), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
+        mask_files.remove(os.path.split(self.mask_paths[i])[-1].replace("_before", "").replace("_after", "")+extra)
+        mask_files.remove(os.path.split(self.mask_paths[i])[-1].replace("_before", "").replace("_after", "")+"og.png")
 
         #read the previous/next section's prediction and EM
-        pred_image = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], image_files[0])), cv2.COLOR_BGR2GRAY)
-        pred_mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], mask_files[1])), cv2.COLOR_BGR2GRAY)
+        pred_image = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], img_files[0])), cv2.COLOR_BGR2GRAY)
+        pred_mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], mask_files[0])), cv2.COLOR_BGR2GRAY)
 
         mask[mask == 0] = 0
         mask[mask == 255] = 1
         pred_mask[pred_mask == 0] = 0
         pred_mask[pred_mask == 255] = 1
-        
         # apply augmentations
-        if random.random() >= 0.5:
-            # image, mask = self.augmentation(image, mask)
-            # image = v2.RandomAutocontrast()(image)
-            augmentation = v2.Compose([
-                v2.RandomHorizontalFlip(p=0.5),
-                v2.RandomVerticalFlip(p=0.5),
-                v2.RandomApply([v2.RandomRotation(degrees=(0, 180))], p=0.5),
-                v2.ColorJitter(contrast=(0, 0.5))
-            ])
-            image, mask, pred_image, pred_mask = augmentation(image, mask, pred_image, pred_mask)
+        # if random.random() >= 0.5:
+        #     # image, mask = self.augmentation(image, mask)
+        #     # image = v2.RandomAutocontrast()(image)
+        #     augmentation = v2.Compose([
+        #         v2.RandomHorizontalFlip(p=0.5),
+        #         v2.RandomVerticalFlip(p=0.5),
+        #         v2.RandomApply([v2.RandomRotation(degrees=(0, 180))], p=0.5),
+        #         v2.ColorJitter(contrast=(0, 0.5))
+        #     ])
+        #     image, mask, pred_image, pred_mask = augmentation(image, mask, pred_image, pred_mask)
         
         # apply preprocessing
         _transform = []
         _transform.append(transforms.ToTensor())
 
-        mask = transforms.Compose(_transform)(mask)
+        mask = torch.from_numpy(mask)
         ont_hot_mask = mask
         
 
         _transform_img = _transform.copy()
         image = transforms.Compose(_transform_img)(image)
         pred_mask = torch.from_numpy(pred_mask)
-        pred_image = torch.from_numpy(pred_image)
+        pred_image = transforms.Compose(_transform_img)(pred_image)
         
-        return image, pred_image, pred_mask, mask
+        # print(torch.unique(image), torch.unique(pred_image), torch.unique(mask).to(torch.float32), torch.unique(pred_mask))
+        return image, pred_image, pred_mask.to(torch.float32).unsqueeze(0), mask.to(torch.float32).unsqueeze(0)
         
     def __len__(self):
         # return length of 
@@ -675,7 +680,7 @@ class UpBlock(nn.Module):
 
 class UNet(nn.Module):
     """UNet Architecture"""
-    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, residual=False, scale=False, spatial=False, dropout=0):
+    def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, residual=False, scale=False, spatial=False, dropout=0, classes=2):
         """Initialize the UNet model"""
         super(UNet, self).__init__()
         self.three = three
@@ -695,7 +700,7 @@ class UNet(nn.Module):
         self.up_conv2 = UpBlock(128+ 256, 128, self.up_sample_mode, dropout=self.dropout, residual=residual)
         self.up_conv1 = UpBlock(128 + 64, 64, self.up_sample_mode)
         # Final Convolution
-        self.conv_last = nn.Conv2d(64, 1, kernel_size=1)
+        self.conv_last = nn.Conv2d(64, 1 if classes == 2 else classes, kernel_size=1)
         self.attend = attend
         if scale:
             self.s1, self.s2 = torch.nn.Parameter(torch.ones(1), requires_grad=True), torch.nn.Parameter(torch.ones(1), requires_grad=True) # learn scaling
@@ -882,8 +887,8 @@ class MemUNet(nn.Module):
             #attention_mode???
             skip1_out = torch.mean(skip1_out, dim=2)
             skip2_out = torch.mean(skip2_out, dim=2)
-        x = self.up_conv2(x, skip2_out) # x: (16, 128, 256, 256)
-        x = self.up_conv1(x, skip1_out) # x: (16, 64, 512, 512)
+        x = self.up_conv2(x, skip2_out/2 + skip2_out_mem/2) # x: (16, 128, 256, 256)
+        x = self.up_conv1(x, skip1_out/2 + skip1_out_mem/2) # x: (16, 64, 512, 512)
         x = self.conv_last(x) # x: (16, 1, 512, 512)
         return x
 
@@ -891,7 +896,7 @@ class ExtendUNet(nn.Module):
     """UNet Architecture with membrane feature information"""
     def __init__(self, out_classes=2, up_sample_mode='conv_transpose', three=False, attend=False, scale=False):
         """Initialize the UNet model"""
-        super(MemUNet, self).__init__()
+        super(ExtendUNet, self).__init__()
         self.three = three
         self.up_sample_mode = up_sample_mode
         # Downsampling Path
@@ -922,11 +927,11 @@ class ExtendUNet(nn.Module):
         """
         # print(x.shape)
         x, skip1_out = self.down_conv1(x) # x: (16, 64, 256, 256), skip1_out: (16, 64, 512, 512) (batch_size, channels, height, width) 
-        x_pimg, skip1_out_pimg = self.down_conv1_mem(pimg)   
-        x_pmask, skip1_out_pmask = self.down_conv1_mem(pmask)   
+        x_pimg, skip1_out_pimg = self.down_conv1_pimg(pimg)   
+        x_pmask, skip1_out_pmask = self.down_conv1_pmask(pmask)   
 
 
-        x, skip2_out = self.down_conv2(x+x_mem) # x: (16, 128, 128, 128), skip2_out: (16, 128, 256, 256)
+        x, skip2_out = self.down_conv2(x) # x: (16, 128, 128, 128), skip2_out: (16, 128, 256, 256)
         x_pimg, skip2_out_pimg = self.down_conv2_pimg(x_pimg)   
         x_pmask, skip2_out_pmask = self.down_conv2_pmask(x_pmask)   
 
@@ -949,13 +954,11 @@ class FocalLoss(nn.Module):
         self.device = device
         self.alpha = alpha.to(device)
     
-    def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
-        # bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], loss_fn = F.binary_cross_entropy_with_logits):
+        bce_loss = loss_fn(inputs, targets, reduction="none") if loss_fn is F.binary_cross_entropy_with_logits else loss_fn(inputs, targets, reduction="none", weight=self.alpha)
+        pt = torch.exp(-bce_loss)
         targets = targets.to(torch.int64)
-        # loss = self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape) * (1-pt) ** self.gamma * bce_loss
-        loss = ((1 - torch.nn.Sigmoid()(inputs)) ** self.gamma) * self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape)* (torch.log(1+torch.exp(-inputs)) +torch.log(1+torch.exp(inputs)))
-
+        loss = (1 if loss_fn is not F.binary_cross_entropy_with_logits else  self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape)) * (1-pt) ** self.gamma * bce_loss 
         if mito_mask != []:
             #first modify loss_mask, neuron_mask is always on.
             loss_mask = loss_mask | mito_mask
@@ -1133,6 +1136,19 @@ class GenDLoss(nn.Module):
 
         return torch.nanmean(1 - 2 * torch.nansum(weights * torch.nansum(targets * inputs, dim=-1), dim=-1)/\
                           torch.nansum(weights * torch.nansum(targets + inputs, dim=-1), dim=-1))
+
+class MultiGenDLoss(nn.Module):
+    def __init__(self):
+        super(MultiGenDLoss, self).__init__()
+    
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], classes=3, **kwargs):
+        inputs = nn.Sigmoid()(inputs)
+        targets, inputs = targets.view(targets.shape[0], targets.shape[1], -1), inputs.view(inputs.shape[0], targets.shape[1], -1)
+
+        weights = 1 / (torch.sum(targets, dim=-1).pow(2)+1e-6)
+        # print(weights.shape, torch.nansum(targets * inputs, dim=-1).shape)
+        return torch.nanmean(1 - 2 * torch.nansum(weights * torch.nansum(targets * inputs, dim=-1))/\
+                          torch.nansum(weights * torch.nansum(targets + inputs, dim=-1)))
 
 class PyramidPooling(nn.Module):
 
