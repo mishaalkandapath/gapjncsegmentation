@@ -156,6 +156,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
     # --- Training ---
     for epoch in range(epochs):
         print(f"--------------------Epoch {epoch} (time: {time.time() - start} seconds)--------------------")
+        print("---------------------------------Training---------------------------------")
         epoch_train_precision = 0
         epoch_train_recall = 0
         epoch_train_loss = 0
@@ -174,7 +175,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}") # (batch, channel, depth, height, width)
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
             if inputs.shape[2:] != (depth, height, width):
-                print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}")
+                print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}, actual shape: {depth, height, width}")
                 continue
             
             # Calculate loss and update weights
@@ -222,8 +223,9 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         train_losses.append(epoch_train_loss)
         train_precision.append(epoch_train_precision)
         train_recall.append(epoch_train_recall)
-        print(f"Train | loss: {epoch_train_loss:.5f} precision: {epoch_train_precision:.5f} recall: {epoch_train_recall:.5f}")
         
+        print(f"Train | loss: {epoch_train_loss:.5f} precision: {epoch_train_precision:.5f} recall: {epoch_train_recall:.5f}")
+        print("---------------------------------Validation---------------------------------")
         # --- Validation ---
         epoch_valid_precision = 0
         epoch_valid_recall = 0
