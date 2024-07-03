@@ -35,8 +35,8 @@ RESULTS_DIR=/home/hluo/scratch/model_results
 LOSS_DIR=/home/hluo/scratch/losses
 TRAIN_X_DIRS="/home/hluo/scratch/data/0_50_3x1024x1024_stride512/imgs"
 TRAIN_Y_DIRS="/home/hluo/scratch/data/0_50_3x1024x1024_stride512/imgs"
-VALID_X_DIRS="/home/hluo/scratch/111_120_3x512x512/original"
-VALID_Y_DIRS="/home/hluo/scratch/111_120_3x512x512/ground_truth"
+VALID_X_DIRS="/home/hluo/scratch/data/111_120_3x512x512/original"
+VALID_Y_DIRS="/home/hluo/scratch/data/111_120_3x512x512/ground_truth"
 python ~/gapjncsegmentation/train.py \
     --intermediate_weight $INTERMEDIATE_WEIGHT \
     --use2d3d $USE2d3d \
