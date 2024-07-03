@@ -426,7 +426,7 @@ def generate_cropped_3d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, save
                 num_imgs_saved += 1
                 print(f"Saved crop {h}/{w} (y{start_y}_z{start_x}) to {save_img_fp}", end='\r')
             print(f"--------------------------------Done saving crop {h}/{w} (y{start_y}_z{start_x})--------------------------------")
-        print(f"Finished processing image {i}")
+        print(f"Finished processing image {i} (saved {num_imgs_saved} crops)")
     print(f"Saved {num_imgs_saved} crops")
     
     
