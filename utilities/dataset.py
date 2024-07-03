@@ -76,7 +76,7 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
                 tio.RandomFlip(axes=0, flip_probability=0.5),
                 tio.RandomFlip(axes=1, flip_probability=0.5),
                 tio.RandomFlip(axes=2, flip_probability=0.5),
-                tio.RandomAffine(scales=(0,0,0), degrees=(360,0,0), translation=(0,0,100)) # translate and rotate
+                tio.RandomAffine(scales=(0,0,0), degrees=(360,0,0), translation=(0,100,100)) # translate and rotate
             ]
             
             for transform in all_transforms:
