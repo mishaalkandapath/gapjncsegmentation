@@ -175,7 +175,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}") # (batch, channel, depth, height, width)
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
             if inputs.shape[2:] != (depth, height, width):
-                print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}, actual shape: {depth, height, width}")
+                print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}, actual shape: {depth, height, width}", end="\r")
                 continue
             
             # Calculate loss and update weights
@@ -224,7 +224,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         train_precision.append(epoch_train_precision)
         train_recall.append(epoch_train_recall)
         
-        print(f"Train | loss: {epoch_train_loss:.5f} precision: {epoch_train_precision:.5f} recall: {epoch_train_recall:.5f}")
+        print(f"Train (num processed: {num_train_processed} | loss: {epoch_train_loss:.5f} precision: {epoch_train_precision:.5f} recall: {epoch_train_recall:.5f}")
         print("---------------------------------Validation---------------------------------")
         # --- Validation ---
         epoch_valid_precision = 0
@@ -240,7 +240,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
             if valid_inputs.shape[2:] != (depth, height, width):
-                print(f"Skipping batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
+                print(f"Skipping valid batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
                 continue
             
             # calculate loss
@@ -285,7 +285,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         valid_precision.append(epoch_valid_precision)
         valid_recall.append(epoch_valid_recall)
         valid_losses.append(epoch_valid_loss)
-        print(f"Valid | loss: {epoch_valid_loss:.5f} precision: {epoch_valid_precision:.5f} recall: {epoch_valid_recall:.5f}")
+        print(f"Valid (num processed: {num_valid_processed})| loss: {epoch_valid_loss:.5f} precision: {epoch_valid_precision:.5f} recall: {epoch_valid_recall:.5f}")
         
         checkpoint(model=model, optimizer=optimizer, epoch=epoch, loss=loss, batch_size=batch_size, lr=lr, focal_loss_weights=(0, 0), path=os.path.join(model_folder, f"{model_name}_epoch_{epoch}.pth"))
         torch.save({
