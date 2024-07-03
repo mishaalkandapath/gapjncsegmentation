@@ -3,7 +3,6 @@ Utility functions for training the model
 """
 import os
 import torch 
-import wandb
 import time
 import argparse
 import matplotlib.pyplot as plt
@@ -60,24 +59,6 @@ def parse_arguments():
 
     args = parser.parse_args()
     return args
-
-def log_predictions(input_img: np.ndarray, label_img: np.ndarray, pred_img: np.ndarray, epoch: int, step: int, table: wandb.Table):
-    """ Log input, ground truth, and prediction images to wandb """
-    depth, height, width = input_img.shape
-    
-    # -- plot as 3 rows: input, ground truth, prediction
-    fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
-    for j in range(depth):
-        ax[0, j].imshow(input_img[j], cmap="gray")
-        ax[1, j].imshow(label_img[j], cmap="gray")
-        ax[2, j].imshow(pred_img[j], cmap="gray")
-    ax[0, 0].set_ylabel("Input")
-    ax[1, 0].set_ylabel("Ground Truth")
-    ax[2, 0].set_ylabel("Prediction")
-    
-    # save figure to wandb
-    mask_img = wandb.Image(fig)          
-    table.add_data(f"Epoch {epoch} Step {step}", mask_img)
 
 def setup_datasets_and_dataloaders_from_lists(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True, downsample_factor: int=1):
     """ Setup datasets and dataloaders for training and validation"""
