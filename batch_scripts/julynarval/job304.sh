@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job304
+#SBATCH --job-name=job303b
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -10,7 +10,7 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-MODEL_NAME="model_job304"
+MODEL_NAME="model_job303b"
 SEED=29
 INTERMEDIATE_WEIGHT=0.6
 USE2d3d=True
@@ -26,15 +26,15 @@ NUM_PREDICTIONS_TO_LOG=3
 DEPTH=3
 WIDTH=512
 HEIGHT=512
-AUGMENT=True
-LOAD_MODEL_NAME=model_job204c
-LOAD_EPOCH=52
+AUGMENT=False
+LOAD_MODEL_NAME=model_job111
+LOAD_EPOCH=49
 LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_epoch_${LOAD_EPOCH}.pth
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
 LOSS_DIR=/home/hluo/scratch/losses
-TRAIN_X_DIRS="/home/hluo/scratch/0_50_3x512x512_filtered/original/train /home/hluo/scratch/100_110_3x512x512_filtered40/original/train"
-TRAIN_Y_DIRS="/home/hluo/scratch/0_50_3x512x512_filtered/ground_truth/train /home/hluo/scratch/100_110_3x512x512_filtered40/ground_truth/train"
+TRAIN_X_DIRS="/home/hluo/scratch/data/0_50_3x1024x1024_stride512/imgs"
+TRAIN_Y_DIRS="/home/hluo/scratch/data/0_50_3x1024x1024_stride512/imgs"
 VALID_X_DIRS="/home/hluo/scratch/111_120_3x512x512/original"
 VALID_Y_DIRS="/home/hluo/scratch/111_120_3x512x512/ground_truth"
 python ~/gapjncsegmentation/train.py \
