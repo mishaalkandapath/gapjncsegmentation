@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job303
+#SBATCH --job-name=job303b
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -10,7 +10,7 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-MODEL_NAME="model_job303"
+MODEL_NAME="model_job303b"
 SEED=9
 INTERMEDIATE_WEIGHT=0.6
 USE2d3d=True
@@ -27,7 +27,7 @@ DOWNSAMPLE_FACTOR=2
 DEPTH=3
 WIDTH=512
 HEIGHT=512
-AUGMENT=True
+AUGMENT=False
 LOAD_MODEL_NAME=model_job111
 LOAD_EPOCH=49
 LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_epoch_${LOAD_EPOCH}.pth

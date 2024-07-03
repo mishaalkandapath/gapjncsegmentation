@@ -13,14 +13,21 @@ DEPTH=2
 GT_PROP=0.0000001
 
 
+SLICES="0_50"
+
+
+
+SLICES="111_120"
+
+SLICES="0_50"
 CROP_SIZE=1024
 STRIDE=512
-DEPTH=2
+DEPTH=5
 GT_PROP=0.0000001
-IMG_DIR="/home/hluo/scratch/data/0-50fullimages"
-GT_DIR="/home/hluo/scratch/data/0_50_gt"
-SAVE_IMG_DIR="/home/hluo/scratch/data/0_50_${DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${STRIDE}/imgs"
-SAVE_GT_DIR="/home/hluo/scratch/data/0_50_${DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${STRIDE}/gt"
+IMG_DIR="/home/hluo/scratch/data/${SLICES}_fullimgs/original"
+GT_DIR="/home/hluo/scratch/data/${SLICES}_fullimgs/ground_truth"
+SAVE_IMG_DIR="/home/hluo/scratch/data/${SLICES}_${DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${STRIDE}/original"
+SAVE_GT_DIR="/home/hluo/scratch/data/${SLICES}_${DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${STRIDE}/ground_truth"
 SAVE_VIS_DIR="/home/hluo/scratch/data/0_50_${DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${STRIDE}/vis"
 python ~/gapjncsegmentation/crop_fullimg.py --img_dir $IMG_DIR \
                           --gt_dir $GT_DIR \

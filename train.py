@@ -45,6 +45,7 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     num_workers = args.num_workers
     augment = args.augment
+    colour_augment = args.colour_augment
     downsample_factor = args.downsample_factor
     pred3classes = args.pred3classes
     train_x_dirs = args.train_x_dirs
@@ -57,8 +58,8 @@ if __name__ == "__main__":
     # if multiple directories are provided, use them to create the dataset
     if len(train_x_dirs) > 1:
         print("Setting up from lists")
-        train_dataset, train_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=train_x_dirs, mask_dir_list=train_y_dirs, batch_size=batch_size, num_workers=num_workers, augment=augment, shuffle=True, downsample_factor=downsample_factor)
-        valid_dataset, valid_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=valid_x_dirs, mask_dir_list=valid_y_dirs, batch_size=1, num_workers=num_workers, augment=False, shuffle=False, downsample_factor=downsample_factor)
+        train_dataset, train_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=train_x_dirs, mask_dir_list=train_y_dirs, batch_size=batch_size, num_workers=num_workers, augment=augment, shuffle=True, downsample_factor=downsample_factor, colour_augment=colour_augment)
+        valid_dataset, valid_loader = setup_datasets_and_dataloaders_from_lists(img_dir_list=valid_x_dirs, mask_dir_list=valid_y_dirs, batch_size=1, num_workers=num_workers, augment=False, shuffle=False, downsample_factor=downsample_factor, colour_augment=False)
     else:
         train_x_dirs = train_x_dirs[0]
         train_y_dirs = train_y_dirs[0]

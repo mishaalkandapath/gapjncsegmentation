@@ -23,13 +23,15 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
             images_dir_lst, 
             masks_dir_lst,
             augment=False,
-            downsample_factor=1
+            downsample_factor=1,
+            colour_augment=False
     ):
         
         self.image_paths = []
         self.mask_paths = []
         self.downsample_factor=downsample_factor
         self.augment = augment
+        self.colour_augment = colour_augment
         for images_dir in images_dir_lst:
             self.image_paths.extend([os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))])
         for masks_dir in masks_dir_lst:   
@@ -85,15 +87,16 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
             mask = subject.mask.tensor
             
             # Define additional transformations for the image
-            additional_transforms = tio.Compose([
-                tio.RandomBlur(p=0.5),
-                tio.RandomNoise(p=0.5),
-                tio.RandomGamma(p=0.5)
-            ])
+            if self.colour_augment:
+                additional_transforms = tio.Compose([
+                    tio.RandomBlur(p=0.5),
+                    tio.RandomNoise(p=0.5),
+                    tio.RandomGamma(p=0.5)
+                ])
 
-            # Apply the additional transformations to the flipped image
-            image = additional_transforms(image)
-            
+                # Apply the additional transformations to the flipped image
+                image = additional_transforms(image)
+                
         # one-hot encode the mask (depth, height, width) --> (depth, height, width, num_classes=2)
         one_hot_mask = torch.nn.functional.one_hot(mask.squeeze(0).long(), num_classes=2)
         one_hot_mask = one_hot_mask.permute(3, 0, 1, 2).float() # (num_classes, depth, height, width)

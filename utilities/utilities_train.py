@@ -43,6 +43,7 @@ def parse_arguments():
     # loss arguments
     parser.add_argument("--pred3classes", type=lambda x: (str(x).lower() == 'true'), default=False, help="Whether to predict 3 classes")
     parser.add_argument("--augment", type=lambda x: (str(x).lower() == 'true'), default=True, help="Whether to augment the data")
+    parser.add_argument("--colour_augment", type=lambda x: (str(x).lower() == 'true'), default=True, help="Whether to colour augment the data")
     parser.add_argument("--use2d3d", type=lambda x: (str(x).lower() == 'true'), default=True, help="Whether to use 2d3d loss")
     parser.add_argument("--loss_type", type=str, default="focal", help="Type of loss function to use")
     parser.add_argument("--intermediate_weight", type=float, default=0.33, help="Intermediate weight parameter for 2d3d loss")
@@ -60,10 +61,10 @@ def parse_arguments():
     args = parser.parse_args()
     return args
 
-def setup_datasets_and_dataloaders_from_lists(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True, downsample_factor: int=1):
+def setup_datasets_and_dataloaders_from_lists(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True, downsample_factor: int=1, colour_augment: bool=False):
     """ Setup datasets and dataloaders for training and validation"""
     print("Setting up: augment ", augment, " shuffle ", shuffle)
-    my_dataset = SliceDatasetMultipleFolders(img_dir_list, mask_dir_list, augment=augment, downsample_factor=downsample_factor)
+    my_dataset = SliceDatasetMultipleFolders(img_dir_list, mask_dir_list, augment=augment, downsample_factor=downsample_factor, colour_augment=colour_augment)
     my_loader = DataLoader(my_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers) # change num_workers as needed
     return my_dataset, my_loader
 
