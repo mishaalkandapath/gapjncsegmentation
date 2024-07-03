@@ -146,7 +146,7 @@ def freeze_model_layers(model, freeze_model_start_layer):
                         print("unfreezed layer 4 (upsampling path)")
     return model
 
-def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, loss_folder:str, num_predictions_to_log:int=5, depth=3, height=512, width=512, use2d3d=False, savevis=True) -> None:
+def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, loss_folder:str, num_predictions_to_log:int=5, depth=3, height=512, width=512, use2d3d=False, savevis=True, prediction_log_interval=5) -> None:
     """ 
     Train the model and log predictions locally.
     
@@ -218,7 +218,7 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             epoch_tn += tn
 
             # Save predictions for each epoch
-            if (num_train_logged < num_predictions_to_log) and (epoch % 10 == 0):
+            if (num_train_logged < num_predictions_to_log) and (epoch % prediction_log_interval == 0):
                 input_img = inputs[0][0].cpu().numpy()
                 label_img = labels[0][1].cpu().numpy()
                 pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
@@ -326,3 +326,160 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             plt.savefig(f"losses_{model_name}.png")
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
 
+def generate_cropped_2d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, crop_size=512, stride=512, gt_proportion=0, suffix='png', save_gt_255=False):
+    img_files = [i for i in os.listdir(img_dir) if (not i.startswith('.')) and (i.endswith(suffix))]
+    gt_files = [i for i in os.listdir(gt_dir) if (not i.startswith('.')) and (i.endswith(suffix))]
+    img_files = sorted(img_files)
+    gt_files = sorted(gt_files)
+        
+    num_imgs_saved = 0
+    print(f"Found {len(img_files)} images and {len(gt_files)} ground truth images")
+    for i in range(len(img_files)):
+        img_path = os.path.join(img_dir, img_files[i])
+        gt_path = os.path.join(gt_dir, gt_files[i])
+        print(f"Processing image {i}: {img_files[i]}, {gt_files[i]}")
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
+        if save_gt_255:
+            gt[gt != 0] = 255
+        # get image dimensions
+        height, width = img.shape
+        # get number of crops in each dimension
+        num_crops_height = (height - crop_size) // stride + 1
+        num_crops_width = (width - crop_size) // stride + 1
+        print(f"Image dimensions: {height} x {width}")
+        print(f"Number of crops: {num_crops_height} x {num_crops_width}")
+        # iterate over crops
+        for h in range(num_crops_height):
+            for w in range(num_crops_width):
+                # get crop
+                start_x = w*stride
+                end_x = w*stride+crop_size
+                start_y = h*stride
+                end_y = h*stride+crop_size
+                crop_img = img[start_y:end_y, start_x:end_x]
+                crop_gt = gt[start_y:end_y, start_x:end_x]
+                
+                # skip crop if no ground truth
+                num_gt = np.sum(crop_gt)
+                if num_gt < gt_proportion * crop_size * crop_size:
+                    print(f"Skipping crop {h}/{w} (y{start_y}_z{start_x}) as num +ve gt {num_gt} < {gt_proportion}", end="\r")
+                    continue
+                # save crop
+                img_name = img_files[i].split('.')[0]
+                save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.png")
+                save_gt_fp = os.path.join(save_gt_dir, f"{img_name}_y{start_y}_x{start_x}.png")
+                cv2.imwrite(save_img_fp, crop_img)
+                cv2.imwrite(save_gt_fp, crop_gt)
+                num_imgs_saved += 1
+                print(f"Saved crop {h}/{w} (y{start_y}_z{start_x}) to {save_img_fp}", end='\r')
+            print(f"--------------------------------Done saving crop {h}/{w} (y{start_y}_z{start_x})--------------------------------")
+        print(f"Finished processing image {i}")
+    print(f"Saved {num_imgs_saved} crops")
+    
+def generate_cropped_3d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, save_depth, save_vis_dir=None, crop_size=512, stride=512, gt_proportion=0, suffix='png', save_gt_255=False):
+    img_files = [i for i in os.listdir(img_dir) if (not i.startswith('.')) and (i.endswith(suffix))]
+    gt_files = [i for i in os.listdir(gt_dir) if (not i.startswith('.')) and (i.endswith(suffix))]
+    img_files = sorted(img_files)
+    gt_files = sorted(gt_files)
+    
+    # process images in intervals of save_depth
+        
+    num_imgs_saved = 0
+    print("Save depth: ", save_depth)
+    print(f"Found {len(img_files)} images and {len(gt_files)} ground truth images")
+    for i in range(0, len(img_files), save_depth):
+        img_vol = []
+        gt_vol = []
+        for k in range(save_depth):
+            file_num = i + k
+            img_path = os.path.join(img_dir, img_files[file_num])
+            gt_path = os.path.join(gt_dir, gt_files[file_num])
+            print(f"Processing image {file_num}: {img_files[file_num]}, {gt_files[file_num]}")
+            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
+            # get image dimensions
+            height, width = img.shape
+            if save_gt_255:
+                gt[gt != 0] = 255
+            img_vol.append(img)
+            gt_vol.append(gt)
+        img_vol = np.stack(img_vol, axis=0) # (depth, full height, full width)
+        gt_vol = np.stack(gt_vol, axis=0) # (depth, full height, full width)
+        
+        # get number of crops in each dimension
+        num_crops_height = (height - crop_size) // stride + 1
+        num_crops_width = (width - crop_size) // stride + 1
+        print(f"Image dimensions: {height} x {width}")
+        print(f"Number of crops: {num_crops_height} x {num_crops_width}")
+        # iterate over crops
+        for h in range(num_crops_height):
+            for w in range(num_crops_width):
+                # get crop
+                start_x = w*stride
+                end_x = w*stride+crop_size
+                start_y = h*stride
+                end_y = h*stride+crop_size
+                crop_img = img_vol[:, start_y:end_y, start_x:end_x]
+                crop_gt = gt_vol[:, start_y:end_y, start_x:end_x]
+                
+                # skip crop if no ground truth
+                num_gt = np.sum(crop_gt)
+                if num_gt < gt_proportion * crop_size * crop_size:
+                    print(f"Skipping crop {h}/{w} (y{start_y}_z{start_x}) as num +ve gt {num_gt} < {gt_proportion}", end="\r")
+                    continue
+                # save crop
+                img_name = img_files[i].split('.')[0]
+                save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.png")
+                save_gt_fp = os.path.join(save_gt_dir, f"{img_name}_y{start_y}_x{start_x}.png")
+                np.save(save_img_fp, crop_img)
+                np.save(save_gt_fp, crop_gt)
+                if save_vis_dir is not None:
+                    fig, ax = plt.subplots(2, save_depth, num=1)
+                    visualize_3d_slice(crop_img, ax[0])
+                    visualize_3d_slice(crop_gt, ax[1])
+                    plt.savefig(os.path.join(save_vis_dir, f"{img_name}_y{start_y}_x{start_x}.png"))
+                    plt.close("all")
+                num_imgs_saved += 1
+                print(f"Saved crop {h}/{w} (y{start_y}_z{start_x}) to {save_img_fp}", end='\r')
+            print(f"--------------------------------Done saving crop {h}/{w} (y{start_y}_z{start_x})--------------------------------")
+        print(f"Finished processing image {i}")
+    print(f"Saved {num_imgs_saved} crops")
+    
+    
+def train_valid_split(img_path, gt_path, train_prop=0.8, suffix="png"):
+    img_files = [i for i in os.listdir(img_path) if (not i.startswith('.')) and (i.endswith(suffix))]
+    gt_files = [i for i in os.listdir(gt_path) if (not i.startswith('.')) and (i.endswith(suffix))]
+    
+    # make train and valid directories
+    train_img_dir = os.path.join(img_path, "train")
+    train_gt_dir = os.path.join(gt_path, "train")
+    valid_img_dir = os.path.join(img_path, "valid")
+    valid_gt_dir = os.path.join(gt_path, "valid")
+    if not os.path.exists(train_img_dir):
+        os.makedirs(train_img_dir)
+        os.makedirs(train_gt_dir)
+        os.makedirs(valid_img_dir)
+        os.makedirs(valid_gt_dir)
+        
+    # random indices
+    num_imgs = len(img_files)
+    train_indices = np.random.choice(num_imgs, int(train_prop*num_imgs), replace=False)
+    valid_indices = [i for i in range(num_imgs) if i not in train_indices]
+    
+    # move files
+    for i in train_indices:
+        img = img_files[i]
+        gt = gt_files[i]
+        os.rename(os.path.join(img_path, img), os.path.join(train_img_dir, img))
+        os.rename(os.path.join(gt_path, gt), os.path.join(train_gt_dir, gt))
+        print(f"Moving {img} to {train_img_dir}", end="\r")
+    print(f"Moved train images to {train_img_dir}, {train_gt_dir}")
+    for i in valid_indices:
+        img = img_files[i]
+        gt = gt_files[i]
+        os.rename(os.path.join(img_path, img), os.path.join(valid_img_dir, img))
+        os.rename(os.path.join(gt_path, gt), os.path.join(valid_gt_dir, gt))
+        print(f"Moving {img} to {valid_img_dir}", end="\r")
+    print(f"Moved valid images to {valid_img_dir}, {valid_gt_dir}")
+    

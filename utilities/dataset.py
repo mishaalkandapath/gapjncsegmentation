@@ -72,15 +72,18 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
                 image=tio.ScalarImage(tensor=image),
                 mask=tio.LabelMap(tensor=mask)
             )
-            flip_transform = tio.RandomFlip(axes=0, flip_probability=0.5)
-            flipped_subject = flip_transform(subject)
-            flip_transform = tio.RandomFlip(axes=1, flip_probability=0.5)
-            flipped_subject = flip_transform(flipped_subject)
-            flip_transform = tio.RandomFlip(axes=2, flip_probability=0.5)
-            flipped_subject = flip_transform(flipped_subject)
-            image = flipped_subject.image.tensor
-            mask = flipped_subject.mask.tensor
-
+            all_transforms = [
+                tio.RandomFlip(axes=0, flip_probability=0.5),
+                tio.RandomFlip(axes=1, flip_probability=0.5),
+                tio.RandomFlip(axes=2, flip_probability=0.5),
+                tio.RandomAffine(scales=(0,0,0), degrees=(360,0,0), translation=(0,0,100)) # translate and rotate
+            ]
+            
+            for transform in all_transforms:
+                subject = transform(subject)
+            image = subject.image.tensor
+            mask = subject.mask.tensor
+            
             # Define additional transformations for the image
             additional_transforms = tio.Compose([
                 tio.RandomBlur(p=0.5),

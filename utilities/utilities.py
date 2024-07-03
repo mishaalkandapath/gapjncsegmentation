@@ -113,7 +113,6 @@ def visualize_3d_slice(img: np.array, fig_ax: plt.Axes, title: str = "", cmap="g
         fig_ax[i].imshow(img[i], cmap=cmap, alpha=alpha)
     fig_ax[0].set_ylabel(title)
     
-
 def get_z_y_x(file_name, pattern) -> Tuple[int, int, int]:
     """ Get z, y, x from file name using pattern
 
@@ -374,17 +373,15 @@ def assemble_predictions(images_dir, preds_dir, gt_dir, start_s=0, start_y=0, st
         
         return new_img, new_pred, new_gt
     
-def assemble_one_slice(preds_dir, filename_regex,start_y=0, start_x=0, end_s=6, end_y=8192, end_x=9216):
-    tile_depth=3
-    tile_width=512
-    tile_height=512
-    total_slices = ((end_s//tile_depth) * ((end_y-start_y)//tile_height )* ((end_x-start_x)//tile_width))
+def assemble_one_slice(preds_dir, filename_regex,start_y=0, start_x=0, end_s=6, end_y=8192, end_x=9216, tile_width=512, tile_height=512):
+    total_slices = (((end_y-start_y)//tile_height )* ((end_x-start_x)//tile_width))
     slice_num = 0
     print(total_slices, "total slices")
     s_acc_pred = []
-    for y in range(start_y, end_y, 512):
+    num_invalid = 0
+    for y in range(start_y, end_y, tile_height):
         y_acc_pred = []
-        for x in range(start_x, end_x, 512):
+        for x in range(start_x, end_x, tile_width):
             suffix = filename_regex.format(x,y)
             # load preds
             try:
@@ -395,6 +392,7 @@ def assemble_one_slice(preds_dir, filename_regex,start_y=0, start_x=0, end_s=6, 
                     pred_slice = tio.CropOrPad((tile_height, tile_width))(pred_slice)
                 print(f"processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}", end="\r")
             except:
+                num_invalid += 1
                 print(f"invalid no volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}", end="\r")
                 pred_slice = np.zeros((512,512))
             pred_slice = np.array(pred_slice) # (tile depth, tile height, tile width)
@@ -402,7 +400,7 @@ def assemble_one_slice(preds_dir, filename_regex,start_y=0, start_x=0, end_s=6, 
             slice_num+=1
         y_acc_pred = np.concatenate(y_acc_pred, axis=0) # (entire height, tile width = 512)
         s_acc_pred += [y_acc_pred] # (num_x_tiles, entire height, tile width = 512)
-    print(f"finished processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}")
+    print(f"finished processing volume {suffix} (num invalid: {num_invalid}) | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}")
     new_pred = np.concatenate(s_acc_pred, axis=1) # (entire height, entire width)
     return new_pred
     
