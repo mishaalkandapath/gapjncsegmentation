@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job303b
+#SBATCH --job-name=job304
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -10,8 +10,8 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-MODEL_NAME="model_job303b"
-SEED=29
+MODEL_NAME="model_job304"
+SEED=9
 INTERMEDIATE_WEIGHT=0.6
 USE2d3d=True
 LOSS_TYPE=focalt
@@ -19,14 +19,15 @@ ALPHA=0.008
 BETA=0.992
 GAMMA=1.5
 EPOCHS=400
-BATCH_SIZE=1
+BATCH_SIZE=4
 NUM_WORKERS=2
 LR=0.00001
 NUM_PREDICTIONS_TO_LOG=3
+DOWNSAMPLE_FACTOR=4
 DEPTH=3
-WIDTH=512
-HEIGHT=512
-AUGMENT=False
+WIDTH=1024
+HEIGHT=1024
+AUGMENT=True
 LOAD_MODEL_NAME=model_job111
 LOAD_EPOCH=49
 LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_epoch_${LOAD_EPOCH}.pth
@@ -40,6 +41,7 @@ VALID_Y_DIRS="/home/hluo/scratch/data/111_120_3x512x512/ground_truth"
 python ~/gapjncsegmentation/train.py \
     --intermediate_weight $INTERMEDIATE_WEIGHT \
     --use2d3d $USE2d3d \
+    --downsample_factor $DOWNSAMPLE_FACTOR \
     --train_x_dirs $TRAIN_X_DIRS \
     --train_y_dirs $TRAIN_Y_DIRS \
     --valid_x_dirs $VALID_X_DIRS \

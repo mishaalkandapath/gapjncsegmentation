@@ -11,7 +11,7 @@ module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
 MODEL_NAME="model_job303"
-SEED=29
+SEED=9
 INTERMEDIATE_WEIGHT=0.6
 USE2d3d=True
 LOSS_TYPE=focalt
@@ -23,9 +23,10 @@ BATCH_SIZE=1
 NUM_WORKERS=2
 LR=0.00001
 NUM_PREDICTIONS_TO_LOG=3
+DOWNSAMPLE_FACTOR=2
 DEPTH=3
-WIDTH=512
-HEIGHT=512
+WIDTH=1024
+HEIGHT=1024
 AUGMENT=True
 LOAD_MODEL_NAME=model_job111
 LOAD_EPOCH=49
@@ -40,6 +41,7 @@ VALID_Y_DIRS="/home/hluo/scratch/data/111_120_3x512x512/ground_truth"
 python ~/gapjncsegmentation/train.py \
     --intermediate_weight $INTERMEDIATE_WEIGHT \
     --use2d3d $USE2d3d \
+    --downsample_factor $DOWNSAMPLE_FACTOR \
     --train_x_dirs $TRAIN_X_DIRS \
     --train_y_dirs $TRAIN_Y_DIRS \
     --valid_x_dirs $VALID_X_DIRS \
