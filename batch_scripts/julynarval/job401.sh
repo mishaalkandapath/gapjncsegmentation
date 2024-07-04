@@ -10,7 +10,7 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-echo "Starting job401: train on 100-120, validate on 0-50 (has augment)"
+echo "Starting job401: scratch - train on 100-120, validate on 0-50 (has augment)"
 MODEL_NAME="model_job401"
 SEED=9
 INTERMEDIATE_WEIGHT=0.6
@@ -20,11 +20,11 @@ ALPHA=0.002
 BETA=0.998
 GAMMA=1.5
 EPOCHS=400
-BATCH_SIZE=4
+BATCH_SIZE=1
 NUM_WORKERS=2
-LR=0.00001
+LR=0.0001
 NUM_PREDICTIONS_TO_LOG=3
-DOWNSAMPLE_FACTOR=4
+DOWNSAMPLE_FACTOR=2
 DEPTH=3
 WIDTH=256
 HEIGHT=256
@@ -33,7 +33,7 @@ MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
 LOSS_DIR=/home/hluo/scratch/losses
 VALID_SLICES="0_50"
-CROP_SIZE=1024
+CROP_SIZE=512
 CROP_DEPTH=3
 TRAIN_STRIDE=512
 VALID_STRIDE=512

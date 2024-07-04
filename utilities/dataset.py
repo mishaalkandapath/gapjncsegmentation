@@ -25,7 +25,9 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
             augment=False,
             downsample_factor=1,
             colour_augment=False,
-            suffix=".npy"
+            suffix=".npy",
+            vertical_translate=100,
+            horizontal_translate=100
     ):
         
         self.image_paths = []
@@ -33,6 +35,8 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
         self.downsample_factor=downsample_factor
         self.augment = augment
         self.colour_augment = colour_augment
+        self.vertical_translate=vertical_translate
+        self.horizontal_translate=horizontal_translate
         for images_dir in images_dir_lst:
             self.image_paths.extend([os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir)) if image_id.endswith(suffix)])
         for masks_dir in masks_dir_lst:   
@@ -79,7 +83,7 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
                 tio.RandomFlip(axes=0, flip_probability=0.5),
                 tio.RandomFlip(axes=1, flip_probability=0.5),
                 tio.RandomFlip(axes=2, flip_probability=0.5),
-                tio.RandomAffine(scales=(0,0,0), degrees=(360,0,0), translation=(0,100,100)) # translate and rotate
+                tio.RandomAffine(scales=(0,0,0), degrees=(360,0,0), translation=(0,self.vertical_translate,self.horizontal_translate)) # translate and rotate
             ]
             
             for transform in all_transforms:

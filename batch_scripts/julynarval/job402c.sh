@@ -10,7 +10,7 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-echo "Starting job402: taking general model111, train on 0-50, validate on 110-120 (has flip + colour augment)"
+echo "Starting job402: taking general model111, train on 0-50, validate on 110-120 (has no augment)"
 MODEL_NAME="model_job402"
 SEED=9
 INTERMEDIATE_WEIGHT=0.6
