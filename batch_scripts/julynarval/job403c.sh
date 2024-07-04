@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job403
+#SBATCH --job-name=job403c
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -11,7 +11,7 @@ module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
 echo "Starting job403: taking model111, train on 100-110, validate on 110-120 (has flip + colour augment)"
-MODEL_NAME="model_job403"
+MODEL_NAME="model_job403c"
 SEED=9
 INTERMEDIATE_WEIGHT=0.6
 USE2d3d=True
@@ -29,8 +29,8 @@ WIDTH=256
 HEIGHT=256
 AUGMENT=True
 COLOUR_AUGMENT=True
-LOAD_MODEL_NAME=model_job111
-LOAD_EPOCH=49
+LOAD_MODEL_NAME=model_job105
+LOAD_EPOCH=85
 LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_epoch_${LOAD_EPOCH}.pth
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
