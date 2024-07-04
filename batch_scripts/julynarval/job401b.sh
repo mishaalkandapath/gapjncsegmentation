@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job401
+#SBATCH --job-name=job401b
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -10,8 +10,8 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-echo "Starting job401: high recall low precision - train on 0-50, 100-110, validate on 110-120 (downsample 2 + all augment)"
-MODEL_NAME="model_job401"
+echo "Starting job401b: high recall low precision - train on 0-50, 100-110, validate on 110-120 (downsample 2 + only flip augment)"
+MODEL_NAME="model_job401b"
 SEED=9
 INTERMEDIATE_WEIGHT=0.6
 USE2d3d=True
@@ -29,6 +29,7 @@ DEPTH=3
 WIDTH=256
 HEIGHT=256
 AUGMENT=True
+COLOUR_AUGMENT=False
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
 LOSS_DIR=/home/hluo/scratch/losses
@@ -41,6 +42,7 @@ TRAIN_X_DIRS="/home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_
 TRAIN_Y_DIRS="/home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth /home/hluo/scratch/data/0_50_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth"
 VALID_X_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/original"
 VALID_Y_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/ground_truth"
+python ~/gapjncsegmentation/train.py \
 python ~/gapjncsegmentation/train.py \
     --intermediate_weight $INTERMEDIATE_WEIGHT \
     --use2d3d $USE2d3d \

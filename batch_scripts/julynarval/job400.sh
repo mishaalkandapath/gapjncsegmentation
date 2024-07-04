@@ -6,10 +6,11 @@
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
 #SBATCH --mem=64G
-#SBATCH --time=11:0:0
+#SBATCH --time=3:0:0
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
+echo "Starting job400: high recall low precision model 136b epoch 137  - train on 0-50, validate on 111-120 (has augment)"
 MODEL_NAME="model_job400"
 SEED=9
 INTERMEDIATE_WEIGHT=0.6
@@ -28,8 +29,9 @@ DEPTH=3
 WIDTH=256
 HEIGHT=256
 AUGMENT=True
-LOAD_MODEL_NAME=model_job111
-LOAD_EPOCH=49
+COLOUR_AUGMENT=True
+LOAD_MODEL_NAME=model_job136b
+LOAD_EPOCH=75
 LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_epoch_${LOAD_EPOCH}.pth
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
@@ -64,6 +66,7 @@ python ~/gapjncsegmentation/train.py \
     --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG \
     --augment $AUGMENT \
     --alpha $ALPHA \
+    --colour_augment $COLOUR_AUGMENT \
     --beta $BETA \
     --gamma $GAMMA \
     --loss_type $LOSS_TYPE \
