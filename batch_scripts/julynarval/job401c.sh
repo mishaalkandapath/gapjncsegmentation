@@ -42,7 +42,6 @@ TRAIN_Y_DIRS="/home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_
 VALID_X_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/original"
 VALID_Y_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/ground_truth"
 python ~/gapjncsegmentation/train.py \
-python ~/gapjncsegmentation/train.py \
     --intermediate_weight $INTERMEDIATE_WEIGHT \
     --use2d3d $USE2d3d \
     --train_x_dirs $TRAIN_X_DIRS \
