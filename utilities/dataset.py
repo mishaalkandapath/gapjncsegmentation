@@ -24,7 +24,8 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
             masks_dir_lst,
             augment=False,
             downsample_factor=1,
-            colour_augment=False
+            colour_augment=False,
+            suffix=".npy"
     ):
         
         self.image_paths = []
@@ -33,9 +34,9 @@ class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
         self.augment = augment
         self.colour_augment = colour_augment
         for images_dir in images_dir_lst:
-            self.image_paths.extend([os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))])
+            self.image_paths.extend([os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir)) if image_id.endswith(suffix)])
         for masks_dir in masks_dir_lst:   
-            self.mask_paths.extend([os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir))])
+            self.mask_paths.extend([os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if image_id.endswith(suffix)])
     
     def __getitem__(self, i):
         """ 
