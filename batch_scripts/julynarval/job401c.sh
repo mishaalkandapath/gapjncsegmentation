@@ -10,7 +10,7 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-echo "Starting job401c: high recall low precision - train on 0-50, 100-110, validate on 110-120 (downsample 2 + no augment)"
+echo "Starting job401c: train on 100-120, validate on 0-50 (no downsample + only flip augment)"
 MODEL_NAME="model_job401c"
 SEED=9
 INTERMEDIATE_WEIGHT=0.6
@@ -24,10 +24,9 @@ BATCH_SIZE=1
 NUM_WORKERS=2
 LR=0.0001
 NUM_PREDICTIONS_TO_LOG=3
-DOWNSAMPLE_FACTOR=2
 DEPTH=3
-WIDTH=256
-HEIGHT=256
+WIDTH=512
+HEIGHT=512
 AUGMENT=False
 COLOUR_AUGMENT=False
 MODEL_DIR=/home/hluo/scratch/models
@@ -46,7 +45,6 @@ python ~/gapjncsegmentation/train.py \
 python ~/gapjncsegmentation/train.py \
     --intermediate_weight $INTERMEDIATE_WEIGHT \
     --use2d3d $USE2d3d \
-    --downsample_factor $DOWNSAMPLE_FACTOR \
     --train_x_dirs $TRAIN_X_DIRS \
     --train_y_dirs $TRAIN_Y_DIRS \
     --valid_x_dirs $VALID_X_DIRS \

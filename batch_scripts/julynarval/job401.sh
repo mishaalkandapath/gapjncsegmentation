@@ -10,7 +10,7 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-echo "Starting job401: high recall low precision - train on 0-50, 100-110, validate on 110-120 (downsample 2 + all augment)"
+echo "Starting job401: train on 100-120, validate on 0-50 (downsample 2 + all augment)"
 MODEL_NAME="model_job401"
 SEED=9
 INTERMEDIATE_WEIGHT=0.6
@@ -20,7 +20,7 @@ ALPHA=0.002
 BETA=0.998
 GAMMA=1.5
 EPOCHS=400
-BATCH_SIZE=1
+BATCH_SIZE=4
 NUM_WORKERS=2
 LR=0.0001
 NUM_PREDICTIONS_TO_LOG=3
@@ -29,16 +29,17 @@ DEPTH=3
 WIDTH=256
 HEIGHT=256
 AUGMENT=True
+COLOUR_AUGMENT=True
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
 LOSS_DIR=/home/hluo/scratch/losses
-VALID_SLICES="111_120"
+VALID_SLICES="0_50"
 CROP_SIZE=512
 CROP_DEPTH=3
 TRAIN_STRIDE=512
 VALID_STRIDE=512
-TRAIN_X_DIRS="/home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/original /home/hluo/scratch/data/0_50_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/original"
-TRAIN_Y_DIRS="/home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth /home/hluo/scratch/data/0_50_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth"
+TRAIN_X_DIRS="/home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/original /home/hluo/scratch/data/111_120_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/original"
+TRAIN_Y_DIRS="/home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth /home/hluo/scratch/data/111_120_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth"
 VALID_X_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/original"
 VALID_Y_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/ground_truth"
 python ~/gapjncsegmentation/train.py \
@@ -59,6 +60,7 @@ python ~/gapjncsegmentation/train.py \
     --num_workers $NUM_WORKERS \
     --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG \
     --augment $AUGMENT \
+    --colour_augment $COLOUR_AUGMENT \
     --alpha $ALPHA \
     --beta $BETA \
     --gamma $GAMMA \
