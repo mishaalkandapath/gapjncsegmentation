@@ -172,7 +172,12 @@ def main():
     total_fp=0
     total_fn=0
     total_tn=0
+    last_updated_time = time.time()
+    estim_time_interval = 5
     for i, data in enumerate(test_loader):
+        if i % 10 == 0:
+            estim_time_interval = time.time() - last_updated_time
+            last_updated_time = time.time()
         if y_test_dir is None:
             inputs, filenames = data
             inputs = inputs.to(DEVICE)
@@ -273,7 +278,8 @@ def main():
             print(f"----------------------loaded {i}/{total_imgs} imgs: avg precision {avg_precision:.3f}, avg recall {avg_recall:.3f}----------------------")
             print(f"Time: {time.time()-start_time:.3f}s")
         else:
-            print(f"----------------------predicted {i}/{total_imgs} imgs----------------------")
+            print(f"----------------------predicted {i}/{total_imgs} imgs (Progress: {i/total_imgs*100:.2f}%)----------------------")
+            print(f"estim time left: {estim_time_interval*(total_imgs-i):.2f}s")
 
 if __name__ == '__main__':
     main()
