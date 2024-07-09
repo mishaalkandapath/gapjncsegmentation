@@ -519,3 +519,62 @@ class SliceDatasetWithFilenameAllSubfolders(torch.utils.data.Dataset):
         
     def __len__(self):
         return len(self.image_paths)
+    
+    
+class SliceDatasetWithFilenameJustImg(torch.utils.data.Dataset):
+    """ Dataset for 2D slices of 3D EM images
+    
+    Read images, apply augmentation and preprocessing transformations.
+    
+    Args:
+        images_dir (str): path to images folder
+        masks_dir (str): path to segmentation masks folder
+        augment (bool): whether to apply augmentations
+    """
+    def __init__(
+            self, 
+            images_dir, 
+            downsample_factor=1
+    ):
+        
+        self.image_paths = []
+
+        for root, dirs, files in os.walk(images_dir):
+            for file in files:
+                self.image_paths.append(os.path.join(root, file))
+
+        self.image_paths.sort()
+        self.downsample_factor = downsample_factor
+    
+    def __getitem__(self, i):
+        """ 
+        Get image and mask at index i
+        
+        Note: for original image, 0 is gap junction, 1 is not gap junction
+        
+        Returns:
+            image (torch.Tensor): image tensor, shape (1, depth, height, width)
+            one_hot_mask (torch.Tensor): one-hot encoded mask tensor, shape (num_classes=2, depth, height, width)
+            - one_hot_mask[0] is the background class, or not gap junction class (1 if not gap junction)
+            - one_hot_mask[1] is the foreground class, or gap junction class (1 if gap junction)
+            USE ONE_HOT_MASK[1]
+        """
+        # read images and masks (3D grayscale images)
+        file_name = os.path.basename(self.image_paths[i])
+        file_name = os.path.splitext(file_name)[0]
+        image = np.load(self.image_paths[i]) # each pixel is 0-255, shape (depth, height, width)
+
+        # convert to tensor
+        image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
+        # Check if the standard deviation is zero
+        if self.downsample_factor > 1:
+            image = torch.nn.MaxPool3d((1, self.downsample_factor, self.downsample_factor), (1, self.downsample_factor, self.downsample_factor))(image)
+            
+        if torch.std(image) == 0:
+            print(f"Image at index {i} has zero standard deviation, skipping normalization")
+        else:
+            image = tio.ZNormalization()(image)
+        return image, file_name
+        
+    def __len__(self):
+        return len(self.image_paths)

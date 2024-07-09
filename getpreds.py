@@ -44,12 +44,11 @@ SUBVOL_DEPTH=3
 SUBVOL_HEIGHT=512
 SUBVOL_WIDTH=512
 python /home/hluo/gapjncsegmentation/getpreds.py --pred_memb $PRED_MEMB --useallsubfolders $USEALLSUBFOLDERS --x_dir $X_DIR --y_dir $Y_DIR --save_dir $SAVE_DIR --model_path $MODEL_PATH --num_workers $NUM_WORKERS --batch_size $BATCH_SIZE --save2d $SAVE2D --subvol_depth $SUBVOL_DEPTH --subvol_height $SUBVOL_HEIGHT --subvol_width $SUBVOL_WIDTH --savecomb $SAVECOMB
-
 """
 
 import os
 from torch.utils.data import DataLoader
-from utilities.dataset import SliceDatasetWithFilename, SliceDatasetWithFilenameAllSubfolders
+from utilities.dataset import SliceDatasetWithFilename, SliceDatasetWithFilenameAllSubfolders, SliceDatasetWithFilenameJustImg
 import argparse
 import time
 from utilities.models import *
@@ -93,7 +92,7 @@ def main():
     print("starting...")
     parser = argparse.ArgumentParser(description="save preds")
     parser.add_argument('--x_dir', type=str, required=True, help='data dir for testing data')
-    parser.add_argument('--y_dir', type=str, required=True, help='data dir for testing data')
+    parser.add_argument('--y_dir', type=str, default=None, help='data dir for testing data')
     parser.add_argument('--save_dir', type=str, required=True, help='save dir for testing data')
     parser.add_argument('--model_path', type=str, required=True, help='model path')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
@@ -109,6 +108,7 @@ def main():
     parser.add_argument('--subvol_height', type=int, default=512, help='num workers')
     parser.add_argument('--subvol_width', type=int, default=512, help='num workers')
     parser.add_argument('--downsample_factor', type=int, default=1, help='num workers')
+    parser.add_argument('--stitch_preds', type=lambda x: (str(x).lower() == 'true'), default=False, help='stitch after predicting')
     args = parser.parse_args()
     
     for arg in vars(args):
@@ -130,6 +130,14 @@ def main():
     downsample_factor = args.downsample_factor
     x_test_dir = args.x_dir
     y_test_dir = args.y_dir
+    
+    
+    
+    if y_test_dir is None:
+        print("No ground truth directory given. Just using img")
+        test_dataset = SliceDatasetWithFilenameJustImg(x_test_dir, downsample_factor=downsample_factor)
+    
+    
     if args.useallsubfolders:
         print("using all subfolders")
         test_dataset = SliceDatasetWithFilenameAllSubfolders(x_test_dir, y_test_dir, downsample_factor=downsample_factor)
@@ -164,9 +172,14 @@ def main():
     total_fn=0
     total_tn=0
     for i, data in enumerate(test_loader):
-        inputs, labels, filenames = data
-        inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-        print(inputs.shape, labels.shape)
+        if y_test_dir is None:
+            inputs, filenames = data
+            inputs = inputs.to(DEVICE)
+            print(inputs.shape)
+        else:
+            inputs, labels, filenames = data
+            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+            print(inputs.shape, labels.shape)
             
         # pad image
         subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width
@@ -181,15 +194,16 @@ def main():
             del tmp
 
         # pad labels if necessary
-        d, h, w = labels.shape[2:]
-        if args.upsample:
-            subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width # keep mask original shape
-        if (h < subvol_height) or (w < subvol_width) or (d < subvol_depth):
-            tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(labels[0].detach().cpu())
-            labels = tmp.unsqueeze(0)
-            labels = labels.to(DEVICE)
-            print("Padded to", labels.shape)
-            del tmp
+        if y_test_dir is not None:
+            d, h, w = labels.shape[2:]
+            if args.upsample:
+                subvol_depth, subvol_height, subvol_width = args.subvol_depth, args.subvol_height, args.subvol_width # keep mask original shape
+            if (h < subvol_height) or (w < subvol_width) or (d < subvol_depth):
+                tmp = tio.CropOrPad((subvol_depth, subvol_height, subvol_width))(labels[0].detach().cpu())
+                labels = tmp.unsqueeze(0)
+                labels = labels.to(DEVICE)
+                print("Padded to", labels.shape)
+                del tmp
             
         # inputs: (batch_size=1, channels=1, depth, height, width)
         interm_pred, pred = model(inputs)
@@ -223,26 +237,27 @@ def main():
         if args.use_entity_metrics:
             entity_fp, entity_fn, entity_tp = get_entity_metrics(binary_pred, labels, args.entity_thresh)
             
+        if y_test_dir is not None:
+            labels = labels[0,0].detach().cpu()
+            combined_volume = np.asarray((labels * 2 + binary_pred))
+            vals, counts = np.unique(combined_volume, return_counts=True)
+            res = dict(map(lambda i,j : (int(i),j) , vals,counts))
+            fp = res.get(1, 0)
+            fn = res.get(2, 0)
+            tp = res.get(3, 0)
+            tn = res.get(0, 0)
+            total_tp+=tp
+            total_fp+=fp
+            total_fn+=fn
+            total_tn+=tn
+            precision=tp/(tp+fp) if (tp + fp) != 0 else 999
+            recall=tp/(tp+fn) if (tp + fn) != 0 else 999
+            print(vals, counts)
+            print(f"comb precision {precision}, recall {recall}")
         
-        labels = labels[0,0].detach().cpu()
-        combined_volume = np.asarray((labels * 2 + binary_pred))
-        vals, counts = np.unique(combined_volume, return_counts=True)
-        res = dict(map(lambda i,j : (int(i),j) , vals,counts))
-        fp = res.get(1, 0)
-        fn = res.get(2, 0)
-        tp = res.get(3, 0)
-        tn = res.get(0, 0)
-        total_tp+=tp
-        total_fp+=fp
-        total_fn+=fn
-        total_tn+=tn
-        precision=tp/(tp+fp) if (tp + fp) != 0 else 999
-        recall=tp/(tp+fn) if (tp + fn) != 0 else 999
-        print(vals, counts)
-        print(f"comb precision {precision}, recall {recall}")
+            if args.savecomb:
+                color_combined_volume = get_colored_image(combined_volume)
         
-        if args.savecomb:
-            color_combined_volume = get_colored_image(combined_volume)
         binary_pred[binary_pred!=0]=255 # to visualize
         if args.save2d:
             for k in range(subvol_depth):
@@ -250,11 +265,14 @@ def main():
                 if args.savecomb:
                     cv2.imwrite(os.path.join(save_dir_comb, f"{filenames[0]}_{k}.png"), np.array(color_combined_volume[k]))
             
-        avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 999
-        avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 999
-        print(f"---------------------- (tn) {total_tn}(fp) {total_fp} (fn) {total_fn} (tp) {total_tp}")
-        print(f"----------------------loaded {i}/{total_imgs} imgs: avg precision {avg_precision:.3f}, avg recall {avg_recall:.3f}----------------------")
-        print(f"Time: {time.time()-start_time:.3f}s")
+        if y_test_dir is not None:
+            avg_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) !=0 else 999
+            avg_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) !=0 else 999
+            print(f"---------------------- (tn) {total_tn}(fp) {total_fp} (fn) {total_fn} (tp) {total_tp}")
+            print(f"----------------------loaded {i}/{total_imgs} imgs: avg precision {avg_precision:.3f}, avg recall {avg_recall:.3f}----------------------")
+            print(f"Time: {time.time()-start_time:.3f}s")
+        else:
+            print(f"----------------------predicted {i}/{total_imgs} imgs----------------------")
 
 if __name__ == '__main__':
     main()

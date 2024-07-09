@@ -87,7 +87,6 @@ start_y = args.start_y
 end_y = args.end_y
 
 img_ = os.listdir(pred_dir)
-print("num imgs", num_imgs)
 
 # Just assemble the predictions
 if args.stitch2d:
@@ -127,6 +126,7 @@ else:
     unique_gt_labels, unique_gt_counts = np.unique(new_gt, return_counts=True)
     print("unique gt:", unique_gt_labels)
     print("unique gt counts:", unique_gt_counts)
+    height, width = new_img.shape[1], new_img.shape[2]
 
 
     # save with all labels

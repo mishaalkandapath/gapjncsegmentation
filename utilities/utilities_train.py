@@ -414,8 +414,8 @@ def generate_cropped_3d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, save
                     continue
                 # save crop
                 img_name = img_files[i].split('.')[0]
-                save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.png")
-                save_gt_fp = os.path.join(save_gt_dir, f"{img_name}_y{start_y}_x{start_x}.png")
+                save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.npy")
+                save_gt_fp = os.path.join(save_gt_dir, f"{img_name}_y{start_y}_x{start_x}.npy")
                 np.save(save_img_fp, crop_img)
                 np.save(save_gt_fp, crop_gt)
                 if save_vis_dir is not None:
@@ -468,7 +468,7 @@ def generate_cropped_3d_dataset_img_only(img_dir, save_img_dir, save_depth, save
                 crop_img = img_vol[:, start_y:end_y, start_x:end_x]
                 # save crop
                 img_name = img_files[i].split('.')[0]
-                save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.png")
+                save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.npy")
                 np.save(save_img_fp, crop_img)
                 if save_vis_dir is not None:
                     fig, ax = plt.subplots(2, save_depth, num=1)
