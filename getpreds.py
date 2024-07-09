@@ -130,6 +130,7 @@ def main():
     downsample_factor = args.downsample_factor
     x_test_dir = args.x_dir
     y_test_dir = args.y_dir
+    print(f"Y test dir is none: {y_test_dir is None}")
     
     
     
@@ -137,8 +138,7 @@ def main():
         print("No ground truth directory given. Just using img")
         test_dataset = SliceDatasetWithFilenameJustImg(x_test_dir, downsample_factor=downsample_factor)
     
-    
-    if args.useallsubfolders:
+    elif args.useallsubfolders:
         print("using all subfolders")
         test_dataset = SliceDatasetWithFilenameAllSubfolders(x_test_dir, y_test_dir, downsample_factor=downsample_factor)
     else:
@@ -146,6 +146,7 @@ def main():
             test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir, downsample_factor=downsample_factor, downsample_mask=False)
         else:
             test_dataset = SliceDatasetWithFilename(x_test_dir, y_test_dir, downsample_factor=downsample_factor, downsample_mask=True)
+    
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers) # change num_workers as needed
     print(f"Batch size: {batch_size}, Number of workers: {num_workers}")
     total_imgs = len(test_dataset)
