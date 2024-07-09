@@ -80,8 +80,9 @@ depth = args.depth
 
 if not os.path.exists(save_img_dir):
     os.makedirs(save_img_dir)
-if not os.path.exists(save_vis_dir):
-    os.makedirs(save_vis_dir)
+if save_vis_dir is not None:
+    if not os.path.exists(save_vis_dir):
+        os.makedirs(save_vis_dir)
 if save_gt_dir is not None:
     if not os.path.exists(save_gt_dir):
         os.makedirs(save_gt_dir)
