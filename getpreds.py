@@ -280,6 +280,7 @@ def main():
         else:
             print(f"----------------------predicted {i}/{total_imgs} imgs (Progress: {i/total_imgs*100:.2f}%)----------------------")
             print(f"estim time left: {estim_time_interval*(total_imgs-i):.2f}s")
+            print(f"Time: {time.time()-start_time:.3f}s")
 
 if __name__ == '__main__':
     main()
