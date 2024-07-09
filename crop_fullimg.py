@@ -88,5 +88,8 @@ if save_gt_dir is not None:
 
 
 if gt_dir is None:
+    print("Cropping img dir only")
     generate_cropped_3d_dataset_img_only(img_dir, save_img_dir, save_vis_dir=save_vis_dir, crop_size=crop_size, stride=stride, suffix=suffix)
-generate_cropped_3d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, save_vis_dir=save_vis_dir, save_depth=depth, crop_size=crop_size, stride=stride, gt_proportion=gt_proportion, suffix=suffix, save_gt_255=save_gt_255)
+else:
+    print("Cropping img and gt dir")
+    generate_cropped_3d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, save_vis_dir=save_vis_dir, save_depth=depth, crop_size=crop_size, stride=stride, gt_proportion=gt_proportion, suffix=suffix, save_gt_255=save_gt_255)

@@ -171,12 +171,12 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         for i, data in enumerate(train_loader):
             inputs, labels = data
             inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
-            print("==========================================================Progress: {:.2%}==========================================================".format(i/len(train_loader)), end="\r")
+            print("Progress: {:.2%}".format(i/len(train_loader)), end="\r")
             if (i==0 and epoch==0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}") # (batch, channel, depth, height, width)
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
             if inputs.shape[2:] != (depth, height, width):
-                print(f"Skipping batch {i} due to shape mismatch, input shape: {inputs.shape}, actual shape: {depth, height, width}", end="\r")
+                print(f"Skipping train batch {i} due to shape mismatch, input shape: {inputs.shape}, actual shape: {depth, height, width}")
                 continue
             
             # Calculate loss and update weights
@@ -430,6 +430,58 @@ def generate_cropped_3d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, save
         print(f"Finished processing image {i} (saved {num_imgs_saved} crops)")
     print(f"Saved {num_imgs_saved} crops")
     
+
+def generate_cropped_3d_dataset_img_only(img_dir, save_img_dir, save_depth, save_vis_dir=None, crop_size=512, stride=512, gt_proportion=0, suffix='png', save_gt_255=False):
+    img_files = [i for i in os.listdir(img_dir) if (not i.startswith('.')) and (i.endswith(suffix))]
+    img_files = sorted(img_files)
+    
+    # process images in intervals of save_depth
+        
+    num_imgs_saved = 0
+    print("Save depth: ", save_depth)
+    print(f"Found {len(img_files)} images")
+    for i in range(0, len(img_files), save_depth):
+        img_vol = []
+        for k in range(save_depth):
+            file_num = i + k
+            img_path = os.path.join(img_dir, img_files[file_num])
+            print(f"Processing image {file_num}: {img_files[file_num]}")
+            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            # get image dimensions
+            height, width = img.shape
+            img_vol.append(img)
+        img_vol = np.stack(img_vol, axis=0) # (depth, full height, full width)
+        
+        # get number of crops in each dimension
+        num_crops_height = (height - crop_size) // stride + 1
+        num_crops_width = (width - crop_size) // stride + 1
+        print(f"Image dimensions: {height} x {width}")
+        print(f"Number of crops: {num_crops_height} x {num_crops_width}")
+        # iterate over crops
+        for h in range(num_crops_height):
+            for w in range(num_crops_width):
+                # get crop
+                start_x = w*stride
+                end_x = w*stride+crop_size
+                start_y = h*stride
+                end_y = h*stride+crop_size
+                crop_img = img_vol[:, start_y:end_y, start_x:end_x]
+                # save crop
+                img_name = img_files[i].split('.')[0]
+                save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.png")
+                np.save(save_img_fp, crop_img)
+                if save_vis_dir is not None:
+                    fig, ax = plt.subplots(2, save_depth, num=1)
+                    visualize_3d_slice(crop_img, ax[0])
+                    plt.savefig(os.path.join(save_vis_dir, f"{img_name}_y{start_y}_x{start_x}.png"))
+                    plt.close("all")
+                num_imgs_saved += 1
+                print(f"Saved crop {h}/{w} (y{start_y}_z{start_x}) to {save_img_fp}", end='\r')
+            print(f"--------------------------------Done saving crop {h}/{w} (y{start_y}_z{start_x})--------------------------------")
+        print(f"Finished processing image {i} (saved {num_imgs_saved} crops)")
+    print(f"Saved {num_imgs_saved} crops")
+    
+   
     
 def train_valid_split(img_path, gt_path, train_prop=0.8, suffix="png"):
     img_files = [i for i in os.listdir(img_path) if (not i.startswith('.')) and (i.endswith(suffix))]
