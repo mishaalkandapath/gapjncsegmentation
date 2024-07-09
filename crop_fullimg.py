@@ -19,10 +19,15 @@ SLICES="0_50"
 
 SLICES="111_120"
 
-SLICES="0_50"
-CROP_SIZE=1024
-STRIDE=512
-DEPTH=5
+
+module purge
+source ~/py39/bin/activate
+module load scipy-stack gcc cuda opencv
+
+SLICES="111_120"
+CROP_SIZE=256
+STRIDE=128
+DEPTH=3
 GT_PROP=0.0000001
 IMG_DIR="/home/hluo/scratch/data/${SLICES}_fullimgs/original"
 GT_DIR="/home/hluo/scratch/data/${SLICES}_fullimgs/ground_truth"
@@ -44,13 +49,13 @@ python ~/gapjncsegmentation/crop_fullimg.py --img_dir $IMG_DIR \
 
 import argparse
 import os
-from utilities.utilities_train import generate_cropped_3d_dataset
+from utilities.utilities_train import generate_cropped_3d_dataset, generate_cropped_3d_dataset_img_only
 
 parser = argparse.ArgumentParser(description='Crop and save images and ground truth data.')
 parser.add_argument('--img_dir', type=str, help='Directory containing input images')
 parser.add_argument('--gt_dir', type=str, help='Directory containing ground truth data')
 parser.add_argument('--save_img_dir', type=str, help='Directory to save cropped images')
-parser.add_argument('--save_gt_dir', type=str, help='Directory to save cropped ground truth data')
+parser.add_argument('--save_gt_dir', type=str, default=None, help='Directory to save cropped ground truth data')
 parser.add_argument('--save_vis_dir', type=str, default=None, help='Directory to save visualizations')
 parser.add_argument('--gt_proportion', type=float, default=0.0000001, help='Proportion of ground truth data to save')
 parser.add_argument('--save_gt_255', action='store_true', help='Save ground truth data as 255 values')
@@ -75,9 +80,13 @@ depth = args.depth
 
 if not os.path.exists(save_img_dir):
     os.makedirs(save_img_dir)
-if not os.path.exists(save_gt_dir):
-    os.makedirs(save_gt_dir)
 if not os.path.exists(save_vis_dir):
     os.makedirs(save_vis_dir)
+if save_gt_dir is not None:
+    if not os.path.exists(save_gt_dir):
+        os.makedirs(save_gt_dir)
 
+
+if gt_dir is None:
+    generate_cropped_3d_dataset_img_only(img_dir, save_img_dir, save_vis_dir=save_vis_dir, crop_size=crop_size, stride=stride, suffix=suffix)
 generate_cropped_3d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, save_vis_dir=save_vis_dir, save_depth=depth, crop_size=crop_size, stride=stride, gt_proportion=gt_proportion, suffix=suffix, save_gt_255=save_gt_255)
