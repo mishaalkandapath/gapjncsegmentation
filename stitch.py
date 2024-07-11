@@ -60,6 +60,9 @@ parser.add_argument("--start_x", type=int, default=0, help="Whether this is trai
 parser.add_argument("--end_x", type=int, default=1, help="Whether this is train, test, or valid folder")
 parser.add_argument("--start_y", type=int, default=0, help="Whether this is train, test, or valid folder")
 parser.add_argument("--end_y", type=int, default=1, help="Whether this is train, test, or valid folder")
+parser.add_argument("--filename_regex_prefix", type=str, default=None, help="Path to the data directory")
+parser.add_argument("--filename_regex_middle", type=str, default=None, help="Path to the data directory")
+parser.add_argument("--filename_regex_suffix", type=str, default=None, help="Path to the data directory")
 args = parser.parse_args()
 
 print("starting script")
@@ -94,7 +97,10 @@ if args.stitch2d:
     for s in range(start_s, end_s, 3):
         num_slices = (s%3) if (s%3 > 0) else 3
         for s_num in range(num_slices):
-            filename_regex = "z"+str(s)+"_y{}_x{}_"+str(s_num)+".png"
+            if args.filename_regex_prefix is None:
+                filename_regex = "z"+str(s)+"_y{}_x{}_"+str(s_num)+".png"
+            else:
+                filename_regex = args.filename_regex_prefix + str(s) + args.filename_regex_middle + str(s_num) + args.filename_regex_suffix
             print(f"---------------------------Started slice {s+s_num}/{end_s} ---------------------------")
             new_pred = assemble_one_slice(pred_dir, filename_regex=filename_regex, start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y)
             # if use_lines, draw horizontal and vertical lines every 512 pixels for better visualization
