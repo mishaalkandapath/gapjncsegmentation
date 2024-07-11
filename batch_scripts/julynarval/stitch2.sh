@@ -13,8 +13,8 @@ module load scipy-stack gcc cuda opencv
 MODELNAME=model_job403
 EPOCH=39
 SLICES="150_180"
-PRED_DIR="/home/hluo/scratch/preds/${SLICES}_model_${MODELNAME}_epoch_${EPOCH}_binary"
-SAVE_DIR="/home/hluo/scratch/stitchedpreds/${SLICES}_model_${MODELNAME}_epoch_${EPOCH}"
+PRED_DIR="/home/hluo/scratch/preds/${SLICES}_${MODELNAME}_epoch_${EPOCH}_binary"
+SAVE_DIR="/home/hluo/scratch/stitchedpreds/${SLICES}_${MODELNAME}_epoch_${EPOCH}"
 USE_LINES=false
 SHOW_IMG=false
 STITCH2d=true
