@@ -1,7 +1,7 @@
 #!/bin/sh
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=12
-#SBATCH --job-name=job410bcont
+#SBATCH --job-name=job401ccont3
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
@@ -10,38 +10,35 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-echo "Starting job403: taking model111, train on 100-110, validate on 110-120 (has flip + colour augment)"
-MODEL_NAME="model_job410bcont"
+echo "Starting job401c: train on 100-120, validate on 0-50 (no downsample + only flip augment)"
+MODEL_NAME="model_job401ccont3"
 SEED=9
-INTERMEDIATE_WEIGHT=1.6
+INTERMEDIATE_WEIGHT=0.6
 USE2d3d=True
 LOSS_TYPE=focalt
-ALPHA=0.002
-BETA=0.998
+ALPHA=0.04
+BETA=0.96
 GAMMA=1.5
 EPOCHS=400
-BATCH_SIZE=2
+BATCH_SIZE=1
 NUM_WORKERS=2
-LR=0.00001
+LR=0.0001
 NUM_PREDICTIONS_TO_LOG=3
 DEPTH=3
-WIDTH=256
-HEIGHT=256
-AUGMENT=True
-COLOUR_AUGMENT=True
-LOAD_MODEL_NAME=model_job410b
-LOAD_EPOCH=19
-LOAD_MODEL_PATH=/home/hluo/scratch/models/${LOAD_MODEL_NAME}/${LOAD_MODEL_NAME}_epoch_${LOAD_EPOCH}.pth
+WIDTH=512
+HEIGHT=512
+AUGMENT=False
+COLOUR_AUGMENT=False
 MODEL_DIR=/home/hluo/scratch/models
 RESULTS_DIR=/home/hluo/scratch/model_results
 LOSS_DIR=/home/hluo/scratch/losses
 VALID_SLICES="111_120"
-CROP_SIZE=256
+CROP_SIZE=512
 CROP_DEPTH=3
-TRAIN_STRIDE=128
-VALID_STRIDE=128
-TRAIN_X_DIRS="/home/hluo/scratch/data/150_170small_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride128/original /home/hluo/scratch/data/0_50_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/original /home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/original"
-TRAIN_Y_DIRS="/home/hluo/scratch/data/150_170small_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride128/ground_truth /home/hluo/scratch/data/0_50_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth /home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth"
+TRAIN_STRIDE=512
+VALID_STRIDE=512
+TRAIN_X_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/original /home/hluo/scratch/data/150_170small_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride256/original /home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/original /home/hluo/scratch/data/0_50_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/original"
+TRAIN_Y_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/ground_truth /home/hluo/scratch/data/150_170small_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride256/ground_truth /home/hluo/scratch/data/100_110_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth /home/hluo/scratch/data/0_50_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${TRAIN_STRIDE}/ground_truth"
 VALID_X_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/original"
 VALID_Y_DIRS="/home/hluo/scratch/data/${VALID_SLICES}_${CROP_DEPTH}x${CROP_SIZE}x${CROP_SIZE}_stride${VALID_STRIDE}/ground_truth"
 python ~/gapjncsegmentation/train.py \
@@ -54,7 +51,6 @@ python ~/gapjncsegmentation/train.py \
     --model_dir "$MODEL_DIR" \
     --loss_dir "$LOSS_DIR" \
     --results_dir "$RESULTS_DIR" \
-    --load_model_path "$LOAD_MODEL_PATH" \
     --epochs $EPOCHS \
     --batch_size $BATCH_SIZE \
     --lr $LR \
@@ -62,7 +58,6 @@ python ~/gapjncsegmentation/train.py \
     --num_workers $NUM_WORKERS \
     --num_predictions_to_log $NUM_PREDICTIONS_TO_LOG \
     --augment $AUGMENT \
-    --colour_augment $COLOUR_AUGMENT \
     --alpha $ALPHA \
     --beta $BETA \
     --gamma $GAMMA \
