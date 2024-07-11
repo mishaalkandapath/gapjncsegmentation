@@ -100,7 +100,7 @@ if args.stitch2d:
             if args.filename_regex_prefix is None:
                 filename_regex = "z"+str(s)+"_y{}_x{}_"+str(s_num)+".png"
             else:
-                filename_regex = args.filename_regex_prefix + str(s) + args.filename_regex_middle + str(s_num) + args.filename_regex_suffix
+                filename_regex = args.filename_regex_prefix + str(s) + "_y{}_x{}_" + args.filename_regex_middle + str(s_num) + args.filename_regex_suffix
             print(f"---------------------------Started slice {s+s_num}/{end_s} ---------------------------")
             new_pred = assemble_one_slice(pred_dir, filename_regex=filename_regex, start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y)
             # if use_lines, draw horizontal and vertical lines every 512 pixels for better visualization
