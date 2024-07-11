@@ -468,9 +468,13 @@ def generate_cropped_3d_dataset_img_only(img_dir, save_img_dir, save_depth, save
                 crop_img = img_vol[:, start_y:end_y, start_x:end_x]
                 # save crop
                 img_name = img_files[i].split('.')[0]
-                save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.npy")
-                np.save(save_img_fp, crop_img)
-                if save_vis_dir is not None:
+                if save_depth > 1:
+                    save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.npy")
+                    np.save(save_img_fp, crop_img)
+                else:
+                    save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.png")
+                    cv2.imwrite(save_img_fp, crop_img[0])
+                if (save_vis_dir is not None) and (save_depth > 1):
                     fig, ax = plt.subplots(2, save_depth, num=1)
                     visualize_3d_slice(crop_img, ax[0])
                     plt.savefig(os.path.join(save_vis_dir, f"{img_name}_y{start_y}_x{start_x}.png"))
