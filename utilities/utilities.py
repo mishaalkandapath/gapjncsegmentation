@@ -290,8 +290,15 @@ def get_colored_image(image, color_map=None):
             3: [0, 1, 0],  # Green (TP)
         }
     # Create an empty RGB image
-    depth, height, width = image.shape[0], image.shape[1], image.shape[2]
-    colored_image = np.zeros((depth, height, width, 3), dtype=np.float32) 
+    if len(image.shape) >= 3:
+        print("processing 3d image: ", image.shape)
+        depth, height, width = image.shape[0], image.shape[1], image.shape[2]
+        colored_image = np.zeros((depth, height, width, 3), dtype=np.float32) 
+    else:
+        print("processing 2d image: ", image.shape)
+        height, width = image.shape[0], image.shape[1]
+        colored_image = np.zeros((height, width, 3), dtype=np.float32)
+    
     
     # Map the pixel values to the corresponding colors
     for value, color in color_map.items():
