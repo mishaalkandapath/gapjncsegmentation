@@ -10,7 +10,7 @@
 module purge
 source ~/py39/bin/activate
 module load scipy-stack gcc cuda opencv
-MODEL_NAME=model_job403
+MODELNAME=model_job403
 EPOCH=39
 SLICES="150_180"
 PRED_DIR="/home/hluo/scratch/preds/${SLICES}_model_${MODELNAME}_epoch_${EPOCH}_binary"
