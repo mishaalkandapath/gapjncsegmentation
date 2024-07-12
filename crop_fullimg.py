@@ -27,7 +27,7 @@ module load scipy-stack gcc cuda opencv
 SLICES="111_120"
 CROP_SIZE=256
 STRIDE=128
-DEPTH=3
+DEPTH=1
 GT_PROP=0.0000001
 IMG_DIR="/home/hluo/scratch/data/${SLICES}_fullimgs/original"
 GT_DIR="/home/hluo/scratch/data/${SLICES}_fullimgs/ground_truth"
