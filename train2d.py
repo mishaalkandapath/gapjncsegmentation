@@ -107,7 +107,7 @@ if __name__ == "__main__":
             print("using focal loss with 2d3d")
             criterion = FocalLossWith2d3d(alpha=args.alpha, gamma=args.gamma, intermediate_weight=intermediate_weight)
         else:
-            criterion = FocalLoss(alpha=alpha, gamma=args.gamma, device=DEVICE)
+            criterion = FocalLoss(alpha=alpha, gamma=args.gamma)
             print(f"using focal loss")
         print("alpha:", args.alpha, "gamma:", args.gamma)
     else:
