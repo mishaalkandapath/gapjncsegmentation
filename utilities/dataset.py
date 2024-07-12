@@ -84,9 +84,9 @@ class SliceDatasetMultipleFolders2D(torch.utils.data.Dataset):
             image = colour_transforms(image)
         
         # one-hot encode the mask (depth, height, width) --> (height, width, num_classes=2)
-        one_hot_mask = torch.nn.functional.one_hot(mask.squeeze(0).long(), num_classes=2)
-        one_hot_mask = one_hot_mask.permute(2, 0, 1).float() # (num_classes, height, width)
-        return image, one_hot_mask
+        # one_hot_mask = torch.nn.functional.one_hot(mask.squeeze(0).long(), num_classes=2)
+        # one_hot_mask = one_hot_mask.permute(2, 0, 1).float() # (num_classes, height, width)
+        return image, mask
         
     def __len__(self):
         return len(self.image_paths)
