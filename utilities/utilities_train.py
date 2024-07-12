@@ -183,9 +183,14 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             if (i==0 and epoch==0):
                 print(f"Inputs shape: {inputs.shape}, Labels shape: {labels.shape}") # (batch, channel, depth, height, width)
                 print(f"Inputs device: {inputs.device}, Labels device: {labels.device}")
-            if inputs.shape[2:] != (depth, height, width):
-                print(f"Skipping train batch {i} due to shape mismatch, input shape: {inputs.shape}, actual shape: {depth, height, width}")
-                continue
+            if depth > 1:
+                if inputs.shape[2:] != (depth, height, width):
+                    print(f"Skipping train batch {i} due to shape mismatch, input shape: {inputs.shape}, actual shape: {depth, height, width}")
+                    continue
+            else:
+                if inputs.shape[2:] != (height, width):
+                    print(f"Skipping 2d train batch {i} due to shape mismatch, input shape: {inputs.shape}, actual shape: {depth, height, width}")
+                    continue
             
             # Calculate loss and update weights
             optimizer.zero_grad()
