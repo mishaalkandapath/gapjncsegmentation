@@ -208,8 +208,14 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             epoch_train_loss += loss.detach().cpu().item()
             
             # Get metrics
-            mask_for_metric = labels[:, 1]
-            pred_for_metric = torch.argmax(pred, dim=1) 
+            if depth > 1:
+                mask_for_metric = labels[:, 1]
+                pred_for_metric = torch.argmax(pred, dim=1) 
+            else:
+                mask_for_metric = labels[:, 0]
+                # pred is (batch, 1, height, width)
+                pred_for_metric = pred[:, 0]
+                
             tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
             epoch_tp += tp
             epoch_fp += fp
