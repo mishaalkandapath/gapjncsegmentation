@@ -362,16 +362,16 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             'valid_recall': valid_recall,
         }, os.path.join(loss_folder, f"losses_{model_name}.pth"))
         
-        if savevis:
-            fig, ax= plt.subplots(2,1,figsize=(10, 8))
-            ax[0].set_title("Train Loss")
-            ax[0].plot(train_losses)
-            ax[0].set_xticks(np.arange(0,  100, 5))
-            ax[1].set_title("Valid Loss")
-            ax[1].plot(valid_losses)
-            ax[1].set_xticks(np.arange(0,  100, 5))
-            plt.suptitle(f"Model {model_name}")
-            plt.savefig(f"losses_{model_name}.png")
+        # if savevis:
+        #     fig, ax= plt.subplots(2,1,figsize=(10, 8))
+        #     ax[0].set_title("Train Loss")
+        #     ax[0].plot(train_losses)
+        #     ax[0].set_xticks(np.arange(0,  100, 5))
+        #     ax[1].set_title("Valid Loss")
+        #     ax[1].plot(valid_losses)
+        #     ax[1].set_xticks(np.arange(0,  100, 5))
+        #     plt.suptitle(f"Model {model_name}")
+        #     plt.savefig(f"losses_{model_name}.png")
     print(f"Training complete. Time elapsed: {time.time() - start} seconds")
 
 def generate_cropped_2d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, crop_size=512, stride=512, gt_proportion=0, suffix='png', save_gt_255=False):
