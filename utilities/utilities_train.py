@@ -224,20 +224,35 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
 
             # Save predictions for each epoch
             if (num_train_logged < num_predictions_to_log) and (epoch % prediction_log_interval == 0):
-                input_img = inputs[0][0].cpu().numpy()
-                label_img = labels[0][1].cpu().numpy()
-                pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
-                fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
-                for j in range(depth):
-                    ax[0, j].imshow(input_img[j], cmap="gray")
-                    ax[1, j].imshow(label_img[j], cmap="gray")
-                    ax[2, j].imshow(pred_img[j], cmap="gray")
-                ax[0, 0].set_ylabel("Input")
-                ax[1, 0].set_ylabel("Ground Truth")
-                ax[2, 0].set_ylabel("Prediction")
-                plt.savefig(os.path.join(results_folder, "train", f"epoch{epoch}_num{num_train_logged}.png"))
-                num_train_logged += 1
-                plt.close("all")
+                if depth > 1:
+                    input_img = inputs[0][0].cpu().numpy()
+                    label_img = labels[0][1].cpu().numpy()
+                    pred_img = np.argmax(pred[0].detach().cpu(), 0).numpy()
+                    fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
+                    for j in range(depth):
+                        ax[0, j].imshow(input_img[j], cmap="gray")
+                        ax[1, j].imshow(label_img[j], cmap="gray")
+                        ax[2, j].imshow(pred_img[j], cmap="gray")
+                    ax[0, 0].set_ylabel("Input")
+                    ax[1, 0].set_ylabel("Ground Truth")
+                    ax[2, 0].set_ylabel("Prediction")
+                    plt.savefig(os.path.join(results_folder, "train", f"epoch{epoch}_num{num_train_logged}.png"))
+                    num_train_logged += 1
+                    plt.close("all")
+                else:
+                    input_img = inputs[0][0].cpu().numpy()
+                    label_img = labels[0][0].cpu().numpy()
+                    pred_img = pred[0][0].detach().cpu().numpy()
+                    fig, ax = plt.subplots(3, 1, figsize=(15, 5), num=1)
+                    ax[0].imshow(input_img, cmap="gray")
+                    ax[1].imshow(label_img, cmap="gray")
+                    ax[2].imshow(pred_img, cmap="gray")
+                    ax[0].set_ylabel("Input")
+                    ax[1].set_ylabel("Ground Truth")
+                    ax[2].set_ylabel("Prediction")
+                    plt.savefig(os.path.join(results_folder, "train", f"epoch{epoch}_num{num_train_logged}.png"))
+                    num_train_logged += 1
+                    plt.close("all")
         
         # save metrics
         epoch_train_loss = epoch_train_loss/(num_train_processed)
@@ -262,9 +277,14 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
         for i, data in enumerate(valid_loader):
             valid_inputs, valid_labels = data
             valid_inputs, valid_labels = valid_inputs.to(DEVICE), valid_labels.to(DEVICE)
-            if valid_inputs.shape[2:] != (depth, height, width):
-                print(f"Skipping valid batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
-                continue
+            if depth > 1:
+                if valid_inputs.shape[2:] != (depth, height, width):
+                    print(f"Skipping valid batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
+                    continue
+            else:
+                if valid_inputs.shape[2:] != (height, width):
+                    print(f"Skipping 2d valid batch {i} due to shape mismatch, input shape: {valid_inputs.shape}")
+                    continue
             
             # calculate loss
             if model2d:
@@ -279,8 +299,12 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             # log metrics
             num_valid_processed += 1
             epoch_valid_loss += valid_loss.detach().cpu().item()
-            mask_for_metric = valid_labels[:, 1]
-            pred_for_metric = torch.argmax(valid_pred, dim=1) 
+            if depth > 1:
+                mask_for_metric = valid_labels[:, 1]
+                pred_for_metric = torch.argmax(valid_pred, dim=1) 
+            else:
+                mask_for_metric = valid_labels[:, 0]
+                pred_for_metric = valid_pred[:, 0]
             tp, fp, fn, tn = get_confusion_matrix(pred=pred_for_metric, target=mask_for_metric)
             epoch_tp += tp
             epoch_fp += fp
@@ -289,19 +313,34 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
 
             # Save predictions
             if (num_logged < num_predictions_to_log) and (epoch % 10 == 0):
-                input_img = valid_inputs[0][0].cpu().numpy()
-                label_img = valid_labels[0][1].cpu().numpy()
-                pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
-                fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
-                for j in range(depth):
-                    ax[0, j].imshow(input_img[j], cmap="gray")
-                    ax[1, j].imshow(label_img[j], cmap="gray")
-                    ax[2, j].imshow(pred_img[j], cmap="gray")
-                ax[0, 0].set_ylabel("Input")
-                ax[1, 0].set_ylabel("Ground Truth")
-                ax[2, 0].set_ylabel("Prediction")
-                plt.savefig(os.path.join(results_folder, "valid", f"epoch{epoch}_num{num_logged}.png"))
-                num_logged += 1
+                if depth > 1:
+                    input_img = valid_inputs[0][0].cpu().numpy()
+                    label_img = valid_labels[0][1].cpu().numpy()
+                    pred_img = np.argmax(valid_pred[0].detach().cpu(), 0).numpy()
+                    fig, ax = plt.subplots(3, depth, figsize=(15, 5), num=1)
+                    for j in range(depth):
+                        ax[0, j].imshow(input_img[j], cmap="gray")
+                        ax[1, j].imshow(label_img[j], cmap="gray")
+                        ax[2, j].imshow(pred_img[j], cmap="gray")
+                    ax[0, 0].set_ylabel("Input")
+                    ax[1, 0].set_ylabel("Ground Truth")
+                    ax[2, 0].set_ylabel("Prediction")
+                    plt.savefig(os.path.join(results_folder, "valid", f"epoch{epoch}_num{num_logged}.png"))
+                    num_logged += 1
+                else:
+                    input_img = valid_inputs[0][0].cpu().numpy()
+                    label_img = valid_labels[0][0].cpu().numpy()
+                    pred_img = valid_pred[0][0].detach().cpu().numpy()
+                    fig, ax = plt.subplots(3, 1, figsize=(15, 5), num=1)
+                    ax[0].imshow(input_img, cmap="gray")
+                    ax[1].imshow(label_img, cmap="gray")
+                    ax[2].imshow(pred_img, cmap="gray")
+                    ax[0].set_ylabel("Input")
+                    ax[1].set_ylabel("Ground Truth")
+                    ax[2].set_ylabel("Prediction")
+                    plt.savefig(os.path.join(results_folder, "valid", f"epoch{epoch}_num{num_logged}.png"))
+                    num_logged += 1
+                    
             plt.close("all")
             
         # save metrics
