@@ -30,7 +30,7 @@ class SliceDatasetMultipleFolders2D(torch.utils.data.Dataset):
             vertical_translate=100,
             horizontal_translate=100
     ):
-        
+        print("suffix", suffix)
         self.image_paths = []
         self.mask_paths = []
         self.downsample_factor=downsample_factor
@@ -39,6 +39,8 @@ class SliceDatasetMultipleFolders2D(torch.utils.data.Dataset):
         self.vertical_translate=vertical_translate
         self.horizontal_translate=horizontal_translate
         for images_dir in images_dir_lst:
+            print("processing", images_dir)
+            print(len(self.image_paths))
             self.image_paths.extend([os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir)) if image_id.endswith(suffix)])
         for masks_dir in masks_dir_lst:   
             self.mask_paths.extend([os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if image_id.endswith(suffix)])
