@@ -73,7 +73,7 @@ if __name__ == "__main__":
     model = model.to(DEVICE)
     if load_model_path is not None:
         checkpoint = torch.load(load_model_path)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        model.load_state_dict(checkpoint)
         print(f"Model loaded from {load_model_path}.")
     print(f"Model is on device {next(model.parameters()).device}")
     model = model.train()
