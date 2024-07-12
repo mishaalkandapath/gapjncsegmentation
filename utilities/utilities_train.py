@@ -64,7 +64,7 @@ def parse_arguments():
 def setup_datasets_and_dataloaders_from_lists2d(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True, downsample_factor: int=1, colour_augment: bool=False):
     """ Setup datasets and dataloaders for training and validation"""
     print("Setting up: augment ", augment, " shuffle ", shuffle)
-    my_dataset = SliceDatasetMultipleFolders2D(img_dir_list, mask_dir_list, augment=augment, downsample_factor=downsample_factor, colour_augment=colour_augment)
+    my_dataset = SliceDatasetMultipleFolders2D(img_dir_list, mask_dir_list, augment=augment, downsample_factor=downsample_factor, colour_augment=colour_augment, suffix=".png")
     print("Dataset size: ", len(my_dataset))
     my_loader = DataLoader(my_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers) # change num_workers as needed
     return my_dataset, my_loader
