@@ -433,10 +433,10 @@ def generate_cropped_3d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, save
                     np.save(save_img_fp, crop_img)
                     np.save(save_gt_fp, crop_gt)
                 else:
-                    if i == 0:
-                        print(f"Saving single image to {save_img_fp}, shape: {crop_img.shape}, {crop_gt.shape}")
                     save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.png")
                     save_gt_fp = os.path.join(save_gt_dir, f"{img_name}_y{start_y}_x{start_x}.png")
+                    if i == 0:
+                        print(f"Saving single image to {save_img_fp}, shape: {crop_img.shape}, {crop_gt.shape}")
                     cv2.imwrite(save_img_fp, crop_img[0])
                     cv2.imwrite(save_gt_fp, crop_gt[0])
                 if save_vis_dir is not None:
