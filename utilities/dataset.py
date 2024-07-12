@@ -8,6 +8,91 @@ import torch
 import torchvision.transforms as transforms
 import torchio as tio
 
+
+class SliceDatasetMultipleFolders2D(torch.utils.data.Dataset):
+    """ Dataset for 2D slices of 3D EM images
+    
+    Read images, apply augmentation and preprocessing transformations.
+    
+    Args:
+        images_dir (str): path to images folder
+        masks_dir (str): path to segmentation masks folder
+        augment (bool): whether to apply augmentations
+    """
+    def __init__(
+            self, 
+            images_dir_lst, 
+            masks_dir_lst,
+            augment=False,
+            downsample_factor=1,
+            colour_augment=False,
+            suffix=".npy",
+            vertical_translate=100,
+            horizontal_translate=100
+    ):
+        
+        self.image_paths = []
+        self.mask_paths = []
+        self.downsample_factor=downsample_factor
+        self.augment = augment
+        self.colour_augment = colour_augment
+        self.vertical_translate=vertical_translate
+        self.horizontal_translate=horizontal_translate
+        for images_dir in images_dir_lst:
+            self.image_paths.extend([os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir)) if image_id.endswith(suffix)])
+        for masks_dir in masks_dir_lst:   
+            self.mask_paths.extend([os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if image_id.endswith(suffix)])
+    
+    def __getitem__(self, i):
+        # read images and masks (3D grayscale images)
+        image = cv2.imread(self.image_paths[i], cv2.IMREAD_GRAYSCALE) # each pixel is 0-255, shape (depth, height, width)
+        mask = cv2.imread(self.mask_paths[i], cv2.IMREAD_GRAYSCALE) # each pixel is 0 or 1, shape (depth, height, width)
+
+        # convert to tensor
+        image = torch.tensor(image).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
+        mask = torch.tensor(mask).float().unsqueeze(0) # add channel dimension (depth, height, width) --> (1, depth, height, width)
+        mask[mask!=0]=1
+            
+        if self.downsample_factor > 1:
+            image = torch.nn.MaxPool2d((self.downsample_factor, self.downsample_factor), (self.downsample_factor, self.downsample_factor))(image)
+            mask = torch.nn.MaxPool2d((self.downsample_factor, self.downsample_factor), (self.downsample_factor, self.downsample_factor))(mask)
+        if torch.std(image) == 0:
+            print(f"Image at index {i} has zero standard deviation, skipping normalization")
+        else:
+            image = torch.nn.functional.normalize(image, dim=0)
+    
+        # apply augmentations, if any
+        if self.augment:
+            # Apply flip transformations to image and mask
+            
+            flip_transforms = transforms.Compose([
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomVerticalFlip(p=0.5)
+            ])
+            
+            image = flip_transforms(image)
+            mask = flip_transforms(mask)
+            
+            # additional colour & blur augmentations for image only
+            colour_transforms = transforms.Compose([
+                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+                transforms.GaussianBlur(kernel_size=3)
+            ])
+            
+            image = colour_transforms(image)
+        
+        # one-hot encode the mask (depth, height, width) --> (depth, height, width, num_classes=2)
+        one_hot_mask = torch.nn.functional.one_hot(mask.squeeze(0).long(), num_classes=2)
+        one_hot_mask = one_hot_mask.permute(3, 0, 1, 2).float() # (num_classes, depth, height, width)
+        return image, one_hot_mask
+        
+    def __len__(self):
+        return len(self.image_paths)
+
+
+
+
+
 class SliceDatasetMultipleFolders(torch.utils.data.Dataset):
     """ Dataset for 2D slices of 3D EM images
     

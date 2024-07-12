@@ -61,6 +61,13 @@ def parse_arguments():
     args = parser.parse_args()
     return args
 
+def setup_datasets_and_dataloaders_from_lists2d(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True, downsample_factor: int=1, colour_augment: bool=False):
+    """ Setup datasets and dataloaders for training and validation"""
+    print("Setting up: augment ", augment, " shuffle ", shuffle)
+    my_dataset = SliceDatasetMultipleFolders2D(img_dir_list, mask_dir_list, augment=augment, downsample_factor=downsample_factor, colour_augment=colour_augment)
+    my_loader = DataLoader(my_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers) # change num_workers as needed
+    return my_dataset, my_loader
+
 def setup_datasets_and_dataloaders_from_lists(img_dir_list, mask_dir_list, batch_size: int, num_workers: int, augment: bool=True, shuffle: bool=True, downsample_factor: int=1, colour_augment: bool=False):
     """ Setup datasets and dataloaders for training and validation"""
     print("Setting up: augment ", augment, " shuffle ", shuffle)
@@ -128,7 +135,7 @@ def freeze_model_layers(model, freeze_model_start_layer):
                         print("unfreezed layer 4 (upsampling path)")
     return model
 
-def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, loss_folder:str, num_predictions_to_log:int=5, depth=3, height=512, width=512, use2d3d=False, savevis=True, prediction_log_interval=5) -> None:
+def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, valid_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, optimizer: torch.optim.Optimizer, epochs: int, batch_size: int,lr: float,model_folder: str, model_name: str, results_folder:str, loss_folder:str, num_predictions_to_log:int=5, depth=3, height=512, width=512, use2d3d=False, savevis=True, prediction_log_interval=5, model2d=False) -> None:
     """ 
     Train the model and log predictions locally.
     
@@ -181,7 +188,10 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
             
             # Calculate loss and update weights
             optimizer.zero_grad()
-            intermediate_pred, pred = model(inputs)      
+            if model2d:
+                pred = model(inputs)
+            else:
+                intermediate_pred, pred = model(inputs)      
             if use2d3d:
                 loss = criterion(intermediate_pred, pred, labels)
             else:
@@ -245,7 +255,10 @@ def train_log_local(model: torch.nn.Module, train_loader: torch.utils.data.DataL
                 continue
             
             # calculate loss
-            valid_interm_pred, valid_pred = model(valid_inputs)
+            if model2d:
+                valid_pred = model(valid_inputs)
+            else:
+                valid_interm_pred, valid_pred = model(valid_inputs)
             if use2d3d:
                 valid_loss = criterion(valid_interm_pred,valid_pred, valid_labels)
             else:
@@ -416,8 +429,14 @@ def generate_cropped_3d_dataset(img_dir, gt_dir, save_img_dir, save_gt_dir, save
                 img_name = img_files[i].split('.')[0]
                 save_img_fp = os.path.join(save_img_dir, f"{img_name}_y{start_y}_x{start_x}.npy")
                 save_gt_fp = os.path.join(save_gt_dir, f"{img_name}_y{start_y}_x{start_x}.npy")
-                np.save(save_img_fp, crop_img)
-                np.save(save_gt_fp, crop_gt)
+                if save_depth > 1:
+                    np.save(save_img_fp, crop_img)
+                    np.save(save_gt_fp, crop_gt)
+                else:
+                    if i == 0:
+                        print(f"Saving single image to {save_img_fp}, shape: {crop_img.shape}, {crop_gt.shape}")
+                    cv2.imwrite(save_img_fp, crop_img[0])
+                    cv2.imwrite(save_gt_fp, crop_gt[0])
                 if save_vis_dir is not None:
                     fig, ax = plt.subplots(2, save_depth, num=1)
                     visualize_3d_slice(crop_img, ax[0])
