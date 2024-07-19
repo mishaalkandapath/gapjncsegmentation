@@ -1,17 +1,20 @@
 """  
 sample usage:
 
+module purge
+source ~/py39/bin/activate
+module load scipy-stack gcc cuda opencv
 MODELPATH=/home/hluo/scratch/models/model_job410b/model_job410b_epoch_19.pth
 DATADIR=/home/hluo/scratch/data/111_120_3x512x512_stride256
 RESULTSDIR=/home/hluo/scratch/results_410b_19
-python ~/gapjncsegmentation --model_path $MODELPATH --data_dir $DATADIR --results_dir $RESULTSDIR
+python ~/gapjncsegmentation/getmetrics.py --model_path $MODELPATH --data_dir $DATADIR --results_dir $RESULTSDIR
 """
 
 import numpy as np
 import os
 import argparse
 from utilities.dataset import *
-from models import *
+from utilities.models import *
 from utilities.utilities_train import *
 from utilities.utilities import *
 from matplotlib.colors import ListedColormap
