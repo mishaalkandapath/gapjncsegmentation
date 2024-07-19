@@ -1,3 +1,12 @@
+"""  
+sample usage:
+
+MODELPATH=/home/hluo/scratch/models/model_job410b/model_job410b_epoch_19.pth
+DATADIR=/home/hluo/scratch/data/111_120_3x512x512_stride256
+RESULTSDIR=/home/hluo/scratch/results_410b_19
+python ~/gapjncsegmentation --model_path $MODELPATH --data_dir $DATADIR --results_dir $RESULTSDIR
+"""
+
 import numpy as np
 import os
 import argparse
@@ -12,7 +21,7 @@ parser = argparse.ArgumentParser(description="Get evaluation metrics for the mod
 parser.add_argument("--model_path", type=str, required=True, help="Path to the model file")
 parser.add_argument("--data_dir", type=str, required=True, help="Path to the data directory")
 parser.add_argument("--results_dir", type=str, required=True, help="Path to the results directory")
-parser.add_argument("--folder_type", type=str, default="valid", help="Whether this is train, test, or valid folder")
+parser.add_argument("--folder_type", type=str, default=None, help="Whether this is train, test, or valid folder")
 args = parser.parse_args()
 
 model_path = args.model_path
@@ -37,8 +46,12 @@ model = model.to(DEVICE)
 print(f"Model loaded from {model_path}")
 
 folder_type = args.folder_type
-x_valid_dir = os.path.join(data_dir, "original", folder_type)
-y_valid_dir = os.path.join(data_dir, "ground_truth", folder_type)
+if folder_type is not None:
+    x_valid_dir = os.path.join(data_dir, "original", folder_type)
+    y_valid_dir = os.path.join(data_dir, "ground_truth", folder_type)
+else:
+    x_valid_dir = os.path.join(data_dir, "original")
+    y_valid_dir = os.path.join(data_dir, "ground_truth")
 valid_dataset = SliceDataset(x_valid_dir, y_valid_dir)
 valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, num_workers=4)
 print(f"Validation dataset loaded from {x_valid_dir} and {y_valid_dir}")
