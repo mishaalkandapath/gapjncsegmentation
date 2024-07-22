@@ -20,6 +20,8 @@ from typing import Tuple, List
 # from sklearn.metrics import mean_squared_error
 from torch.utils.data import DataLoader
 from utilities import *
+# from models import *
+from datasets import *
 # import segmentation_models_pytorch.utils.metrics
 import wandb
 import random
@@ -42,7 +44,7 @@ DATASETS = {
     "extend": r"/home/mishaalk/scratch/gapjunc/train_datasets/0_50_extend_train"
 }
                 
-def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=False, gen_gj_entities=False):
+def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=False, gen_gj_entities=False, finetune_dirs=[]):
     try:
         height, width = cv2.imread(os.path.join(x_new_dir, os.listdir(x_new_dir)[0])).shape[:2]
     except:
@@ -81,6 +83,7 @@ def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False,
     else:
         train = CaImagesDataset(
             dataset_dir,
+            finetune_dirs=finetune_dirs,
             preprocessing=None,
             image_dim = (width, height), augmentation=augmentation if aug else None,
             mask_neurons= neuron_mask,
@@ -239,12 +242,12 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                     val_prec_avg.append(precision_f(torch.argmax(valid_pred.squeeze(1), dim=1) == 1, valid_labels.squeeze(1).argmax(dim=1) == 1).detach().item())
                     val_recall_avg.append(recall_f(torch.argmax(valid_pred.squeeze(1), dim=1) == 1, valid_labels.squeeze(1).argmax(dim=1) == 1).detach().item())
 
-                #save it locally:
-                if not args.pred_mem:
-                    write_valid_imgs(valid_pred, valid_labels, i, epoch)
-                else:
-                    # print(torch.unique(torch.argmax(valid_pred.squeeze(1), dim=1), return_counts=True))
-                    write_valid_imgs(valid_pred.squeeze(1).argmax(dim=1) == 1, valid_labels.squeeze(1).argmax(dim=1) * 0.5, i, epoch)
+                # #save it locally:
+                # if not args.pred_mem:
+                #     write_valid_imgs(valid_pred, valid_labels, i, epoch)
+                # else:
+                #     # print(torch.unique(torch.argmax(valid_pred.squeeze(1), dim=1), return_counts=True))
+                #     write_valid_imgs(valid_pred.squeeze(1).argmax(dim=1) == 1, valid_labels.squeeze(1).argmax(dim=1) * 0.5, i, epoch)
             # log some metrics
             valid_loss = np.sum(np.array(val_loss_avg) * np.array(val_count))/sum(val_count)
             wandb.log({"valid_loss": val_loss_avg})
@@ -352,7 +355,7 @@ def extend_train_loop(model, train_loader, criterion, optimizer, valid_loader=No
                 val_recall_avg.append(recall_f(valid_pred >= 0.5, valid_labels).detach().item())
 
                 #save it locally:
-                write_valid_imgs(valid_pred, valid_labels, i, epoch)
+                # write_valid_imgs(valid_pred, valid_labels, i, epoch)
             # log some metrics
             valid_loss = np.sum(np.array(val_loss_avg) * np.array(val_count))/sum(val_count)
             wandb.log({"valid_loss": val_loss_avg})
@@ -421,6 +424,86 @@ def inference_save(model, train_dataset, valid_dataset):
         pred_mask_binary = torch.round(nn.Sigmoid()(pred_mask)) * 255
         plt.imshow(pred_mask_binary.cpu().detach().squeeze(0).squeeze(0).numpy(), cmap="gray")
         plt.savefig(os.path.join(sample_val_folder, f"sample_pred_binary_{suffix}.png"))
+
+def extend_inference_sequence(model, img_dir, preds_dir, new_preds_dir, y_range, x_range, s_min, s_max, img_template, preds_template, off=False):
+
+    os.makedirs(new_preds_dir, exist_ok=True)
+    model = model.to("cuda")
+    model.eval()
+
+    imgs = [os.path.join(img_dir, img) for img in os.listdir(img_dir) if "DS" not in img]
+    imgs = sorted(imgs, key=lambda x: (int(re.findall("Y\d+", x)[0][1:]), int(re.findall("X\d+", x)[0][1:]), int(re.findall("s\d\d\d", x)[0][1:])))
+
+    masks = [os.path.join(preds_dir, img) for img in os.listdir(img_dir) if "DS" not in img]
+
+    wrote_files = 0
+
+    for y in tqdm(y_range):
+        for x in x_range:
+            cur_s = s_min
+            
+            prev_pred, prev_img = None, None
+            while cur_s <= s_max:
+                img_name = img_template + f"s{cur_s}_Y{y}_X{x}{'' if not off else 'off'}.png"
+                if not os.path.isfile(os.path.join(img_dir, img_name)):
+                    while not (os.path.isfile(os.path.join(img_dir, img_name))) and cur_s != s_max:
+                        cur_s = cur_s + 1
+                        img_name = img_template + f"s{cur_s}_Y{y}_X{x}{'' if not off else 'off'}.png"
+                    if cur_s == s_max: break
+                    if cur_s < s_max: cur_s +=1
+                    prev_pred, prev_img = None, None
+
+                img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_name)), cv2.COLOR_BGR2GRAY)
+                if prev_pred is None:
+                    prev_img = img
+                    prev_pred = torch.nn.Sigmoid()(torch.from_numpy(np.load(os.path.join(preds_dir, img_name.replace(img_template, preds_template) + ".npy")))).unsqueeze(0).unsqueeze(0) >= 0.5
+                else:
+                    # predict this based on the previous pred
+                    _transform = []
+                    _transform.append(transforms.ToTensor())
+                    new_pred = torch.nn.Sigmoid()(model(transforms.Compose(_transform)(img).to("cuda").unsqueeze(0), transforms.Compose(_transform)(prev_img).to("cuda").unsqueeze(0), prev_pred.to(dtype=torch.float32).to("cuda"))) >= 0.5
+
+                    #write it in 
+                    assert cv2.imwrite(os.path.join(new_preds_dir, img_name), new_pred.detach().cpu().numpy().squeeze(0).squeeze(0) * 255)
+                    prev_pred = new_pred
+                    prev_img = img
+                    wrote_files += 1
+                cur_s += 1
+    # move it backwards:
+    for y in y_range:
+        for x in x_range:
+            cur_s = s_max
+
+            after_img, after_pred = None, None
+            while cur_s >= s_min:
+                img_name = img_template + f"s{cur_s}_Y{y}_X{x}{'' if not off else 'off'}.png"
+                if not os.path.isfile(os.path.join(img_dir, img_name)):
+                    while not (os.path.isfile(os.path.join(img_dir, img_name))) and cur_s !=s_min:
+                        cur_s = cur_s - 1
+                        img_name = img_template + f"s{cur_s}_Y{y}_X{x}{'' if not off else 'off'}.png"
+
+                    if cur_s == s_min: break
+                    if cur_s > s_min: cur_s -=1
+                    prev_pred, prev_img = None, None
+                img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_name)), cv2.COLOR_BGR2GRAY)
+                if prev_pred is None:
+                    prev_img = img
+                    if not os.path.isfile(os.path.join(new_preds_dir, img_name.replace(img_template, preds_template))):
+                        prev_pred = torch.nn.Sigmoid()(torch.from_numpy(np.load(os.path.join(preds_dir, img_name.replace(img_template, preds_template))+".npy"))).unsqueeze(0).unsqueeze(0) >= 0.5
+                    else:
+                        prev_pred = cv2.cvtColor(cv2.imread(os.path.join(new_preds_dir, img_name.replace(img_template, preds_template)))).unsqueeze(0) == 255
+                else:
+                    # predict this based on the previous pred
+                    _transform = []
+                    _transform.append(transforms.ToTensor())
+
+                    new_pred = torch.nn.Sigmoid()(model(transforms.Compose(_transform)(img).to("cuda").unsqueeze(0), transforms.Compose(_transform)(prev_img).to("cuda").unsqueeze(0), prev_pred.to(dtype=torch.float32).to("cuda"))) >= 0.5
+
+                    #write it in 
+                    assert cv2.imwrite(os.path.join(new_preds_dir, img_name[:-4]+ "after.png"), new_pred.detach().cpu().numpy().squeeze(0).squeeze(0) * 255)
+                    prev_pred = new_pred
+                    prev_img = img
+                cur_s -= 1   
 
 def setup_wandb(epochs, lr):
     global table, class_labels
@@ -510,10 +593,12 @@ if __name__ == "__main__":
     parser.add_argument("--extend", action="store_true")
     parser.add_argument("--pred_mem", action="store_true")
     parser.add_argument("--lr", default=0, type=float)
+    parser.add_argument("--extendinfer", action="store_true")
+    parser.add_argument("--finetune_dirs", action="append", type=str)
 
     args = parser.parse_args()
 
-    if not args.special:
+    if not args.special and not args.extendinfer:
 
         if args.seed:
             SEED = 12
@@ -528,8 +613,8 @@ if __name__ == "__main__":
         
         if args.dataset is not None:
             train_dir = (DATASETS[args.dataset if not args.extend else "extend"])
-            train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat or args.pred_mem, mito_mask=args.mask_mito, chain_length=args.td, gen_gj_entities=args.customloss)
-        else: make_dataset_old(args.aug)
+            train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat or args.pred_mem, mito_mask=args.mask_mito, chain_length=args.td, gen_gj_entities=args.customloss, finetune_dirs=args.finetune_dirs)
+        # else: make_dataset_old(args.aug)
 
         if args.dataset is None: print("----WARNING: RUNNING OLD DATASET----")
 
@@ -570,7 +655,7 @@ if __name__ == "__main__":
             model = ResUNet(three=args.td).to(DEVICE) if not args.mem_feat else MemResUNet(three=args.td).to(DEVICE)
         else: model = joblib.load(os.path.join("/home/mishaalk/scratch/gapjunc/models/", args.model_name)) # load model
 
-        if not args.infer:
+        if not args.infer and not args.new_preds_dir:
 
             print("Current dataset {}".format(args.dataset))
 
@@ -626,7 +711,7 @@ if __name__ == "__main__":
                 criterion = FocalLoss(alpha=cls_weights, device=DEVICE)#torch.nn.BCEWithLogitsLoss()
                 model_folder= model_folder[:-1] +"focal"
 
-            optimizer = torch.optim.Adam(model.parameters(),lr=1e-5 if not args.lr else args.lr)
+            optimizer = torch.optim.Adam(model.parameters(),lr=1e-6 if not args.lr else args.lr)
             decayed_lr = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
             loss_list = [] 
 
@@ -658,13 +743,21 @@ if __name__ == "__main__":
 
         else:
             inference_save(model, train_dataset, valid_dataset)
+    elif args.extendinfer:
+        model_folder += "newextendgendice01"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch56.pk1"))
+
+        model = model.to("cuda")
+        model.eval()
+
+        extend_inference_sequence(model, "/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/imgs", sample_preds_folder+"2d_gd_mem_run1_full_front/", sample_preds_folder+"extend_preds/", range(0, 16), range(0, 18), 100, 120, "sem_dauer_2_em_",  "SEM_dauer_2_export_")
 
     else:
         #--- Personal debug area ---
 
-        model_folder += "unet_mem_skip_mem"
-        sample_preds_folder = sample_preds_folder+"/unet_mem_skip_mem_test/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch88.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
+        model_folder += "2d_gd_mem_run1"
+        sample_preds_folder = sample_preds_folder+"/2d_gd_mem_temp_test/"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch71.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
         # for flat dyna we have 125, 2wt we have 142, 2d_gd_mem_run2 best was 36, 2d_membrane_aug_low is 83, 2d_membrane_noaug is 140
         #resnet w memebrane 67 or 84, 
         #resnet 3d 131 or 130
@@ -674,11 +767,11 @@ if __name__ == "__main__":
 
         # dataset_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split/"
         # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/3d_test_new/imgs/"
-        # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/full_front_split1/imgs/"
+        # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/full_front_split/imgs/"
         dataset_dir="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/imgs"
 
         # dataset = CaImagesDataset(dataset_dir, preprocessing=None, augmentation=None, image_dim=(512, 512), split=1)
-        dataset = TestDataset(dataset_dir, td=False, membrane="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/")
+        dataset = TestDataset(dataset_dir, td=False)#, membrane="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/")
         imgs_files, gt_files = [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i], [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i]
         def collate_fn(batch):
             return (
@@ -706,7 +799,7 @@ if __name__ == "__main__":
                 #infer:
                 x_tensor = image.to("cuda")
                 memb = membrane.to("cuda")
-                pred_mask = model(x_tensor, memb) # [1, 2, 512, 512]
+                pred_mask = model(x_tensor) # [1, 2, 512, 512]
                 # print(pred_mask.shape)
                 # pred_mask_binary = pred_mask.squeeze(0).detach()
                 pred_mask_binary = pred_mask
@@ -725,12 +818,12 @@ if __name__ == "__main__":
                     f.close()
                     i+=1
                     # class_list.append([file_name, classified[j].item()])
-                    pred_mask_binary1 = nn.Sigmoid()(pred_mask_binary) >= 0.5
-                    gt[gt == 255] = 1
-                    rec_acc.append(recall_f(pred_mask_binary1, gt).detach().item())
-                    prec_acc.append(precision_f(pred_mask_binary1, gt).detach().item())
-        print(np.nanmean(prec_acc))
-        print(np.nanmean(rec_acc))
+                    # pred_mask_binary1 = nn.Sigmoid()(pred_mask_binary) >= 0.5
+                    # gt[gt == 255] = 1
+        #             rec_acc.append(recall_f(pred_mask_binary1, gt).detach().item())
+        #             prec_acc.append(precision_f(pred_mask_binary1, gt).detach().item())
+        # print(np.nanmean(prec_acc))
+        # print(np.nanmean(rec_acc))
 
 
 

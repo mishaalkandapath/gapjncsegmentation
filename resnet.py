@@ -253,7 +253,7 @@ class ResNet(nn.Module):
 
     def _forward_impl(self, x):
         # See note [TorchScript super()]
-        if self.membrane:
+        if hasattr(self, "membrane") and self.membrane:
             x, x_mem = x
 
         x = self.conv1(x)
@@ -262,21 +262,22 @@ class ResNet(nn.Module):
         x = self.maxpool(x)
 
         skip_out_1 = self.layer1(x)
-        if self.three: 
+        if hasattr(self, "three") and self.three: 
             skip_out_1 = skip_out_1.squeeze(2)
         skip_out_2_o = self.layer2(skip_out_1)
         
         #add_membrane:
-        if self.membrane:
+        if hasattr(self, "membrane") and self.membrane:
             x_mem = self.mem_conv1(x_mem)
             x_mem = self.mem_bn1(x_mem)
             x_mem = self.mem_relu(x_mem)
             x_mem = self.mem_maxpool(x_mem)
 
-            x_mem = self.mem_layer1(x_mem)
-            x_mem = self.mem_layer2(x_mem)
+            skip_mem1 = self.mem_layer1(x_mem)
+            x_mem = self.mem_layer2(skip_mem1)
 
             skip_out_2 = x_mem + skip_out_2_o
+            skip_out_1 = skip_out_1 + skip_mem1 # NEW ADDITION 
         else: skip_out_2 = skip_out_2_o
 
         skip_out_3 = self.layer3(skip_out_2)
