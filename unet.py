@@ -41,7 +41,8 @@ DATASETS = {
     "tiny": r"/home/mishaalk/scratch/gapjunc/train_datasets/final_tiny_jnc_only128",
     "new3d": r"/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split3d", 
     "test": r"/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split", 
-    "extend": r"/home/mishaalk/scratch/gapjunc/train_datasets/0_50_extend_train"
+    "extend": r"/home/mishaalk/scratch/gapjunc/train_datasets/0_50_extend_train",
+    "new_rwt" = r"/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split_rwt"
 }
                 
 def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=False, gen_gj_entities=False, finetune_dirs=[]):
@@ -112,7 +113,7 @@ def write_valid_imgs(batch, batch_gt, batch_no, epoch):
         assert cv2.imwrite(os.path.join(sample_folder, f"epoch{epoch}_b{batch_no}_{im}_gt.png"), batch_gt[im].cpu().expand(3, -1, -1).permute(1,2,0).detach().numpy() * 255)
 
 
-def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem_feat=False, epochs=30, decay=None, gen_gj_entities=True):
+def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem_feat=False, epochs=30, decay=None, gen_gj_entities=True, fn_rwt=False):
     global table, class_labels, model_folder, DEVICE, args
     
     print(f"Using device: {DEVICE}")
@@ -155,12 +156,12 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                 labels[labels == 3] = 1 # make it a gapjnc
                 labels = F.one_hot(labels.long()).to(torch.float32).permute((0, 1, 4, 2, 3))
                 loss_f_ = F.cross_entropy
-            else: loss_f_ = F.cross_entropy
+            else: loss_f_ = F.binary_cross_entropy_with_logits
 
             
             if args.focalweight == 0:
                 loss = criterion(pred.squeeze(1), labels.squeeze(1), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [], model.s1, model.s2, loss_fn=loss_f_)
-            else: loss = criterion(pred.squeeze(1), labels.squeeze(1) if not gen_gj_entities else (label_centers, label_contours, pad_mask), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [], loss_fn = loss_f_)
+            else: loss = criterion(pred.squeeze(1), labels.squeeze(1) if not gen_gj_entities else (label_centers, label_contours, pad_mask), neuron_mask.squeeze(1) if neuron_mask != [] and not mem_feat else [], mito_mask.squeeze(1) if mito_mask != [] else [], loss_fn = loss_f_, fn_reweight=fn_rwt)
             
             loss.backward() # calculate gradients (backpropagation)
             
@@ -205,7 +206,7 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                     valid_labels[valid_labels == 3] = 1 # make it a gapjnc
                     valid_labels = F.one_hot(valid_labels.long()).to(torch.float32).permute((0, 1, 4, 2, 3))
                     loss_f_ = F.cross_entropy
-                else: loss_f_ = F.cross_entropy
+                else: loss_f_ = F.binary_cross_entropy_with_logits
 
                 if args.focalweight == 0:
                     valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] and not mem_feat else [], valid_mito_mask if valid_mito_mask !=[] else [], model.s1, model.s2, loss_fn=loss_f_)
@@ -270,7 +271,7 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
     except:
         print("Failed to save loss list")
 
-def extend_train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem_feat=False, epochs=30, decay=None, gen_gj_entities=True):
+def extend_train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem_feat=False, epochs=30, decay=None, gen_gj_entities=True, fn_rwt=False):
     global table, class_labels, model_folder, DEVICE, args
     
     print(f"Using device: {DEVICE}")
@@ -454,6 +455,8 @@ def extend_inference_sequence(model, img_dir, preds_dir, new_preds_dir, y_range,
                     prev_pred, prev_img = None, None
 
                 img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_name)), cv2.COLOR_BGR2GRAY)
+                if img.shape[0] != 512 or img.shape[1] != 512: 
+                    break
                 if prev_pred is None:
                     prev_img = img
                     prev_pred = torch.nn.Sigmoid()(torch.from_numpy(np.load(os.path.join(preds_dir, img_name.replace(img_template, preds_template) + ".npy")))).unsqueeze(0).unsqueeze(0) >= 0.5
@@ -470,7 +473,7 @@ def extend_inference_sequence(model, img_dir, preds_dir, new_preds_dir, y_range,
                     wrote_files += 1
                 cur_s += 1
     # move it backwards:
-    for y in y_range:
+    for y in tqdm(y_range):
         for x in x_range:
             cur_s = s_max
 
@@ -486,6 +489,8 @@ def extend_inference_sequence(model, img_dir, preds_dir, new_preds_dir, y_range,
                     if cur_s > s_min: cur_s -=1
                     prev_pred, prev_img = None, None
                 img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_name)), cv2.COLOR_BGR2GRAY)
+                if img.shape[0] != 512 or img.shape[1] != 512: 
+                    break
                 if prev_pred is None:
                     prev_img = img
                     if not os.path.isfile(os.path.join(new_preds_dir, img_name.replace(img_template, preds_template))):
@@ -595,6 +600,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", default=0, type=float)
     parser.add_argument("--extendinfer", action="store_true")
     parser.add_argument("--finetune_dirs", action="append", type=str)
+    parser.add_argument("--fn_rwt", action="store_true")
 
     args = parser.parse_args()
 
@@ -612,7 +618,9 @@ if __name__ == "__main__":
 
         
         if args.dataset is not None:
-            train_dir = (DATASETS[args.dataset if not args.extend else "extend"])
+            if args.fn_rwt: dset = args.dataset + "_rwt"
+            else: dset = args.dataset
+            train_dir = (DATASETS[dset if not args.extend else "extend"])
             train_dataset, valid_dataset =  make_dataset_new(train_dir, aug=args.aug,neuron_mask=args.mask_neurons or args.mem_feat or args.pred_mem, mito_mask=args.mask_mito, chain_length=args.td, gen_gj_entities=args.customloss, finetune_dirs=args.finetune_dirs)
         # else: make_dataset_old(args.aug)
 
@@ -655,7 +663,7 @@ if __name__ == "__main__":
             model = ResUNet(three=args.td).to(DEVICE) if not args.mem_feat else MemResUNet(three=args.td).to(DEVICE)
         else: model = joblib.load(os.path.join("/home/mishaalk/scratch/gapjunc/models/", args.model_name)) # load model
 
-        if not args.infer and not args.new_preds_dir:
+        if not args.infer:# and not args.new_preds_dir:
 
             print("Current dataset {}".format(args.dataset))
 
@@ -739,25 +747,25 @@ if __name__ == "__main__":
             print(f"running for {300 if not args.epochs else args.epochs} epochs")
             
             train_wrapper = train_loop if not args.extend else extend_train_loop
-            train_wrapper(model, train_loader, criterion, optimizer, valid_loader, epochs=300 if not args.epochs else args.epochs, mem_feat=args.mem_feat, gen_gj_entities=args.customloss)
+            train_wrapper(model, train_loader, criterion, optimizer, valid_loader, epochs=300 if not args.epochs else args.epochs, mem_feat=args.mem_feat, gen_gj_entities=args.customloss, fn_rwt=args.fn_rwt)
 
         else:
             inference_save(model, train_dataset, valid_dataset)
     elif args.extendinfer:
-        model_folder += "newextendgendice01"
+        model_folder += "newextendgendice01" # and 0 ar ethe best ones. 01 is some tweak on the learning rate i believe
         model = joblib.load(os.path.join(model_folder, "model5_epoch56.pk1"))
 
         model = model.to("cuda")
         model.eval()
 
-        extend_inference_sequence(model, "/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/imgs", sample_preds_folder+"2d_gd_mem_run1_full_front/", sample_preds_folder+"extend_preds/", range(0, 16), range(0, 18), 100, 120, "sem_dauer_2_em_",  "SEM_dauer_2_export_")
+        extend_inference_sequence(model, "/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/imgs", sample_preds_folder+"2d_gd_mem_run1_full_front/", sample_preds_folder+"extend_preds_off/", range(0, 16), range(0, 18), 100, 120, "sem_dauer_2_em_",  "SEM_dauer_2_export_", off=True)
 
     else:
         #--- Personal debug area ---
 
-        model_folder += "2d_gd_mem_run1"
-        sample_preds_folder = sample_preds_folder+"/2d_gd_mem_temp_test/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch71.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
+        model_folder += "feat_mem_unet"#"2d_gd_mem_run1" IS THE BEST HERE OKAY??
+        sample_preds_folder = sample_preds_folder+"/feat_mem_unet_100_120_e83/"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch83.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
         # for flat dyna we have 125, 2wt we have 142, 2d_gd_mem_run2 best was 36, 2d_membrane_aug_low is 83, 2d_membrane_noaug is 140
         #resnet w memebrane 67 or 84, 
         #resnet 3d 131 or 130
@@ -769,9 +777,11 @@ if __name__ == "__main__":
         # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/3d_test_new/imgs/"
         # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/full_front_split/imgs/"
         dataset_dir="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/imgs"
+        mem_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/imgs"
+        # dataset_dir="/home/mishaalk/scratch/gapjunc/test_datasets/dauer1_test/imgs"
 
         # dataset = CaImagesDataset(dataset_dir, preprocessing=None, augmentation=None, image_dim=(512, 512), split=1)
-        dataset = TestDataset(dataset_dir, td=False)#, membrane="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/")
+        dataset = TestDataset(dataset_dir, td=False, membrane=mem_dir)#, membrane="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/")
         imgs_files, gt_files = [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i], [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i]
         def collate_fn(batch):
             return (
@@ -799,7 +809,7 @@ if __name__ == "__main__":
                 #infer:
                 x_tensor = image.to("cuda")
                 memb = membrane.to("cuda")
-                pred_mask = model(x_tensor) # [1, 2, 512, 512]
+                pred_mask = model(x_tensor, memb) # [1, 2, 512, 512]
                 # print(pred_mask.shape)
                 # pred_mask_binary = pred_mask.squeeze(0).detach()
                 pred_mask_binary = pred_mask

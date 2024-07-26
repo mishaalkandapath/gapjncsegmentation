@@ -28,580 +28,217 @@ import pickle as p
 from resnet import ResNet, BasicBlock
 
 # import segmentation_models_pytorch.utils.metrics
-
-class CaImagesDataset(torch.utils.data.Dataset):
-
-    """Calcium imaging images dataset. Read images, apply augmentation and preprocessing transformations.
     
-    Args:
-        images_dir (str): path to images folder
-        masks_dir (str): path to segmentation masks folder
-        augmentation (albumentations.Compose): data transfromation pipeline 
-            (e.g. flip, scale, etc.)
-        preprocessing (albumentations.Compose): data preprocessing 
-            (e.g. noralization, shape manipulation, etc.)
+class FocalLoss(nn.Module):
+    def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
+        super(FocalLoss, self).__init__()
+        
+        self.gamma = gamma
+        self.device = device
+        self.alpha = alpha.to(device)
     
-    """
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], loss_fn = F.binary_cross_entropy_with_logits, fn_reweight=False):
+        bce_loss = loss_fn(inputs, targets, reduction="none") if loss_fn is F.binary_cross_entropy_with_logits else loss_fn(inputs, targets, reduction="none", weight=self.alpha)
+        pt = torch.exp(-bce_loss)
+
+        if fn_reweight: fn_wt = (targets > 1) + 1 
+        targets = targets != 0
+        targets = targets.to(torch.int64)
+        loss = (1 if loss_fn is not F.binary_cross_entropy_with_logits else  self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape)) * (1-pt) ** self.gamma * bce_loss 
+        if fn_reweight:
+            fn_wt[fn_wt == 2] = 5
+            loss *= fn_wt # fn are weighted 5 times more than regulars
+        if mito_mask != []:
+            #first modify loss_mask, neuron_mask is always on.
+            loss_mask = loss_mask | mito_mask
+            # factor = 1
+            # loss = loss * (1 + (mito_mask * factor))#weight this a bit more. 
+        if loss_mask != []: 
+            #better way? TODO: get rid of this if statement
+            if len(loss.shape) > len(loss_mask.shape): loss = loss * loss_mask.unsqueeze(-1)
+            else: loss = loss * loss_mask # remove everything that is a neuron body, except ofc if the mito_mask was on. 
+
+        return loss.mean() 
+
+class DiceLoss(nn.Module):
+    def __init__(self, eps=1e-6):
+        super(DiceLoss, self).__init__()
+        self.eps = eps
     
-    def __init__(
-            self, 
-            dataset_dir, 
-            augmentation=None, 
-            preprocessing=None,
-            image_dim = (512, 512),
-            mask_neurons=None,
-            mask_mito=None,
-            gen_gj_entities=False,
-            split=0 #0 for train, 1 for valid
-    ):
-        prefix = "train" if not split else "valid"
-        images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
-        masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], loss_fn=None):
+        #get the probabilities:
+        probs = nn.Sigmoid()(inputs)
+        n1 = probs * targets
+        inv_targets = 1 - targets
+
+        d = probs + targets
+
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
         
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts"))) if "DS" not in image_id and (True and self.centers_and_contours(cv2.imread(os.path.join(masks_dir, image_id)), filter_mode=True))]
-        self.image_paths = [os.path.join(images_dir, os.path.split(image_id.replace("sem2dauer_gj_2d_training.vsseg_export_", "SEM_dauer_2_image_export_"))[-1]) for image_id in self.mask_paths if "DS" not in image_id]
+        if loss_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            # loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            inv_targets[loss_mask] = 0
+            d *= (loss_mask == 0)
+            d += (loss_mask *2) # eqv to d[loss_mask]=2
 
-        if mask_neurons:
-            assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "illegal naming, feds on the way"
-            self.neuron_paths = []
-            for neuron_id in self.image_paths:
-                neuron_id = os.path.split(neuron_id)[-1]
-                item = os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), os.path.split(neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_"))[-1].replace(".png.png", ".png"))
-                self.neuron_paths.append(item)
-
-        else: self.neuron_paths = None
-
-        if mask_mito:
-            self.mito_mask = [os.path.join(os.path.join(dataset_dir, f"{prefix}_mito"), neuron_id.replace("png", "tiff") if not "tiny" in dataset_dir else neuron_id) for neuron_id in sorted(os.listdir(images_dir))]
-            assert len(self.mito_mask) == len(self.image_paths), f"{len(self.mito_mask)} {len(self.image_paths)}"
-        else:
-            self.mito_mask=None
-            
-        self.augmentation = augmentation 
-        self.preprocessing = preprocessing
-        self.image_dim = image_dim
-        self.gen_gj_entities=gen_gj_entities
-
-    def centers_and_contours(self, gt, filter_mode=False):
-        gray = cv2.cvtColor(gt, cv2.COLOR_BGR2GRAY)
-        out = np.zeros_like(gray, dtype=np.uint8)
-
-        # Apply thresholding
-        _, thresh = cv2.threshold(gray, 40, 255, cv2.THRESH_BINARY)
-
-        # Find contours
-        contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-         # Calculate center of each contour
-        centers, contour_arr = [], []
-        for i, cnt in enumerate(contours):
-            M = cv2.moments(cnt)
-            if M['m00'] != 0:
-                cx = int(M['m10'] / M['m00'])
-                cy = int(M['m01'] / M['m00'])
-
-                cnt = cnt.squeeze(1)
-                cont_arr = torch.zeros(gray.shape)
-                cont_arr[[cnt[:, 1], cnt[:, 0]]] = 1
-
-                #check for intersection
-                get_out = False
-                for c in contour_arr:
-                    if torch.count_nonzero((c +cont_arr) >= 2) != 0: 
-                        get_out = True
-                        break
-                if get_out: continue # bad contour identification safeguard
-
-                centers.append((cx, cy))
-                contour_arr.append(cont_arr)    
-
-                out = cv2.circle(out, (cx, cy), 5, 255, 2)
-                out = cv2.drawContours(out, contours, i, color=255, thickness=2)
-                
-        if not len(centers) and filter_mode:
-            return False
-        elif filter_mode: return True
-
-        contour_arr = torch.stack(contour_arr, axis=0)
-        assert contour_arr.shape[0] == len(centers)
-
-        center_indices = [list(range(len(centers)))] + [list(list(zip(*centers))[0]), list(list(zip(*centers))[1])]
-        center_arr = torch.zeros((len(centers), gt.shape[0], gt.shape[1]))
-        try:
-            center_arr[list(range(len(centers))), list(list(zip(*centers))[0]), list(list(zip(*centers))[1])] = 1
-        except:
-            print(center_indices, center_arr.shape)
-            raise Exception
-
-        #sanity check
-        if len(torch.unique(contour_arr.sum(dim=0))) > 2:
-            #save the image somehwere
-            cv2.imwrite("example.png", out)
-            cv2.imwrite("example_gt.png", gt)
-        assert len(torch.unique(contour_arr.sum(dim=0))) <=2, f"{torch.unique(contour_arr.sum(dim=0))} {torch.unique(contour_arr)} {(len(centers))}"
-
-
-        return center_arr.to(dtype=torch.float32), contour_arr.to(dtype=torch.float32)
-
-    def __getitem__(self, i):
-        
-        # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
-        try:
-            image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
-        except Exception as e:
-            print(self.image_paths[i])
-            raise Exception(self.image_paths[i])
-        mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
-        if self.gen_gj_entities: centers, contours = self.centers_and_contours(cv2.imread(self.mask_paths[i]))
-
-        # make sure each pixel is 0 or 255
-        
-        mask_labels, counts = np.unique(mask, return_counts=True)
-        # if (len(mask_labels)>2):
-        #     print("More than 2 labels found for mask")
-        mask[mask == 0] = 0
-        mask[mask == 255] = 1
-        
-        mask_ref = mask.copy()
-        # apply augmentations
-        if self.augmentation:
-            image, mask = self.augmentation(image, mask)
-            image = v2.RandomAutocontrast()(image)
-        
-        # apply preprocessing
-        _transform = []
-        _transform.append(transforms.ToTensor())
-
-        # img_size = 512
-        # width, height = self.image_dim
-        # max_dim = max(img_size, width,    )
-        # pad_left = (max_dim-width)//2
-        # pad_right = max_dim-width-pad_left
-        # pad_top = (max_dim-height)//2
-        # pad_bottom = max_dim-height-pad_top
-        # _transform.append(transforms.Pad(padding=(pad_left, pad_top, pad_right, pad_bottom), 
-        #                                 padding_mode='edge'))
-        # _transform.append(transforms.Resize(interpolation=transforms.InterpolationMode.NEAREST_EXACT,size=(img_size, img_size)))  
-
-        mask = transforms.Compose(_transform)(mask)
-        if len(mask_labels) == 1:
-            mask[:] = 0
-        else:
-            mask[mask != 0] = 1
-        ont_hot_mask = mask
-        # ont_hot_mask = F.one_hot(mask.long(), num_classes=2).squeeze().permute(2, 0, 1).float()
-
-        _transform_img = _transform.copy()
-        # _transform_img.append(transforms.Normalize(mean=[0.5], std=[0.5]))
-        image = transforms.Compose(_transform_img)(image)
-
-        #get the coresponding neuron mask
-        if self.neuron_paths: neurons = cv2.cvtColor(cv2.imread(self.neuron_paths[i]), cv2.COLOR_BGR2GRAY)
-        if self.mito_mask: mitos = np.array(Image.open(self.mito_mask[i]))
-        
-        if not self.gen_gj_entities:
-            return image, ont_hot_mask, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
-        else:
-            return image, ont_hot_mask, centers, contours, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
-        
-    def __len__(self):
-        # return length of 
-        return len(self.image_paths)
-
-class SectionsDataset(torch.utils.data.Dataset):
+        n2 = (1-probs) * inv_targets
     
-    def __init__(
-            self, 
-            dataset_dir ,
-            augmentation=None, 
-            preprocessing=None,
-            image_dim = (512, 512),
-            chain_length=4,
-            mask_neurons=None,
-            mask_mito=None,
-            split=0 #0 if train 1 if valid
-    ):    
-        prefix = "train" if not split else "valid"
-        images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
-        self.image_paths = [os.path.join(images_dir, image_id) for image_id in sorted(os.listdir(images_dir))]
-        self.mask_paths = [os.path.join(os.path.join(dataset_dir, f"{prefix}_gts"), image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts")))]
+        # no need to use masks for balancing, coz of the loss fn here
 
-        if mask_neurons:
-            assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "illegal naming, feds on the way"
-            self.neuron_paths = [path.replace("imgs", "neuro") for path in self.image_paths]
-        else: self.neuron_paths = None
+        n1 = n1.view(n1.shape[0], -1)
+        n2 = n2.view(n2.shape[0], -1)
+        d =  d.view(d.shape[0], -1)
 
-        # if mask_mito:
-        #     self.mito_mask = [os.path.join(mask_mito, neuron_id) for neuron_id in sorted(os.listdir(images_dir))]
-        # else:
-        #     self.mito_mask=None
-        self.mito_mask = None
-            
-        self.augmentation = augmentation 
-        self.preprocessing = preprocessing
-        self.image_dim = image_dim
-        self.chain_length = chain_length
+        return torch.mean(2 - (torch.sum(n1, dim=-1) + self.eps)/(torch.sum(d, dim=-1) + self.eps)
+                           - (torch.sum(n2, dim=-1) + self.eps)/(torch.sum(2-d, dim=-1) + self.eps))
 
-        # self.make_chain_paths()
-        print("Dataset has {} samples".format(len(self.image_paths)))
-
-    def make_chain_paths(self):
-        chain_img_paths, chain_seg_paths, chain_neuron_paths, chain_mito_paths = [], [], [] if self.neuron_paths else None, [] if self.neuron_paths else None
-        for i in range(len(self.image_paths)):
-            imgs, segs, neurons, mitos = [], [], [], []
-            img_path, seg_path = self.image_paths[i], self.mask_paths[i]
-            layer = re.findall(r's\d\d\d_', img_path)[0]
-
-            skip = False
-            for j in range(self.chain_length):
-                next_layer_1 = "s" + ("00" if int(layer[1:-1]) < 9-j else "0") + str(int(layer[1:-1])+j) + "_"
-                img_f_1 = img_path.replace(layer, next_layer_1)
-                seg_f_1 = seg_path.replace(layer, next_layer_1)
-                if self.neuron_paths:
-                    neuron_path = self.neuron_paths[i]
-                    neurons_f_1 = neuron_path.replace(layer, next_layer_1)
-                if self.mito_mask:
-                    mito_path = self.mito_mask[i]
-                    mito_f_1 = mito_path.replace(layer, next_layer_1)
-
-                if not os.path.isfile(img_f_1) or not os.path.isfile(seg_f_1) or (self.neuron_paths is not None and not os.path.isfile(neurons_f_1)) \
-                    or (self.mito_mask is not None and not os.path.isfile(mito_f_1)) : 
-                    skip = True
-                    break
-                # print("Not skip!")
-                imgs.append(img_f_1)
-                segs.append(seg_f_1)
-                if self.neuron_paths: neurons.append(neurons_f_1)
-                if self.mito_mask: mitos.append(mito_f_1)
-
-            if skip: continue
-
-            chain_img_paths.append(imgs)
-            chain_seg_paths.append(segs)
-
-            if self.neuron_paths: chain_neuron_paths.append(neurons)
-            if self.mito_mask: chain_mito_paths.append(mitos)  
-            # assert len(sum(chain_img_paths, start=[]))%3 == 0
-
-        self.image_paths, self.mask_paths = chain_img_paths, chain_seg_paths
-        if self.neuron_paths: self.neuron_paths = chain_neuron_paths
-        if self.mito_mask: self.mito_mask = chain_mito_paths
-
-    def __getitem__(self, i):
-
-        # directory is arranged as before, current, future1, future2
-
-        images = sorted(os.listdir(self.image_paths[i]))
-        masks = sorted(os.listdir(self.mask_paths[i]))
-        
-
-        img = []
-        ns = []
-        if self.neuron_paths: neurons = sorted(os.listdir(self.neuron_paths[i]))
-        if self.mito_mask: mitos = []
-
-        mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], masks[1])), cv2.COLOR_BGR2GRAY)
-
-        for j in range(4):
-            im = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], images[j])), cv2.COLOR_BGR2GRAY)
-            img.append(im)
-            if self.neuron_paths:
-                neuron = cv2.cvtColor(cv2.imread(os.path.join(self.neuron_paths[i], neurons[j])), cv2.COLOR_BGR2GRAY)
-                ns.append(neuron)
-        
-        image = np.stack(img, axis=0)
-        if self.neuron_paths: neurons = np.stack(ns, axis=0)
-        mitos=[]
-        
-
-        # make sure each pixel is 0 or 255
-        
-        mask_labels = np.unique(mask)
-        mask[mask == 0] = 0
-        mask[mask == 255] = 1
-        
-        
-        # apply augmentations
-        flippant = random.random()
-        if self.augmentation and flippant < 0.25:
-            if flippant < 0.55:
-                #random rotation plus gaussian blur
-                sample = self.transform1(image=image, mask=mask)
-                image, mask = sample['image'], sample['mask']
-            elif flippant < 0.85:
-                #horizontal and vertical flip + gaussian blur
-                sample = self.transform2(image=image, mask=mask)
-                image, mask = sample['image'], sample['mask']
-            else:
-                #everything
-                sample = self.transform3(image=image, mask=mask)
-                image, mask = sample['image'], sample['mask']
-        
-        # apply preprocessing
-        _transform = []
-        _transform.append(transforms.ToTensor())
-
-        mask = transforms.Compose(_transform)(mask)
-        if len(mask_labels) == 1:
-            mask[:] = 0
-        else:
-            mask[mask != 0] = 1
-        ont_hot_mask = mask
-
-        _transform_img = _transform.copy()
-        image = transforms.Compose(_transform_img)(image)
-
-        image = torch.permute(image, (1, 2, 0))  
-
-        # ont_hot_mask = torch.permute(ont_hot_mask, (1, 2, 0))    
-            
-        return image.unsqueeze(0), ont_hot_mask, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], torch.from_numpy(mitos[np.newaxis, :]) if self.mito_mask else []
-        
-    def __len__(self):
-        # return length of 
-        return len(self.image_paths)
-
-class DebugDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_dir, aug=False):
-        images = os.path.join(dataset_dir, "imgs")
-        gts = os.path.join(dataset_dir, "gts")
-        mems = os.path.join(dataset_dir, "neurons")
-
-        self.mask_paths = []
-        self.image_paths = []
-        self.neuron_paths = []
-        names = []
-
-        print("--Filtering")
-        # for image_id in tqdm(sorted(os.listdir(images))):
-        #     if "DS" in image_id:
-        #         continue
-        #     image_id = os.path.join(gts, image_id)
-        #     gt = cv2.cvtColor(cv2.imread(image_id), cv2.COLOR_BGR2GRAY)
-        #     gt[gt == 2] = 0
-        #     gt[gt == 15] = 0
-        #     if len(np.unique(gt)) < 2: continue
-        #     image_name = os.path.split(image_id)[-1]
-        #     names.append(image_name)
-        #     self.image_paths.append(os.path.join(images, image_name))
-        #     self.neuron_paths.append(os.path.join(mems, image_name))
-        #     self.mask_paths.append(os.path.join(gts, image_id))
-        with open("/home/mishaalk/projects/def-mzhen/mishaalk/gapjncsegmentation/names.p", "rb") as  f:
-            names = p.load(f)
-        for image_name in names:
-            self.image_paths.append(os.path.join(images, image_name))
-            self.neuron_paths.append(os.path.join(mems, image_name))
-            self.mask_paths.append(os.path.join(gts, image_name))
-        
-        self.augmentation = aug
-        
-
-        
-    def __getitem__(self, i):
-
-        # directory is arranged as before, current, future1, future2
-        mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY)
-        image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY)
-        neurons = cv2.cvtColor(cv2.imread(self.neuron_paths[i]), cv2.COLOR_BGR2GRAY) 
-        
-
-        # make sure each pixel is 0 or 255
-        # print(np.unique(mask))
-        
-        mask_labels = np.unique(mask)
-        mask[mask == 0] = 0
-        mask[mask == 255] = 1
-        
-        
-        # apply augmentations
-        if self.augmentation:
-            image, mask = self.augmentation(image, mask)
-            image = v2.RandomAutocontrast()(image)
-        
-        # apply preprocessing
-        _transform = []
-        _transform.append(transforms.ToTensor())
-
-        mask = transforms.Compose(_transform)(mask)
-        if len(mask_labels) == 1:
-            mask[:] = 0
-        else:
-            mask[mask != 0] = 1
-        ont_hot_mask = mask
-
-        _transform_img = _transform.copy()
-        image = transforms.Compose(_transform_img)(image)
-
-        # image = torch.permute(image, (1, 2, 0))     
-        if len(image.shape) >= 5: print(image.shape)
-        # print( torch.from_numpy(neurons[np.newaxis, :]).unsqueeze(0).shape)
-            
-        return image, ont_hot_mask, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], []
-
-    def __len__(self):
-        # return length of 
-        return len(self.image_paths)
+class TverskyFocal(nn.Module):
+    def __init__(self, eps=1e-6):
+        super(TverskyFocal, self).__init__()
+        self.eps = eps
     
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], recall=0.7, precision=0.3):
+        #get the probabilities:
+        probs = nn.Sigmoid()(inputs)
+        n1 = probs * targets
+        inv_targets = 1 - targets
 
+        d = probs + targets
 
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
+        
+        if loss_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            # loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            inv_targets[loss_mask] = 0
+            d *= (loss_mask == 0)
+            d += (loss_mask *2) # eqv to d[loss_mask]=2
 
-class TestDataset(torch.utils.data.Dataset):
-    def __init__(
-            self, 
-            dataset_dir ,
-            image_dim = (512, 512),
-            td=False,
-            membrane=False
-    ):      
-        self.image_paths = [os.path.join(dataset_dir, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
-        self.mask_paths = [os.path.join(dataset_dir.replace("imgs", "gts"), image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
-        if membrane:
-            self.membrane_paths = [os.path.join(dataset_dir, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
-        else: self.membrane_paths = None
-        self.td = td
+        n2 = (1-probs) * inv_targets
 
-    def __getitem__(self, i):
-        # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
-        if not self.td:
-            try:
-                image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
-                mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY)
-                if self.membrane_paths: memb = cv2.cvtColor(cv2.imread(self.membrane_paths[i]), cv2.COLOR_BGR2GRAY)
-            except Exception as e:
-                print(self.image_paths[i])
-                raise Exception(self.image_paths[i])
-        else:
-            images = sorted(os.listdir(self.image_paths[i]))
-            img, mem = [], []
-            for j in range(4):
-                im = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], images[j])), cv2.COLOR_BGR2GRAY)
-                if self.membrane_paths: 
-                    memb = cv2.cvtColor(cv2.imread(os.path.join(self.membrane_paths[i], images[j])), cv2.COLOR_BGR2GRAY)
-                    mem.append(memb)
-                img.append(im)
-            
-            image = np.stack(img, axis=0)
-            memb = np.stack(mem, axis=0)
-
-        _transform = []
-        _transform.append(transforms.ToTensor()) 
-        if self.membrane_paths: memb = transforms.Compose(_transform)(memb)
-        _transform_img = _transform.copy()
-        # _transform_img.append(transforms.Normalize(mean=[0.5], std=[0.5]))
-        image = transforms.Compose(_transform_img)(image)
-        mask = transforms.Compose(_transform_img)(mask)
-        if self.td: 
-            image = torch.permute(image, (1, 2, 0)) 
-            if self.membrane_paths: memb = torch.permute(memb, (1, 2, 0)) 
-        else: 
-            image = image.squeeze(0) 
-            memb = memb.squeeze(0)
-            mask = mask.squeeze(0)
-
-
-        if image.shape[-1] != 512: 
-            image = torch.zeros(image.shape[:-1]+(512,))
-            mask = torch.zeros(image.shape[:-1]+(512,))
-            if self.membrane_paths: memb = torch.zeros(memb.shape[:-1]+(512,))
-        if image.shape[-2] != 512: 
-            image = torch.zeros(image.shape[:-2]+(512,512))
-            mask = torch.zeros(image.shape[:-1]+(512,))
-            if self.membrane_paths: memb = torch.zeros(memb.shape[:-2]+(512,512))
-
-        return image.unsqueeze(0), mask.unsqueeze(0), image.unsqueeze(0) if not self.membrane_paths else memb.unsqueeze(0), image.unsqueeze(0)
-    def __len__(self):
-        # return length of 
-        return len(self.image_paths)
-
-class ExtendDataset(torch.utils.data.Dataset):
-
-    """Calcium imaging images dataset. Read images, apply augmentation and preprocessing transformations.
+        f1 = probs * inv_targets
+        f2 = (1-probs) * targets
     
-    Args:
-        images_dir (str): path to images folder
-        masks_dir (str): path to segmentation masks folder
-        augmentation (albumentations.Compose): data transfromation pipeline 
-            (e.g. flip, scale, etc.)
-        preprocessing (albumentations.Compose): data preprocessing 
-            (e.g. noralization, shape manipulation, etc.)
+        # no need to use masks for balancing, coz of the loss fn here
+
+        n1 = n1.view(n1.shape[0], -1)
+        n2 = n2.view(n2.shape[0], -1)
+        d =  d.view(d.shape[0], -1)
+
+        f1 = torch.sum(f1.view(n1.shape[0], -1))
+        f2 = torch.sum(f2.view(n1.shape[0], -1))
+
+        return torch.mean(2 - (torch.sum(n1, dim=-1) + self.eps)/(torch.sum(n1, dim=-1) + recall*f2 + precision*f1  + self.eps)
+                           - (torch.sum(n2, dim=-1) + self.eps)/(torch.sum(n2, dim=-1) + precision*f2 + recall*f1 + self.eps))
+
+class SSLoss(nn.Module):
+    def __init__(self, eps=1e-6, lamda=0.05):
+        super(SSLoss, self).__init__()
+        self.eps = eps
+        self.lamda = 0.05
+
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
+        inputs = nn.Sigmoid()(inputs)
+        targets, inputs = targets.view(targets.shape[0], -1), inputs.view(inputs.shape[0], -1)
+        inv_targets = 1-targets
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
+        
+        if loss_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            inv_targets[loss_mask] = 0
+
+        return torch.mean(self.lmda * torch.sum(torch.pow((targets - inputs), 2) * targets, dim=-1)/(torch.sum(targets, dim=-1) + self.eps) +
+                           (1-self.lamda) * torch.sum(torch.pow((targets - inputs), 2) * inv_targets, dim=-1)/ (torch.sum(inv_targets, dim=-1) + self.eps))
+
+class SpecialLoss(nn.Module):
+    def __init__(self, bg_imp=2e-2):
+        super(SpecialLoss, self).__init__()
+        self.bg_imp = bg_imp
     
-    """
+    def forward(self, predictions, targets, neuron_mask=[], mito_mask=[]):
+        target_centers, targets, pad_mask = targets
+
+        pad_tensors = torch.zeros((target_centers.shape[-2:])).to(dtype=torch.bool).to(pad_mask.device)
+        pad_tensors[0, 0] = 1 # simply 
+        target_centers[pad_mask] = pad_tensors # for now
+
+        rows, cols = np.indices(target_centers.shape[-2:])
+        rows, cols = torch.from_numpy(rows).to(predictions.device), torch.from_numpy(cols).to(predictions.device)
+        #extend 
+        rows, cols = rows.expand(predictions.size(0), targets.size(1), -1, -1), cols.expand(predictions.size(0),targets.size(1), -1, -1)
+        center_rows, center_cols = (rows * target_centers).sum(dim = -1, keepdim=True).sum(dim=-1, keepdim=True), (cols * target_centers).sum(dim = -1, keepdim=True).sum(dim=-1, keepdim=True) 
+        
+        squared_dist = (rows - center_rows) ** 2 + (cols - center_cols) ** 2
+        pixel_importance = (targets) * 1/((squared_dist)+1e-6)
+        pixel_importance[pad_mask] = 0 # reset everything that was purely pad
+
+        pixel_importance = pixel_importance.sum(dim=1)
+        importance_coeff = (targets.sum(dim=1) == 0) * self.bg_imp
+        pixel_importance += importance_coeff
+
+        assert torch.count_nonzero(pixel_importance <0 ) == 0
+
+        bce_loss = F.binary_cross_entropy_with_logits(predictions, targets.sum(dim=1).to(dtype=torch.float32), reduction="none")
+        bce_loss *= pixel_importance
+
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
+        if neuron_mask != []:
+            if len(targets.shape) > len(neuron_mask.shape): neuron_mask.unsqueeze(-1)
+            # neuron_mask = neuron_mask.view(neuron_mask.shape[0], -1)
+            bce_loss *= neuron_mask
+
+        return torch.mean(bce_loss)
+        
+
+
+class GenDLoss(nn.Module):
+    def __init__(self):
+        super(GenDLoss, self).__init__()
     
-    def __init__(
-            self, 
-            dataset_dir,  
-            image_dim = (512, 512),
-            split=0 #0 for train, 1 for valid
-    ):
-        print("--extend dataset--")
-        prefix = "train" if not split else "valid"
-        images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
-        masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], loss_fn=None):
+        inputs = nn.Sigmoid()(inputs)
+        targets, inputs = targets.view(targets.shape[0], -1), inputs.view(inputs.shape[0], -1)
+
+        inputs = torch.stack([inputs, 1-inputs], dim=-1)
+        targets = torch.stack([targets, 1-targets], dim=-1)
+
+        if mito_mask != []:
+            loss_mask = loss_mask | mito_mask 
         
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if "DS" not in image_id]
-        self.image_paths = [os.path.join(images_dir, os.path.split(image_id)[-1]) for image_id in self.mask_paths if "DS" not in image_id]
+        if loss_mask != []:
+            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
+            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
+            targets *= loss_mask.unsqueeze(-1)
+            inputs *= loss_mask.unsqueeze(-1)#0 them out in both masks
 
-        self.image_dim = image_dim
+        weights = 1 / (torch.sum(torch.permute(targets, (0, 2, 1)), dim=-1).pow(2)+1e-6)
+        targets, inputs = torch.permute(targets, (0, 2, 1)), torch.permute(inputs, (0, 2, 1))
 
-    def __getitem__(self, i):
+        # print(torch.nansum(weights * torch.nansum(targets * inputs, dim=-1), dim=-1))
+        # print(weights)
 
-        # read the directories
-        img_files = os.listdir(self.image_paths[i])
-        mask_files = os.listdir(self.mask_paths[i])
+        return torch.nanmean(1 - 2 * torch.nansum(weights * torch.nansum(targets * inputs, dim=-1), dim=-1)/\
+                          torch.nansum(weights * torch.nansum(targets + inputs, dim=-1), dim=-1))
 
-        # read the input EM image and its target label
-        try:
-            s = re.findall(r"s\d\d\d", self.image_paths[i])[0][1:]
-            if int(s) <= 50: extra= ".png.png"
-            else: extra = ".png"
-            image = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], os.path.split(self.image_paths[i])[-1].replace("_before", "").replace("_after", "")+extra)), cv2.COLOR_BGR2GRAY) # each pixel is 
-            img_files.remove(os.path.split(self.image_paths[i])[-1].replace("_before", "").replace("_after", "")+extra)
-        except Exception as e:
-            print(self.image_paths[i])
-            raise Exception(e)
-            
-        mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], os.path.split(self.mask_paths[i])[-1].replace("_before", "").replace("_after", "")+extra)), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
-        mask_files.remove(os.path.split(self.mask_paths[i])[-1].replace("_before", "").replace("_after", "")+extra)
-        mask_files.remove(os.path.split(self.mask_paths[i])[-1].replace("_before", "").replace("_after", "")+"og.png")
+class MultiGenDLoss(nn.Module):
+    def __init__(self):
+        super(MultiGenDLoss, self).__init__()
+    
+    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], classes=3, **kwargs):
+        inputs = nn.Sigmoid()(inputs)
+        targets, inputs = targets.view(targets.shape[0], targets.shape[1], -1), inputs.view(inputs.shape[0], targets.shape[1], -1)
 
-        #read the previous/next section's prediction and EM
-        pred_image = cv2.cvtColor(cv2.imread(os.path.join(self.image_paths[i], img_files[0])), cv2.COLOR_BGR2GRAY)
-        pred_mask = cv2.cvtColor(cv2.imread(os.path.join(self.mask_paths[i], mask_files[0])), cv2.COLOR_BGR2GRAY)
+        weights = 1 / (torch.sum(targets, dim=-1).pow(2)+1e-6)
+        # print(weights.shape, torch.nansum(targets * inputs, dim=-1).shape)
+        return torch.nanmean(1 - 2 * torch.nansum(weights * torch.nansum(targets * inputs, dim=-1))/\
+                          torch.nansum(weights * torch.nansum(targets + inputs, dim=-1)))
 
-        mask[mask == 0] = 0
-        mask[mask == 255] = 1
-        pred_mask[pred_mask == 0] = 0
-        pred_mask[pred_mask == 255] = 1
-        # apply augmentations
-        # if random.random() >= 0.5:
-        #     # image, mask = self.augmentation(image, mask)
-        #     # image = v2.RandomAutocontrast()(image)
-        #     augmentation = v2.Compose([
-        #         v2.RandomHorizontalFlip(p=0.5),
-        #         v2.RandomVerticalFlip(p=0.5),
-        #         v2.RandomApply([v2.RandomRotation(degrees=(0, 180))], p=0.5),
-        #         v2.ColorJitter(contrast=(0, 0.5))
-        #     ])
-        #     image, mask, pred_image, pred_mask = augmentation(image, mask, pred_image, pred_mask)
-        
-        # apply preprocessing
-        _transform = []
-        _transform.append(transforms.ToTensor())
-
-        mask = torch.from_numpy(mask)
-        ont_hot_mask = mask
-        
-
-        _transform_img = _transform.copy()
-        image = transforms.Compose(_transform_img)(image)
-        pred_mask = torch.from_numpy(pred_mask)
-        pred_image = transforms.Compose(_transform_img)(pred_image)
-        
-        # print(torch.unique(image), torch.unique(pred_image), torch.unique(mask).to(torch.float32), torch.unique(pred_mask))
-        return image, pred_image, pred_mask.to(torch.float32).unsqueeze(0), mask.to(torch.float32).unsqueeze(0)
-        
-    def __len__(self):
-        # return length of 
-        return len(self.image_paths)
 
 class DoubleConv(nn.Module):
     """(Conv2d -> BN -> ReLU) * 2"""
@@ -944,211 +581,6 @@ class ExtendUNet(nn.Module):
         x = self.up_conv1(x, skip1_out+skip1_out_pimg+skip1_out_pmask) # x: (16, 64, 512, 512)
         x = self.conv_last(x) # x: (16, 1, 512, 512)
         return x
-
-    
-class FocalLoss(nn.Module):
-    def __init__(self, alpha, gamma=2, device=torch.device("cpu")):
-        super(FocalLoss, self).__init__()
-        
-        self.gamma = gamma
-        self.device = device
-        self.alpha = alpha.to(device)
-    
-    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], loss_fn = F.binary_cross_entropy_with_logits):
-        bce_loss = loss_fn(inputs, targets, reduction="none") if loss_fn is F.binary_cross_entropy_with_logits else loss_fn(inputs, targets, reduction="none", weight=self.alpha)
-        pt = torch.exp(-bce_loss)
-        targets = targets.to(torch.int64)
-        loss = (1 if loss_fn is not F.binary_cross_entropy_with_logits else  self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape)) * (1-pt) ** self.gamma * bce_loss 
-        if mito_mask != []:
-            #first modify loss_mask, neuron_mask is always on.
-            loss_mask = loss_mask | mito_mask
-            # factor = 1
-            # loss = loss * (1 + (mito_mask * factor))#weight this a bit more. 
-        if loss_mask != []: 
-            #better way? TODO: get rid of this if statement
-            if len(loss.shape) > len(loss_mask.shape): loss = loss * loss_mask.unsqueeze(-1)
-            else: loss = loss * loss_mask # remove everything that is a neuron body, except ofc if the mito_mask was on. 
-
-        return loss.mean() 
-
-class DiceLoss(nn.Module):
-    def __init__(self, eps=1e-6):
-        super(DiceLoss, self).__init__()
-        self.eps = eps
-    
-    def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
-        #get the probabilities:
-        probs = nn.Sigmoid()(inputs)
-        n1 = probs * targets
-        inv_targets = 1 - targets
-
-        d = probs + targets
-
-        if mito_mask != []:
-            loss_mask = loss_mask | mito_mask 
-        
-        if loss_mask != []:
-            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
-            # loss_mask = loss_mask.view(loss_mask.shape[0], -1)
-            inv_targets[loss_mask] = 0
-            d *= (loss_mask == 0)
-            d += (loss_mask *2) # eqv to d[loss_mask]=2
-
-        n2 = (1-probs) * inv_targets
-    
-        # no need to use masks for balancing, coz of the loss fn here
-
-        n1 = n1.view(n1.shape[0], -1)
-        n2 = n2.view(n2.shape[0], -1)
-        d =  d.view(d.shape[0], -1)
-
-        return torch.mean(2 - (torch.sum(n1, dim=-1) + self.eps)/(torch.sum(d, dim=-1) + self.eps)
-                           - (torch.sum(n2, dim=-1) + self.eps)/(torch.sum(2-d, dim=-1) + self.eps))
-
-class TverskyFocal(nn.Module):
-    def __init__(self, eps=1e-6):
-        super(TverskyFocal, self).__init__()
-        self.eps = eps
-    
-    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], recall=0.7, precision=0.3):
-        #get the probabilities:
-        probs = nn.Sigmoid()(inputs)
-        n1 = probs * targets
-        inv_targets = 1 - targets
-
-        d = probs + targets
-
-        if mito_mask != []:
-            loss_mask = loss_mask | mito_mask 
-        
-        if loss_mask != []:
-            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
-            # loss_mask = loss_mask.view(loss_mask.shape[0], -1)
-            inv_targets[loss_mask] = 0
-            d *= (loss_mask == 0)
-            d += (loss_mask *2) # eqv to d[loss_mask]=2
-
-        n2 = (1-probs) * inv_targets
-
-        f1 = probs * inv_targets
-        f2 = (1-probs) * targets
-    
-        # no need to use masks for balancing, coz of the loss fn here
-
-        n1 = n1.view(n1.shape[0], -1)
-        n2 = n2.view(n2.shape[0], -1)
-        d =  d.view(d.shape[0], -1)
-
-        f1 = torch.sum(f1.view(n1.shape[0], -1))
-        f2 = torch.sum(f2.view(n1.shape[0], -1))
-
-        return torch.mean(2 - (torch.sum(n1, dim=-1) + self.eps)/(torch.sum(n1, dim=-1) + recall*f2 + precision*f1  + self.eps)
-                           - (torch.sum(n2, dim=-1) + self.eps)/(torch.sum(n2, dim=-1) + precision*f2 + recall*f1 + self.eps))
-
-class SSLoss(nn.Module):
-    def __init__(self, eps=1e-6, lamda=0.05):
-        super(SSLoss, self).__init__()
-        self.eps = eps
-        self.lamda = 0.05
-
-    def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
-        inputs = nn.Sigmoid()(inputs)
-        targets, inputs = targets.view(targets.shape[0], -1), inputs.view(inputs.shape[0], -1)
-        inv_targets = 1-targets
-        if mito_mask != []:
-            loss_mask = loss_mask | mito_mask 
-        
-        if loss_mask != []:
-            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
-            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
-            inv_targets[loss_mask] = 0
-
-        return torch.mean(self.lmda * torch.sum(torch.pow((targets - inputs), 2) * targets, dim=-1)/(torch.sum(targets, dim=-1) + self.eps) +
-                           (1-self.lamda) * torch.sum(torch.pow((targets - inputs), 2) * inv_targets, dim=-1)/ (torch.sum(inv_targets, dim=-1) + self.eps))
-
-class SpecialLoss(nn.Module):
-    def __init__(self, bg_imp=2e-2):
-        super(SpecialLoss, self).__init__()
-        self.bg_imp = bg_imp
-    
-    def forward(self, predictions, targets, neuron_mask=[], mito_mask=[]):
-        target_centers, targets, pad_mask = targets
-
-        pad_tensors = torch.zeros((target_centers.shape[-2:])).to(dtype=torch.bool).to(pad_mask.device)
-        pad_tensors[0, 0] = 1 # simply 
-        target_centers[pad_mask] = pad_tensors # for now
-
-        rows, cols = np.indices(target_centers.shape[-2:])
-        rows, cols = torch.from_numpy(rows).to(predictions.device), torch.from_numpy(cols).to(predictions.device)
-        #extend 
-        rows, cols = rows.expand(predictions.size(0), targets.size(1), -1, -1), cols.expand(predictions.size(0),targets.size(1), -1, -1)
-        center_rows, center_cols = (rows * target_centers).sum(dim = -1, keepdim=True).sum(dim=-1, keepdim=True), (cols * target_centers).sum(dim = -1, keepdim=True).sum(dim=-1, keepdim=True) 
-        
-        squared_dist = (rows - center_rows) ** 2 + (cols - center_cols) ** 2
-        pixel_importance = (targets) * 1/((squared_dist)+1e-6)
-        pixel_importance[pad_mask] = 0 # reset everything that was purely pad
-
-        pixel_importance = pixel_importance.sum(dim=1)
-        importance_coeff = (targets.sum(dim=1) == 0) * self.bg_imp
-        pixel_importance += importance_coeff
-
-        assert torch.count_nonzero(pixel_importance <0 ) == 0
-
-        bce_loss = F.binary_cross_entropy_with_logits(predictions, targets.sum(dim=1).to(dtype=torch.float32), reduction="none")
-        bce_loss *= pixel_importance
-
-        if mito_mask != []:
-            loss_mask = loss_mask | mito_mask 
-        if neuron_mask != []:
-            if len(targets.shape) > len(neuron_mask.shape): neuron_mask.unsqueeze(-1)
-            # neuron_mask = neuron_mask.view(neuron_mask.shape[0], -1)
-            bce_loss *= neuron_mask
-
-        return torch.mean(bce_loss)
-        
-
-
-class GenDLoss(nn.Module):
-    def __init__(self):
-        super(GenDLoss, self).__init__()
-    
-    def forward(self, inputs, targets, loss_mask=[], mito_mask=[]):
-        inputs = nn.Sigmoid()(inputs)
-        targets, inputs = targets.view(targets.shape[0], -1), inputs.view(inputs.shape[0], -1)
-
-        inputs = torch.stack([inputs, 1-inputs], dim=-1)
-        targets = torch.stack([targets, 1-targets], dim=-1)
-
-        if mito_mask != []:
-            loss_mask = loss_mask | mito_mask 
-        
-        if loss_mask != []:
-            if len(targets.shape) > len(loss_mask.shape): loss_mask.unsqueeze(-1)
-            loss_mask = loss_mask.view(loss_mask.shape[0], -1)
-            targets *= loss_mask.unsqueeze(-1)
-            inputs *= loss_mask.unsqueeze(-1)#0 them out in both masks
-
-        weights = 1 / (torch.sum(torch.permute(targets, (0, 2, 1)), dim=-1).pow(2)+1e-6)
-        targets, inputs = torch.permute(targets, (0, 2, 1)), torch.permute(inputs, (0, 2, 1))
-
-        # print(torch.nansum(weights * torch.nansum(targets * inputs, dim=-1), dim=-1))
-        # print(weights)
-
-        return torch.nanmean(1 - 2 * torch.nansum(weights * torch.nansum(targets * inputs, dim=-1), dim=-1)/\
-                          torch.nansum(weights * torch.nansum(targets + inputs, dim=-1), dim=-1))
-
-class MultiGenDLoss(nn.Module):
-    def __init__(self):
-        super(MultiGenDLoss, self).__init__()
-    
-    def forward(self, inputs, targets, loss_mask=[], mito_mask=[], classes=3, **kwargs):
-        inputs = nn.Sigmoid()(inputs)
-        targets, inputs = targets.view(targets.shape[0], targets.shape[1], -1), inputs.view(inputs.shape[0], targets.shape[1], -1)
-
-        weights = 1 / (torch.sum(targets, dim=-1).pow(2)+1e-6)
-        # print(weights.shape, torch.nansum(targets * inputs, dim=-1).shape)
-        return torch.nanmean(1 - 2 * torch.nansum(weights * torch.nansum(targets * inputs, dim=-1))/\
-                          torch.nansum(weights * torch.nansum(targets + inputs, dim=-1)))
 
 class PyramidPooling(nn.Module):
 
