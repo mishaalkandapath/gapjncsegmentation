@@ -41,6 +41,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
+import time
 import cv2
 from utilities.utilities import get_colored_image, assemble_predictions, assemble_one_slice
 
@@ -99,6 +100,7 @@ img_ = os.listdir(pred_dir)
 # Just assemble the predictions
 if args.stitch2d:
     print("=================Just stitching preds=================")
+    start_time = time.time()
 
     filename_regex_prefix = args.filename_regex_prefix
     filename_regex_middle = args.filename_regex_middle
@@ -150,6 +152,7 @@ if args.stitch2d:
             y_acc_pred = np.concatenate(y_acc_pred, axis=0) # (entire height, tile width = 512)
             s_acc_pred += [y_acc_pred] # (num_x_tiles, entire height, tile width = 512)
             print(f"finished processing volume {suffix} (num invalid: {num_invalid}) | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}")
+            print(f"Time elapsed: {time.time()-start_time} seconds")
             new_pred = np.concatenate(s_acc_pred, axis=1) # (entire height, entire width)
     
     
