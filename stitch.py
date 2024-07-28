@@ -141,12 +141,12 @@ if args.stitch2d:
                         pred_slice = np.zeros((tile_height-(2*padding), tile_width-(2*padding),), dtype=np.uint8)
                     else:
                         pred_slice = np.zeros((tile_height, tile_width,), dtype=np.uint8)
-                print(start_x, end_x)
-                print("x", x, pred_slice.shape)
+                # print(start_x, end_x)
+                # print("x", x, pred_slice.shape)
                 pred_slice = np.array(pred_slice) # (tile depth, tile height, tile width)
                 y_acc_pred += [pred_slice] # y_acc_pred: (num_y_tiles, tile height, tile width)
                 slice_num+=1
-            print(np.array(y_acc_pred).shape)
+            # print(np.array(y_acc_pred).shape)
             y_acc_pred = np.concatenate(y_acc_pred, axis=0) # (entire height, tile width = 512)
             s_acc_pred += [y_acc_pred] # (num_x_tiles, entire height, tile width = 512)
             print(f"finished processing volume {suffix} (num invalid: {num_invalid}) | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}")
