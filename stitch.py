@@ -119,57 +119,42 @@ if args.stitch2d:
                 filename_regex = "z"+str(s)+"_y{}_x{}_"+str(s_num)+".png"
             else:
                 filename_regex = filename_regex_prefix + str(s) + "_y{}_x{}" + filename_regex_middle + str(s_num) + filename_regex_suffix
-        total_slices = (((end_y-start_y)//tile_height )* ((end_x-start_x)//tile_width))
-        slice_num = 0
-        print(total_slices, "total slices")
-        s_acc_pred = []
-        num_invalid = 0
-        step = stride if USE_OVERLAP else tile_height
-        for y in range(start_y, end_y, step):
-            y_acc_pred = []
-            for x in range(start_x, end_x, step):
-                suffix = filename_regex.format(x,y)
-                try:
-                    fp=os.path.join(pred_dir, suffix)
-                    pred_slice = cv2.imread(fp, cv2.IMREAD_GRAYSCALE)
-                    h,w= pred_slice.shape[0], pred_slice.shape[1]
-                    if USE_OVERLAP:
-                        pred_slice = pred_slice[padding:-padding, padding:-padding]
-                    # print(f"processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}", end="\r")
-                except:
-                    num_invalid += 1
-                    # print(f"invalid no volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}", end="\r")
-                    if USE_OVERLAP:
-                        pred_slice = np.zeros((tile_height-(2*padding), tile_width-(2*padding),), dtype=np.uint8)
-                    else:
-                        pred_slice = np.zeros((tile_height, tile_width,), dtype=np.uint8)
-                # print(start_x, end_x)
-                # print("x", x, pred_slice.shape)
-                pred_slice = np.array(pred_slice) # (tile depth, tile height, tile width)
-                y_acc_pred += [pred_slice] # y_acc_pred: (num_y_tiles, tile height, tile width)
-                slice_num+=1
-            # print(np.array(y_acc_pred).shape)
-            y_acc_pred = np.concatenate(y_acc_pred, axis=0) # (entire height, tile width = 512)
-            s_acc_pred += [y_acc_pred] # (num_x_tiles, entire height, tile width = 512)
-            print(f"finished processing volume {suffix} (num invalid: {num_invalid}) | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}")
-            print(f"Time elapsed: {time.time()-start_time} seconds")
-            new_pred = np.concatenate(s_acc_pred, axis=1) # (entire height, entire width)
+            total_slices = (((end_y-start_y)//tile_height )* ((end_x-start_x)//tile_width))
+            slice_num = 0
+            print(total_slices, "total slices")
+            s_acc_pred = []
+            num_invalid = 0
+            step = stride if USE_OVERLAP else tile_height
+            for y in range(start_y, end_y, step):
+                y_acc_pred = []
+                for x in range(start_x, end_x, step):
+                    suffix = filename_regex.format(x,y)
+                    try:
+                        fp=os.path.join(pred_dir, suffix)
+                        pred_slice = cv2.imread(fp, cv2.IMREAD_GRAYSCALE)
+                        h,w= pred_slice.shape[0], pred_slice.shape[1]
+                        if USE_OVERLAP:
+                            pred_slice = pred_slice[padding:-padding, padding:-padding]
+                        # print(f"processing volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}", end="\r")
+                    except:
+                        num_invalid += 1
+                        # print(f"invalid no volume {suffix} | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}", end="\r")
+                        if USE_OVERLAP:
+                            pred_slice = np.zeros((tile_height-(2*padding), tile_width-(2*padding),), dtype=np.uint8)
+                        else:
+                            pred_slice = np.zeros((tile_height, tile_width,), dtype=np.uint8)
+                    # print(start_x, end_x)
+                    # print("x", x, pred_slice.shape)
+                    pred_slice = np.array(pred_slice) # (tile depth, tile height, tile width)
+                    y_acc_pred += [pred_slice] # y_acc_pred: (num_y_tiles, tile height, tile width)
+                    slice_num+=1
+                # print(np.array(y_acc_pred).shape)
+                y_acc_pred = np.concatenate(y_acc_pred, axis=0) # (entire height, tile width = 512)
+                s_acc_pred += [y_acc_pred] # (num_x_tiles, entire height, tile width = 512)
+                print(f"finished processing volume {suffix} (num invalid: {num_invalid}) | Progress:{slice_num+1}/{total_slices} {((slice_num)/total_slices):.2f}")
+                print(f"Time elapsed: {time.time()-start_time} seconds")
+                new_pred = np.concatenate(s_acc_pred, axis=1) # (entire height, entire width)
     
-    
-    
-    # for s in range(start_s, end_s, 3):
-    #     num_slices = (s%3) if (s%3 > 0) else 3
-    #     for s_num in range(num_slices):
-    #         if args.filename_regex_prefix is None:
-    #             filename_regex = "z"+str(s)+"_y{}_x{}_"+str(s_num)+".png"
-    #         else:
-    #             filename_regex = args.filename_regex_prefix + str(s) + "_y{}_x{}" + args.filename_regex_middle + str(s_num) + args.filename_regex_suffix
-    #         print(f"filename_regex: {filename_regex}")
-    #         print(f"---------------------------Started slice {s+s_num}/{end_s} ---------------------------")
-    #         new_pred = assemble_one_slice(pred_dir, filename_regex=filename_regex, start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y)
-            
-            
-            
             # if use_lines, draw horizontal and vertical lines every 512 pixels for better visualization
             # Note: new_pred is of shape (height, width) and is in grayscale
             if use_lines:
@@ -186,6 +171,19 @@ if args.stitch2d:
         
             plt.imsave(os.path.join(save_dir, f"slice{s+s_num}.png"), new_pred, cmap="gray")
             print(f"---------------------------Finished slice {s+s_num}---------------------------")
+            
+            # for s in range(start_s, end_s, 3):
+            #     num_slices = (s%3) if (s%3 > 0) else 3
+            #     for s_num in range(num_slices):
+            #         if args.filename_regex_prefix is None:
+            #             filename_regex = "z"+str(s)+"_y{}_x{}_"+str(s_num)+".png"
+            #         else:
+            #             filename_regex = args.filename_regex_prefix + str(s) + "_y{}_x{}" + args.filename_regex_middle + str(s_num) + args.filename_regex_suffix
+            #         print(f"filename_regex: {filename_regex}")
+            #         print(f"---------------------------Started slice {s+s_num}/{end_s} ---------------------------")
+            #         new_pred = assemble_one_slice(pred_dir, filename_regex=filename_regex, start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y)
+                    
+                    
     exit(0)
 
 # Compare with gt and assemble tp, fp, tn, fn
