@@ -20,8 +20,8 @@ Function for assembling the prediction tiles into a single EM image.
 @param offset: offset for the overlap (default 256)
 @returns: None (saves the images in the save_dir)
 """
-def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_dir=None, img_templ="SEM_dauer_2_em_",seg_templ="sem_dauer_2_gj_gt_" , s_range=range(101, 109), x_range=range(0, 19), y_range=range(0, 17), offset=256, fn=None, fn_mask_dir=None, plot_legend=True):
-    
+def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, extend_dir=None, overlap=True, missing_dir=None, img_templ="SEM_dauer_2_em_",seg_templ="sem_dauer_2_gj_gt_" , s_range=range(101, 109), x_range=range(0, 19), y_range=range(0, 17), offset=256, fn=None, fn_mask_dir=None, plot_legend=True):
+    offset = int(offset)
     if fn: fn_stats = []
     for s in s_range:
         s_acc_img, s_acc_pred, s_acc_gt = [], [], []
@@ -30,7 +30,7 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
             y_acc_img, y_acc_pred, y_acc_gt = [], [], []
             if offset: y_acc_img1, y_acc_pred1, y_acc_gt1 = [], [], []
             for x in x_range:
-                suffix = r"s{}_Y{}_X{}".format(s, y, x)
+                suffix = r"s{}_Y{}_X{}".format('0'*(3-len(str(s)))+str(s), y, x)
 
                 if not os.path.isfile(os.path.join(img_dir, img_templ +suffix + ".png")): 
                     assert missing_dir is not None, f"Missing image {img_templ +suffix + '.png'}"
@@ -38,84 +38,107 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
                 im =cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_templ+ suffix + ".png")), cv2.COLOR_BGR2GRAY)
 
                 try:
-                    gt = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + ".png")), cv2.COLOR_BGR2GRAY) 
+                    if gt_dir: gt = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + ".png")), cv2.COLOR_BGR2GRAY) 
                     if True:
                         pred = np.load(os.path.join(pred_dir, img_templ + suffix + ".png.npy"))
-                        # print(len(np.unique(pred)))
-                        pred = 1/(1+np.exp(-pred/255)) >= 0.5
+                        #softmax on channel 1 of size 3
+                        pred = 1/(1+np.exp(-pred)) >= 0.5
                     else:
                         pred = cv2.cvtColor(cv2.imread(os.path.join(pred_dir, img_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
                         pred = pred == 255
-                    if gt.shape != pred.shape: pred = np.zeros_like(gt)  
-                except:
-                    gt = np.zeros_like(im)
+                    if extend_dir:
+                        ext_pred = cv2.imread(os.path.join(extend_dir, img_templ + suffix + ".png"))
+                        ext_pred = cv2.cvtColor(ext_pred, cv2.COLOR_BGR2GRAY)
+                        ext_pred[ext_pred != 0] = 255
+                        pred = pred | (ext_pred == 255)
+
+                    if gt_dir and gt.shape != pred.shape: pred = np.zeros_like(gt)  
+                except Exception as e:
+                    print(e)
+                    if gt_dir: gt = np.zeros_like(im)
                     pred = np.zeros_like(im)
 
                 #just append as is
                 y_acc_img.append(im)
                 y_acc_pred.append(pred)
-                y_acc_gt.append(gt)
+                if gt_dir: y_acc_gt.append(gt)
 
                 if offset:
                     try:
                         im1 = cv2.cvtColor(cv2.imread(os.path.join(img_dir, img_templ +suffix + "off.png")), cv2.COLOR_BGR2GRAY)
-                        gt1 = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
+                        if gt_dir: gt1 = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
                         if True:
                             pred1 = np.load(os.path.join(pred_dir, img_templ + suffix + "off.png.npy"))
-                            pred1 = 1/(1+np.exp(-pred1/255)) >= 0.5
+                            pred1 = 1/(1+np.exp(-pred1)) >= 0.5
+                            # pred1 = np.argmax(pred, axis=0)
+                            # pred1[pred1 != 1] = 0
                         else:
                              pred1 = cv2.cvtColor(cv2.imread(os.path.join(pred_dir, img_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
                              pred1 = pred1 == 255
-                        if im1 is None or gt1 is None or pred1 is None: raise Exception
-                        if gt1.shape != pred1.shape: pred1 = np.zeros_like(gt1)  
+                        if extend_dir:
+                            try:
+                                ext_pred1 = cv2.imread(os.path.join(extend_dir, img_templ + suffix + "off.png"))
+                                ext_pred1 = cv2.cvtColor(ext_pred1, cv2.COLOR_BGR2GRAY)
+                                ext_pred1[ext_pred1 != 0] = 255
+                                pred1 = pred1 | (ext_pred1 == 255)
+                            except:
+                                pass
+
+                        # if im1 is None or gt1 is None or pred1 is None: raise Exception
+                        if gt_dir and gt1.shape != pred1.shape: pred1 = np.zeros_like(gt1)  
                         y_acc_img1.append(im1)
                         y_acc_pred1.append(pred1)
-                        y_acc_gt1.append(gt1)
+                        if gt_dir: y_acc_gt1.append(gt1)
                     except Exception as e:
                         print(e)
-                        # gt1 = np.zeros_like(im1)
-                        # pred1 = np.zeros_like(im1)
-                        continue
+                        gt1 = np.zeros_like(im1)
+                        pred1 = np.zeros_like(im1)
+                        # continue
 
             s_acc_img.append(np.concatenate(y_acc_img, axis=1))
             s_acc_pred.append(np.concatenate(y_acc_pred, axis=1))
-            s_acc_gt.append(np.concatenate(y_acc_gt, axis=1))
+            if gt_dir: s_acc_gt.append(np.concatenate(y_acc_gt, axis=1))
             if offset:
                 try:
                     s_acc_img1.append(np.concatenate(y_acc_img1, axis=1))
                     s_acc_pred1.append(np.concatenate(y_acc_pred1, axis=1))
-                    s_acc_gt1.append(np.concatenate(y_acc_gt1, axis=1))
+                    if gt_dir: s_acc_gt1.append(np.concatenate(y_acc_gt1, axis=1))
                 except Exception as e:
                     print(e)
                     continue
 
         new_img = np.concatenate(s_acc_img, axis=0)
         new_pred = np.concatenate(s_acc_pred, axis=0)
-        new_gt = np.concatenate(s_acc_gt, axis=0)
+        if gt_dir: new_gt = np.concatenate(s_acc_gt, axis=0)
 
         if offset:
             new_img1 = np.concatenate(s_acc_img1, axis=0)
             new_pred1 = np.concatenate(s_acc_pred1, axis=0)
-            new_gt1 = np.concatenate(s_acc_gt1, axis=0)
+            if gt_dir: new_gt1 = np.concatenate(s_acc_gt1, axis=0)
 
         #calculate and color statsitic
-        new_gt[(new_gt == 2) | (new_gt == 15)] = 0
-        new_gt_conf = new_gt.copy()
-        new_gt[new_gt != 0] = 1
+        if gt_dir:
+            new_gt[(new_gt == 2) | (new_gt == 15)] = 0
+            new_gt_conf = new_gt.copy()
+            new_gt[new_gt != 0] = 1
 
-        if offset:
+        if offset and gt_dir:
             new_gt1[(new_gt1 == 2) | (new_gt1 == 15)] = 0
             new_gt1[new_gt1 != 0] = 1
         
         new_pred[new_pred !=0 ] = 1
         if offset: new_pred1[new_pred1 !=0 ] = 1
         if offset:
-            new_gt[offset:-offset, offset:-offset] = new_gt[offset:-offset, offset:-offset] | new_gt1
-            new_pred[offset:-offset, offset:-offset] = new_pred[offset:-offset, offset:-offset] | new_pred1
+            if gt_dir: new_gt[offset:-offset, offset:-offset] = new_gt[offset:-offset, offset:-offset] | new_gt1
+            try:
+                new_pred[offset:-offset, offset:-offset] = new_pred[offset:-offset, offset:-offset] | new_pred1
+            except:
+                print(new_pred.shape, new_pred1.shape)
+                sys.exit()
 
         new_img1 = np.repeat(new_img[:, :, np.newaxis], 3, axis=-1)
-        new_gt1 = np.repeat(new_gt[:, :, np.newaxis], 3, axis=-1)
-        new_pred1 = np.repeat(new_pred[:, :, np.newaxis], 3, axis=-1)            
+        if gt_dir: new_gt1 = np.repeat(new_gt[:, :, np.newaxis], 3, axis=-1)
+        new_pred1 = np.repeat(new_pred[:, :, np.newaxis], 3, axis=-1).astype(np.uint8)            
 
         if not fn and plot_legend:
             # else: 
@@ -123,7 +146,6 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
             red = (0, 0, 255)
             green = (0, 255, 0)
             blue = (255, 0, 0)
-            print(np.unique(new_pred), np.unique(new_gt))
             for m in range(3):
                 new_pred1[(new_pred == 1) & (new_gt == 1)] = green
                 new_pred1[(new_pred == 1) & (new_gt == 0)] = red
@@ -176,13 +198,13 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, overlap=True, missing_
             assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_pred.png"), new_pred1)
             assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_gt.png"), new_gt1)
         elif not fn and not plot_legend:
-            new_gt1[new_gt == 1] = (255, 255, 255)
-            new_pred1[new_pred == 1] = (255, 255, 255)
+            if gt_dir: new_gt1[new_gt == 1] = (255, 255, 255)
+            new_pred1[new_pred == 1] = (255, 0, 0)
             if not os.path.isdir(save_dir):
                 os.mkdir(save_dir)
             assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_img.png"), new_img1)
             assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_pred.png"), new_pred1)
-            assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_gt.png"), new_gt1)
+            if gt_dir: assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_gt.png"), new_gt1)
         else: 
             mask = glob.glob(fn_mask_dir+f"*s{'0'*(3-len(str(s)))}{s}*")[0]
             mask = cv2.cvtColor(cv2.imread(mask), cv2.COLOR_BGR2GRAY)  
@@ -396,8 +418,8 @@ def entity_recall(gt_contour, pred):
 
 
 if __name__ == "__main__":
-    base = "/Volumes/Normal/gapjnc/resuklts/assembled_2d_resnet_run1/"
-    img = cv2.imread(base+"SEM_dauer_2_image_export_s101_Y16_X18_gt.png")
+    base = "/Volumes/Normal/gapjnc/resuklts/assembled_2d_ent_recall_test/"
+    # img = cv2.imread(base+"SEM_dauer_2_image_export_s101_Y16_X18_gt.png")
 
     files = glob.glob(base+"SEM_dauer_2_image_export_*pred.png")
     rec = []
@@ -405,7 +427,19 @@ if __name__ == "__main__":
         gt = cv2.imread(file.replace("pred", "gt"))
         _, gt_cont = center_img(gt)
         pred = cv2.cvtColor(cv2.imread(file), cv2.COLOR_BGR2GRAY)
+        pred[pred != 0] = 255
         recall = entity_recall(gt_cont, pred)
         print(recall)
         rec.append(recall)
     print(np.nanmean(rec))
+
+    #test overlay:
+    # img1 = "/Volumes/Normal/gapjnc/resuklts/assembled_finetuned_aug_2d_sem_dauer_1/SEM_dauer_2_image_export_s113_Y16_X18_pred.png"
+    # img2 = "/Volumes/Normal/gapjnc/resuklts/assembled_finetuned_aug_2d_sem_dauer_1/SEM_dauer_2_image_export_s113_Y16_X18_img.png"
+
+    # #overlap img1 on img2
+    # img1 = cv2.imread(img1)
+    # img2 = cv2.imread(img2)
+    # img1 = cv2.addWeighted(img2, 0.5, img1, 0.6, 0)
+    # cv2.imwrite("overlap1.png", img1)
+

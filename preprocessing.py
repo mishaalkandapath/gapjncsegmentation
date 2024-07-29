@@ -1,6 +1,6 @@
 import cv2, re, os, sys, shutil, numpy as np
 from tqdm import tqdm
-from postprocessing import center_img
+from postprocessing import center_img, move_generous
 
 
 """
@@ -17,7 +17,7 @@ def split_img(img, offset=256, tile_size=512, names=False):
     imgs = []
     names_list = []
     for i in range(img.shape[0]//tile_size+1):
-        for j in range(img.shape[1]//tile_size +1):
+        for j in range(img.shape[1]//tile_size+1):
             imgs.append(img[i*tile_size:(i+1)*tile_size, j*tile_size:(j+1)*tile_size])
             names_list.append("Y{}_X{}".format(i, j))
     return (imgs, names_list) if names else imgs 
@@ -164,9 +164,9 @@ def create_dataset_2d_from_full(imgs_dir, output_dir, seg_dir=None, img_size=512
                             assert cv2.imwrite(os.path.join(output_dir, f"{os.path.split(add_dir[k])[-1]}/{imgs[i].replace('.png', '_'+img_names[j] + ('' if not offset else 'off'))}.png"), add_data[k][j])
 
     for i in tqdm(range(len(imgs))):
-        img = cv2.imread(os.path.join(imgs_dir, imgs[i]))
+        img = cv2.imread(os.path.join(imgs_dir, imgs[i]), -1)
         if not test: 
-            gt = cv2.imread(os.path.join(seg_dir, image_to_seg_name_map(imgs[i])))
+            gt = cv2.imread(os.path.join(seg_dir, image_to_seg_name_map(imgs[i])), -1)
 
             #make changes in the gt
             for ig in seg_ignore:
@@ -329,13 +329,13 @@ def create_entity_sequence_dataset(imgs_dir, output_dir, seg_dir=None, img_size=
             cv2.imwrite(os.path.join(output_dir, f"gts_mod/{imgs[i]}"), new_gt_contours)
             cv2.imwrite(os.path.join(output_dir, f"gts_mod_centers/{imgs[i]}"), new_gt_centers)
 
-
+            prev_gt = new_gt_contours
         else:
             contours = np.unique(gt_contours)
             contours = contours[contours != 0]
             gj_set = set(contours)
             prev_gt = gt_contours
-            cv2.imwrite(os.path.join(output_dir, f"gts_mod/{imgs[i]}"), gt_contours)
+            cv2.imwrite(os.path.join(gt_contours, output_dir, f"gts_mod/{imgs[i]}"))
             cv2.imwrite(os.path.join(output_dir, f"gts_mod_centers/{imgs[i]}"), gt_centers)
     f = open("gj_set.txt", "w")
     f.write(str(gj_set))
@@ -372,3 +372,198 @@ def create_entity_sequence_dataset(imgs_dir, output_dir, seg_dir=None, img_size=
                     dat = cv2.imread(os.path.join(add_dir[j], add_dir_maps[j](imgs[i])))
                     split_dat = dat[row[0]-img_size//2:row[0]+img_size//2, col[0]-img_size//2:col[0]+img_size//2]
                     cv2.imwrite(os.path.join(output_dir, os.path.split(j)[-1], str(c), imgs[i]), split_dat)
+
+def create_unsupervised_dataset(images_dir, cell_id_dir, nr_mask_dir, img_template, id_template=None, nr_mask_template=None, out_dir="unsupervised_dataset", img_size=512):
+    os.makedirs(out_dir, exist_ok=True)
+    if id_template is None: id_template = img_template
+    if nr_mask_template is None: nr_mask_template = img_template
+
+    images = os.listdir(images_dir)
+
+    write_count = 0
+    skipped = 0
+    
+    for img in tqdm(images):
+        try:
+            s = re.findall("s\d\d\d", img)[0][1:]
+        except:
+            print(img)
+            continue
+        image = cv2.imread(os.path.join(images_dir, img), -1)
+        neurons = cv2.imread(os.path.join(cell_id_dir, img.replace(img_template, id_template)), -1)
+        nr_mask = cv2.imread(os.path.join(nr_mask_dir, img.replace(img_template, nr_mask_template)), -1)
+
+        nr_mask[nr_mask != 5497] = 0
+        nr_mask[nr_mask == 5497] = 1
+
+        neurons *= nr_mask
+
+        cell_ids = np.unique(neurons)
+
+        for cell_id in cell_ids:
+            if cell_id == 0: continue
+            i = 0
+            cell = neurons == cell_id
+            cell = cell.astype(np.uint8) * 255
+            contours, _ = cv2.findContours(cell, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+            M = cv2.moments(contours[i])
+            while M["m00"] == 0:
+                if len(contours) == i+1: break
+                M = cv2.moments(contours[i+1])
+                i += 1
+            if M["m00"] == 0: 
+                print(f"Skipping {img} for cell {cell_id}")
+                skipped += 1
+                continue
+
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+
+            cell_img = image[cY-img_size//2:cY+img_size//2, cX-img_size//2:cX+img_size//2]
+            
+            os.makedirs(os.path.join(out_dir, f"neuron_{cell_id}"), exist_ok=True)
+            assert not os.path.isfile(os.path.join(out_dir, f"neuron_{cell_id}", f"s{(3-len(str(s)))*str(0)+str(s)}.png")), f"""File already exists: {os.path.join(out_dir, f'neuron_{cell_id}', f"s{(3-len(str(s)))*'0'+str(s)}")}"""
+            cv2.imwrite(os.path.join(out_dir, f"neuron_{cell_id}", f"s{(3-len(str(s)))*'0'+str(s)}.png"), cell_img)
+            write_count += 1
+    print(f"Written {write_count} images to {out_dir}")
+
+def create_fn_dataset(img_dir, gt_dir, preds_dir , img_template, gt_template, preds_template, output_dir, npy=False):
+    imgs = os.listdir(img_dir)
+    os.makedirs(output_dir, exist_ok=True)
+
+    for img in imgs:
+        gt = cv2.imread(os.path.join(gt_dir, img.replace(img_template, gt_template)), cv2.COLOR_BGR2GRAY)
+        if not npy: pred = cv2.imread(os.path.join(preds_dir, img.replace(img_template, preds_template)), cv2.COLOR_BGR2GRAY)
+        else: 
+            pred = np.load(os.path.join(preds_dir, img.replace(img_template, preds_template) + ".npy"))
+            #sigmoid it
+            pred = 1/(1+np.exp(-pred)) >= 0.5
+
+        # in the gt, 0 and 1. 1 is gj. mark False Negatives as 2
+        gt[gt != 0] =1 
+        pred[pred != 0] = 1
+        gt[(gt == 1) & (pred == 0)] = 2
+
+        cv2.imwrite(os.path.join(output_dir, img), gt)
+
+if __name__ == "__main__":
+    # create_entity_sequence_dataset(imgs_dir="/Volumes/Normal/gapjnc/sections100_125/em/", seg_dir="/Volumes/Normal/gapjnc/sections100_125/gj_seg/", 
+    #                                output_dir="/Volumes/Normal/gapjnc/sections100_125/sequence_dataset/", img_size=512, image_to_seg_name_map=lambda x: x.replace('sem_dauer_2_em_', 'sem_dauer_2_gj_gt_'))
+    if False:
+        split = "train"
+        dirs = "/Volumes/Normal/gapjnc/final_jnc_only_split_extend/"
+        masks = sorted(os.listdir(os.path.join(dirs, split+"_gts/")))
+        imgs = sorted(os.listdir(os.path.join(dirs, split+"_imgs/")))
+        preds = sorted(os.listdir(os.path.join(dirs, split+"_preds/")))
+
+        os.makedirs("/Volumes/Normal/gapjnc/0_50_extend_train/",exist_ok=True)
+        os.makedirs(f"/Volumes/Normal/gapjnc/0_50_extend_train/{split}_imgs/",exist_ok=True)
+        os.makedirs(f"/Volumes/Normal/gapjnc/0_50_extend_train/{split}_gts/",exist_ok=True)
+
+        mask_pairs_before, mask_pairs_after = [], []
+        img_pairs_before, img_pairs_after = [], []
+
+        for i in tqdm(range(len(masks))):
+            s,x, y = re.findall("s\d\d\d", masks[i]), re.findall("Y\d+", masks[i]), re.findall("X\d+", masks[i])
+            before = int(s[0][1:]) - 1
+            after = int(s[0][1:]) + 1
+            # if before < 0 or after > 50: continue
+            before = "s"+("0" * (3-len(str(before)))) + str(before)
+            after = "s"+("0" * (3-len(str(after)))) + str(after)
+            before_mask = preds[i].replace(s[0], before)
+            after_mask = preds[i].replace(s[0], after)
+
+            before_gt = cv2.imread(os.path.join(dirs, f"{split}_gts", masks[i]))
+            if len(np.unique(before_gt)) == 1: continue # dont need this guy
+            #check if they exist
+            if before_mask.replace("SEM_dauer_2_image_export_", "sem2dauer_gj_2d_training.vsseg_export_") in masks:
+                mask_pairs_before.append((before_mask, masks[i]))
+                img_pairs_before.append((imgs[i].replace(s[0], before), imgs[i]))
+            if after_mask.replace("SEM_dauer_2_image_export_", "sem2dauer_gj_2d_training.vsseg_export_") in masks:
+                mask_pairs_after.append((after_mask, masks[i]))
+                img_pairs_after.append((imgs[i].replace(s[0], after), imgs[i]))
+            
+        def subhelper(mask_list, image_list, section="before"):
+            for i in tqdm(range(len(mask_list))):
+                base_name = mask_list[i][1]
+                if ".png.png" in base_name: off = -8
+                else: off = -4
+                target_name = mask_list[i][1].replace("sem2dauer_gj_2d_training.vsseg_export_", "SEM_dauer_2_image_export_")
+                os.makedirs(f"/Volumes/Normal/gapjnc/0_50_extend_train/{split}_gts/{target_name[:off]}_{section}",exist_ok=True)
+                os.makedirs(f"/Volumes/Normal/gapjnc/0_50_extend_train/{split}_imgs/{target_name[:off]}_{section}",exist_ok=True)
+                shutil.copy(os.path.join(dirs, f"{split}_preds", mask_list[i][0]), f"/Volumes/Normal/gapjnc/0_50_extend_train/{split}_gts/{target_name[:off]}_{section}/{mask_list[i][0]}")
+                shutil.copy(os.path.join(dirs, f"{split}_imgs", image_list[i][0]), f"/Volumes/Normal/gapjnc/0_50_extend_train/{split}_imgs/{target_name[:off]}_{section}/{image_list[i][0]}")
+                shutil.copy(os.path.join(dirs, f"{split}_imgs", image_list[i][1]), f"/Volumes/Normal/gapjnc/0_50_extend_train/{split}_imgs/{target_name[:off]}_{section}/{image_list[i][1]}")
+
+                # the new label shud only be the intersecting gap junctions
+                other = cv2.imread(os.path.join(dirs, f"{split}_preds", mask_list[i][0]))
+                labels = cv2.imread(os.path.join(dirs, f"{split}_gts", mask_list[i][1]))
+
+                labels[(labels == 2) | (labels == 15)] = 0
+                labels[(labels == 7) | (labels == 9) | (labels == 11)] = 255
+
+                #get the centers and contours of each one 
+                other_centers, other_contours = center_img(other)
+                labels_centers, labels_contours = center_img(labels)
+
+                new_labels = np.zeros_like(labels)
+                for c in range(len(other_centers)):
+
+                    present_mask = other_contours == c+1
+                    #roll it 
+                    present_mask = move_generous(present_mask, 0, 25)
+                    label_contours_temp = move_generous(labels_contours, 0, 25)
+                    present_contours = np.unique(label_contours_temp[present_mask])
+
+                    for c_ in present_contours:
+                        if c_ == 0: continue
+                        new_labels[labels_contours == c_] = 255
+
+                assert cv2.imwrite(f'/Volumes/Normal/gapjnc/0_50_extend_train/{split}_gts/{target_name[:off]}_{section}/{target_name}', new_labels)
+                # print(f"/Volumes/Normal/gapjnc/0_50_extend_train/{split}_gts/{target_name[:-8]}/{target_name[:-8]+'og.png'}")
+                assert cv2.imwrite(f"/Volumes/Normal/gapjnc/0_50_extend_train/{split}_gts/{target_name[:off]}_{section}/{target_name[:off]+'og.png'}", move_generous(cv2.cvtColor(labels, cv2.COLOR_BGR2GRAY), 0, 25) | move_generous(cv2.cvtColor(other, cv2.COLOR_BGR2GRAY), 0, 25))
+        subhelper(mask_pairs_after, img_pairs_after, "after")
+        subhelper(mask_pairs_before, img_pairs_before, "before")
+    
+    if False:
+        # time to balance
+        import random
+        split="train"
+        dirs = os.listdir(f'/Volumes/Normal/gapjnc/0_50_extend_train/{split}_gts/')
+        empty_gts = []
+        others = []
+        for d in tqdm(dirs):
+            if "DS" in d: continue
+            files = os.listdir(os.path.join(f'/Volumes/Normal/gapjnc/0_50_extend_train/{split}_gts/', d))
+            temp_d = d.replace("_after", "").replace("_before", "")
+            try:
+                files.remove(temp_d+".png.png")
+                right = temp_d+".png.png"
+            except:
+                files.remove(temp_d+".png")
+                right =temp_d+".png"
+            files.remove(temp_d+"og.png")
+            # assert len(files) == 1, files
+            # file = files[0]
+            pred = cv2.cvtColor(cv2.imread(os.path.join(f'/Volumes/Normal/gapjnc/0_50_extend_train/{split}_gts/{d}/', right)), cv2.COLOR_BGR2GRAY)
+            if len(np.unique(pred)) == 1: 
+                empty_gts.append(d)
+                continue
+            others.append(d)
+        total = int(len(others) * 10/8)
+        print(total)
+        others += random.sample(empty_gts, total - len(others))
+
+        os.makedirs(f"/Volumes/Normal/gapjnc/0_50_extend_train/train_imgs_balanced/")
+        os.makedirs(f"/Volumes/Normal/gapjnc/0_50_extend_train/train_gts_balanced/")
+        for f in others:
+            shutil.copytree(f"/Volumes/Normal/gapjnc/0_50_extend_train/train_imgs/{f}", f"/Volumes/Normal/gapjnc/0_50_extend_train/train_imgs_balanced/{f}")
+            shutil.copytree(f"/Volumes/Normal/gapjnc/0_50_extend_train/train_gts/{f}", f"/Volumes/Normal/gapjnc/0_50_extend_train/train_gts_balanced/{f}")
+
+    if True:
+        create_fn_dataset("/Volumes/Normal/gapjnc/final_jnc_only_split/valid_imgs", "/Volumes/Normal/gapjnc/final_jnc_only_split/valid_gts", "/Volumes/Normal/gapjnc/final_jnc_only_split/valid_preds", "SEM_dauer_2_image_export_", "sem2dauer_gj_2d_training.vsseg_export_", "SEM_dauer_2_image_export_", "/Volumes/Normal/gapjnc/final_jnc_only_split_rwt_valid/", npy=True)
+
+
+
+
+    

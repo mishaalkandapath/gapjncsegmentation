@@ -9,13 +9,20 @@ if __name__ == "__main__":
     parser.add_argument("--results", action="store_true", help="performance metrics")
 
     parser.add_argument("--imgs_dir", default=None, type=str, help="Full path to directory where images are stored")# -- Shared
-    parser.add_argument("--seg_dir", default=None, type=str, help="Full path to where segmentation masks are stored")# -- Shared
+    parser.add_argument("--seg_dir", default="", type=str, help="Full path to where segmentation masks are stored")# -- Shared
     parser.add_argument("--add_dir", action="append", type=str, help="Full path to any additional training data")# -- Shared
     parser.add_argument("--add_dir_templates", action="append", type=str, help="Naming template for additional directories. e.g --add_dir_templates neuro_1 mito_pred")# -- Shared
     parser.add_argument("--seg_template", default="sem_dauer_2_gj_gt_", type=str, help="Naming template for segmentation masks") # -- Shared
     parser.add_argument("--img_template", default="SEM_dauer_2_em_", type=str, help="Naming template for EM images") # -- Shared
+    parser.add_argument("--nr_mask_dir", default=None, type=str, help="Directory where relevancy area masks are stored")
+    parser.add_argument("--nr_mask_template", default="nr_mask", type=str, help="Naming template for the relevancy area masks")
 
     # -- Pre-processing Flags --
+    #extra unsupervised flags:
+    parser.add_argument("--unsupervised_dataset", action="store_true", help="Unsupervised dataset based on EM cell IDs")
+    parser.add_argument("--cell_id_template", default="cell_id", type=str, help="Naming template for the cell id masks")
+    parser.add_argument("--cell_id_dir", default=None, type=str, help="Directory where the cell id masks are stored")
+
     parser.add_argument("--seg_ignore", action="append", type=int, default=[2, 15], help="Any indices in mask that should be ignored when training. These will be set to 0, rest to 255")
     parser.add_argument("--depth_pattern", type=str, default="sXXX", help="numbers where the depth is located should be contiguously annotated with an X. e.g sXXX")
     parser.add_argument("--window", action="append", type=int, default=[0, 1, 0, 0], help="window size for 3d dataset creation. Specify as tuple of one 1. 0 for context, 1 for target image. e.g. --window 0 1 0 0")
@@ -37,9 +44,8 @@ if __name__ == "__main__":
     # -- Post-processing Flags --
 
     parser.add_argument("-missing_dir", default=None, type=str, help="Directory where missing image data is stored. Generally used when GJs or neuron-wise filtering of dataset was done")
-    parser.add_argument("--nr_mask_dir", default=None, type=str, help="Directory where relevancy area masks are stored")
-    parser.add_argument("--nr_mask_template", default="nr_mask", type=str, help="Naming template for the relevancy area masks")
     parser.add_argument("--preds_dir", default=None, type=str, help="Full path to the predictions directory")
+    parser.add_argument("--extend_dir", default=None, type=str, help="Full path to the directory where the extended predictions are stored")
 
     parser.add_argument("--Smin", type=int, default=101, help="starting S index for the image")
     parser.add_argument("--Smax", type=int, default=109, help="Ending S index for the image")
@@ -82,6 +88,11 @@ if __name__ == "__main__":
             raise ValueError("Please specify the training dataset directory")
         if (args.train_val_split and args.filter_neurons and args.add_dir_templates is None):
             raise ValueError(f"Please specify the template for the additional subdirs present in {args.train_dataset_dir}, atleast for the neuron masks")
+        if args.unsupervised_dataset:
+            assert args.cell_id_template is not None, "Please specify the cell id template"
+            assert args.nr_mask_dir is not None, "Please specify the directory where the relevancy masks are stored"
+            assert args.cell_id_dir is not None, "Please specify the directory where the cell id masks are stored"
+            assert args.nr_mask_template is not None, "Please specify the naming template for the relevancy masks"
         
         #report printing:
         print("Relevant Preprocessing Arguments:")
@@ -109,6 +120,15 @@ if __name__ == "__main__":
             print(f"Output Directory for Training and Validation Split: {args.output_dir}")
             print(f"Filter Neurons: {args.filter_neurons}")
             print(f"Filter GJs: {args.filter_gj}")
+        if args.unsupervised_dataset:
+            print(f"Image Directory: {args.imgs_dir}")
+            print(f"Image Template: {args.img_template}")
+            print(f"Cell ID Directory: {args.cell_id_dir}")
+            print(f"Cell ID Template: {args.cell_id_template}")
+            print(f"Relevancy Mask Directory: {args.nr_mask_dir}")
+            print(f"Relevancy Mask Template: {args.nr_mask_template}")
+            print(f"Output Directory for Unsupervised Dataset: {args.output_dir}")
+            print(f"Image Size for Unsupervised Dataset: {args.img_size}")
         print("NOTE: Unreported arguments were ignored.")
     
     if args.postprocessing:
@@ -161,6 +181,9 @@ if __name__ == "__main__":
     cont = input("Do you want to continue? (y/n): ")
     if cont.lower() != 'y':
         sys.exit(0)
+
+    if args.preprocessing and args.unsupervised_dataset:
+        create_unsupervised_dataset(args.imgs_dir, args.cell_id_dir, args.nr_mask_dir, args.img_template, args.cell_id_template, args.nr_mask_template, args.output_dir, args.img_size)
     
     if args.preprocessing and args.make_twoD:
         f = None if args.test else lambda x: x.replace(args.img_template, args.seg_template)
@@ -181,13 +204,13 @@ if __name__ == "__main__":
     
     if args.postprocessing:
         f = None if args.test else lambda x: x.replace(args.img_template, args.seg_template)
-        assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, overlap=args.create_overlap, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset, plot_legend=args.plot_legend)
+        assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, extend_dir=args.extend_dir,overlap=args.create_overlap, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset, plot_legend=args.plot_legend)
     
     if args.results and not args.no_assemble:
         recalls, precisions, precisions_gen, accs, accs_gen = [], [], [], [], []
 
 
-        stats = assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, overlap=True, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset, fn=assembled_stats, fn_mask_dir=args.nr_mask_dir)
+        stats = assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, extend_dir=args.extend_dir, overlap=True, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset, fn=assembled_stats, fn_mask_dir=args.nr_mask_dir)
         
         for s in stats:
             recalls.append(s[0])
