@@ -69,11 +69,15 @@ class CaImagesDataset(torch.utils.data.Dataset):
                 self.neuron_paths.append(item)
 
         else: self.neuron_paths = None
-
-        for f_dir in finetune_dirs:
-            self.mask_paths += [os.path.join(os.path.join(f_dir, "gts"), image_id) for image_id in sorted(os.listdir(os.path.join(f_dir, f"gts"))) if "DS" not in image_id]
-            self.image_paths += [os.path.join(os.path.join(f_dir, "imgs"), image_id) for image_id in self.mask_paths if "DS" not in image_id]
-        if mask_neurons: self.neuron_paths += [os.path.join(os.path.join(f_dir, "neurons"), image_id) for image_id in self.mask_paths if "DS" not in image_id]
+        if finetune_dirs:
+            for f_dir in finetune_dirs:
+                t = [os.path.join(os.path.join(f_dir, "gts"), image_id) for image_id in sorted(os.listdir(os.path.join(f_dir, f"gts"))) if "DS" not in image_id]
+                self.mask_paths += t
+                self.image_paths += [os.path.join(os.path.join(f_dir, "imgs"), os.path.split(image_id)[-1]) for image_id in t]
+        
+        if mask_neurons and finetune_dirs: 
+            for f_dir in finetune_dirs:
+                self.neuron_paths += [os.path.join(os.path.join(f_dir, "neurons"), image_id) for image_id in self.mask_paths if "DS" not in image_id]
 
         if mask_mito:
             self.mito_mask = [os.path.join(os.path.join(dataset_dir, f"{prefix}_mito"), neuron_id.replace("png", "tiff") if not "tiny" in dataset_dir else neuron_id) for neuron_id in sorted(os.listdir(images_dir))]
@@ -170,6 +174,8 @@ class CaImagesDataset(torch.utils.data.Dataset):
         if self.augmentation:
             image, mask = self.augmentation(image, mask)
             image = v2.RandomAutocontrast()(image)
+            image = v2.GaussianBlur(5)(image)
+
         
         # apply preprocessing
         _transform = []
@@ -459,7 +465,7 @@ class TestDataset(torch.utils.data.Dataset):
         self.image_paths = [os.path.join(dataset_dir, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
         self.mask_paths = [os.path.join(dataset_dir.replace("imgs", "gts"), image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
         if membrane:
-            self.membrane_paths = [os.path.join(dataset_dir, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
+            self.membrane_paths = [os.path.join(membrane, image_id) for image_id in sorted(os.listdir(dataset_dir)) if "DS" not in image_id]
         else: self.membrane_paths = None
         self.td = td
 
@@ -469,7 +475,7 @@ class TestDataset(torch.utils.data.Dataset):
             try:
                 image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
                 mask = np.zeros_like(image)#cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY)
-                if self.membrane_paths: memb = cv2.cvtColor(cv2.imread(self.membrane_paths[i]), cv2.COLOR_BGR2GRAY)
+                if self.membrane_paths: memb = cv2.imread(self.membrane_paths[i].replace("sem_dauer_2_em_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_"), -1) == 0
             except Exception as e:
                 print(self.image_paths[i])
                 raise Exception(self.image_paths[i])
@@ -511,7 +517,7 @@ class TestDataset(torch.utils.data.Dataset):
             mask = torch.zeros(image.shape[:-1]+(512,))
             if self.membrane_paths: memb = torch.zeros(memb.shape[:-2]+(512,512))
 
-        return image.unsqueeze(0), mask.unsqueeze(0), image.unsqueeze(0) if not self.membrane_paths else memb.unsqueeze(0), image.unsqueeze(0)
+        return image.unsqueeze(0), mask.unsqueeze(0), image.unsqueeze(0) if not self.membrane_paths else memb.unsqueeze(0).float(), image.unsqueeze(0)
     def __len__(self):
         # return length of 
         return len(self.image_paths)
@@ -541,11 +547,12 @@ class ExtendDataset(torch.utils.data.Dataset):
         images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
         masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
         
-        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if "DS" not in image_id and int(re.findall("s\d\d\d", image_id)[0][1:]) <= 50]
+        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(masks_dir)) if "DS" not in image_id]
 
         self.image_paths = [os.path.join(images_dir, os.path.split(image_id)[-1]) for image_id in self.mask_paths if "DS" not in image_id]
 
         self.image_dim = image_dim
+        self.split = split
 
     def __getitem__(self, i):
 
@@ -605,6 +612,104 @@ class ExtendDataset(torch.utils.data.Dataset):
         # print(torch.unique(image), torch.unique(pred_image), torch.unique(mask).to(torch.float32), torch.unique(pred_mask))
         if self.split == -1: return image, pred_image, pred_mask.to(torch.float32).unsqueeze(0), mask.to(torch.float32).unsqueeze(0)
         return image, pred_image, pred_mask.to(torch.float32).unsqueeze(0), mask.to(torch.float32).unsqueeze(0)
+        
+    def __len__(self):
+        # return length of 
+        return len(self.image_paths)
+
+class FinetuneFNDataset(CaImagesDataset):
+    def __init__(
+            self, 
+            dataset_dir, 
+            finetune_dirs=[],
+            augmentation=None, 
+            preprocessing=None,
+            image_dim = (512, 512),
+            mask_neurons=None,
+            mask_mito=None,
+            gen_gj_entities=False,
+            split=0):
+        
+        # super(FinetuneFNDataset, self).__init__(dataset_dir=dataset_dir, finetune_dirs=finetune_dirs, augmentation=augmentation, preprocessing=preprocessing, image_dim=image_dim, mask_neurons =mask_neurons, mask_mito = mask_mito, gen_gj_entities=gen_gj_entities, split=split)
+
+        # print(len(self.image_paths))
+        prefix = "train" if not split else "valid"
+        images_dir = os.path.join(dataset_dir, f"{prefix}_imgs")
+        masks_dir = os.path.join(dataset_dir, f"{prefix}_gts")
+        
+        self.mask_paths = [os.path.join(masks_dir, image_id) for image_id in sorted(os.listdir(os.path.join(dataset_dir, f"{prefix}_gts")))]
+        self.image_paths = [os.path.join(images_dir, os.path.split(image_id.replace("sem2dauer_gj_2d_training.vsseg_export_", "SEM_dauer_2_image_export_"))[-1]) for image_id in self.mask_paths ]
+        print(len(self.image_paths), images_dir, masks_dir)
+
+        if mask_neurons:
+            assert "SEM_dauer_2_image_export_" in os.listdir(images_dir)[0], "illegal naming, feds on the way"
+            self.neuron_paths = []
+            for neuron_id in self.image_paths:
+                neuron_id = os.path.split(neuron_id)[-1]
+                item = os.path.join(os.path.join(dataset_dir, f"{prefix}_neuro"), os.path.split(neuron_id.replace("SEM_dauer_2_image_export_", "20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_"))[-1].replace(".png.png", ".png"))
+                self.neuron_paths.append(item)
+
+        else: self.neuron_paths = None
+        if finetune_dirs:
+            for f_dir in finetune_dirs:
+                t = [os.path.join(os.path.join(f_dir, "gts"), image_id) for image_id in sorted(os.listdir(os.path.join(f_dir, f"gts"))) if "DS" not in image_id]
+                self.mask_paths += t
+                self.image_paths += [os.path.join(os.path.join(f_dir, "imgs"), os.path.split(image_id)[-1]) for image_id in t]
+        
+        if mask_neurons and finetune_dirs: 
+            for f_dir in finetune_dirs:
+                self.neuron_paths += [os.path.join(os.path.join(f_dir, "neurons"), image_id) for image_id in self.mask_paths if "DS" not in image_id]
+
+        if mask_mito:
+            self.mito_mask = [os.path.join(os.path.join(dataset_dir, f"{prefix}_mito"), neuron_id.replace("png", "tiff") if not "tiny" in dataset_dir else neuron_id) for neuron_id in sorted(os.listdir(images_dir))]
+            assert len(self.mito_mask) == len(self.image_paths), f"{len(self.mito_mask)} {len(self.image_paths)}"
+        else:
+            self.mito_mask=None
+            
+        self.augmentation = augmentation 
+        self.preprocessing = preprocessing
+        self.image_dim = image_dim
+        self.gen_gj_entities=gen_gj_entities
+    
+    def __getitem__(self, i):
+        # read images and masks # they have 3 values (BGR) --> read as 2 channel grayscale (H, W)
+        try:
+            image = cv2.cvtColor(cv2.imread(self.image_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 
+        except Exception as e:
+            print(self.image_paths[i])
+            raise Exception(self.image_paths[i])
+        mask = cv2.cvtColor(cv2.imread(self.mask_paths[i]), cv2.COLOR_BGR2GRAY) # each pixel is 0 or 255
+        if self.gen_gj_entities: centers, contours = self.centers_and_contours(cv2.imread(self.mask_paths[i]))
+
+        mask_ref = mask.copy()
+        # apply augmentations
+        if self.augmentation:
+            image, mask = self.augmentation(image, mask)
+            image = v2.RandomAutocontrast()(image)
+            image = v2.GaussianBlur(5)(image)
+
+        
+        # apply preprocessing
+        _transform = []
+        _transform.append(transforms.ToTensor())
+
+        # mask = transforms.Compose(_transform)(mask)
+        mask = torch.from_numpy(mask).to(torch.float32)
+        ont_hot_mask = mask
+        # ont_hot_mask = F.one_hot(mask.long(), num_classes=2).squeeze().permute(2, 0, 1).float()
+
+        _transform_img = _transform.copy()
+        # _transform_img.append(transforms.Normalize(mean=[0.5], std=[0.5]))
+        image = transforms.Compose(_transform_img)(image)
+
+        #get the coresponding neuron mask
+        if self.neuron_paths: neurons = cv2.cvtColor(cv2.imread(self.neuron_paths[i]), cv2.COLOR_BGR2GRAY)
+        if self.mito_mask: mitos = np.array(Image.open(self.mito_mask[i]))
+        
+        if not self.gen_gj_entities:
+            return image, ont_hot_mask.unsqueeze(0), torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
+        else:
+            return image, ont_hot_mask, centers, contours, torch.from_numpy(neurons[np.newaxis, :]) == 0 if self.neuron_paths else [], mitos if self.mito_mask else []
         
     def __len__(self):
         # return length of 
