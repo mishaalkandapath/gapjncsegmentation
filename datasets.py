@@ -58,7 +58,12 @@ class BalancedBatchSampler(BatchSampler):
     def __len__(self):
         return len(self.dataset) // self.batch_size
 
-def contrastive_collate():
+def contrastive_collate(batch):
+    imgs, labels = zip(*batch)
+
+    imgs = torch.stack(imgs, axis=0)
+    labels = torch.tensor(labels)
+
     un_labels, counts = torch.unique(labels, return_counts=True)
     max_count = torch.max(counts)
 
