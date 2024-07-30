@@ -42,7 +42,7 @@ DATASETS = {
     "new3d": r"/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split3d", 
     "test": r"/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split", 
     "extend": r"/home/mishaalk/scratch/gapjunc/train_datasets/0_50_extend_train",
-    "new_rwt" = r"/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split_rwt"
+    "new_rwt": r"/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split_rwt"
 }
                 
 def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False, chain_length=False, gen_gj_entities=False, finetune_dirs=[]):
@@ -82,7 +82,8 @@ def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False,
         train = DebugDataset(dataset_dir)
         valid = None
     else:
-        train = CaImagesDataset(
+        dset_cls = CaImagesDataset if "rwt" not in dataset_dir else FinetuneFNDataset
+        train = dset_cls(
             dataset_dir,
             finetune_dirs=finetune_dirs,
             preprocessing=None,
@@ -91,7 +92,7 @@ def make_dataset_new(dataset_dir, aug=False, neuron_mask=False, mito_mask=False,
             mask_mito = mito_mask,
             gen_gj_entities=gen_gj_entities
         )
-        valid = CaImagesDataset(
+        valid = dset_cls(
             dataset_dir,
             preprocessing=None,
             image_dim = (width, height), augmentation=augmentation if aug else None,
@@ -167,8 +168,8 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
             
             # log some metrics
             # print(torch.unique(torch.argmax(pred.squeeze(1), dim=1), return_counts=True))
-            wandb.log({"train_precision": precision_f(pred >= 0, labels)}) if not args.pred_mem else wandb.log({"train_precision": precision_f(torch.argmax(pred.squeeze(1), dim=1) == 1, labels.squeeze(1).argmax(dim=1) == 1)})
-            wandb.log({"train_recall": recall_f(pred >= 0, labels)}) if not args.pred_mem else wandb.log({"train_recall": recall_f(torch.argmax(pred.squeeze(1), dim=1) == 1, labels.squeeze(1).argmax(dim=1) == 1)})
+            wandb.log({"train_precision": precision_f(pred >= 0, labels != 0)}) if not args.pred_mem else wandb.log({"train_precision": precision_f(torch.argmax(pred.squeeze(1), dim=1) == 1, labels.squeeze(1).argmax(dim=1) != 0)})
+            wandb.log({"train_recall": recall_f(pred >= 0, labels != 0)}) if not args.pred_mem else wandb.log({"train_recall": recall_f(torch.argmax(pred.squeeze(1), dim=1) == 1, labels.squeeze(1).argmax(dim=1) != 0)})
 
             if args.mask_neurons and args.gendice: torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
             optimizer.step() # update model weights (values for kernels)
@@ -211,7 +212,7 @@ def train_loop(model, train_loader, criterion, optimizer, valid_loader=None, mem
                 if args.focalweight == 0:
                     valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] and not mem_feat else [], valid_mito_mask if valid_mito_mask !=[] else [], model.s1, model.s2, loss_fn=loss_f_)
                 else:   
-                    valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1) if not gen_gj_entities else (valid_label_centers, valid_label_contours, valid_pad_mask), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] and not mem_feat else [], valid_mito_mask if valid_mito_mask !=[] else [], loss_fn=loss_f_)
+                    valid_loss = criterion(valid_pred.squeeze(1), valid_labels.squeeze(1) if not gen_gj_entities else (valid_label_centers, valid_label_contours, valid_pad_mask), valid_neuron_mask.squeeze(1) if valid_neuron_mask != [] and not mem_feat else [], valid_mito_mask if valid_mito_mask !=[] else [], loss_fn=loss_f_,fn_reweight=fn_rwt )
                 
                 #--ADD FOR CEDAR IF WANT --
                 # mask_img = wandb.Image(valid_inputs[0].squeeze(0).cpu().numpy()[0] if args.td else valid_inputs[0].squeeze(0).cpu().numpy(), 
@@ -763,9 +764,9 @@ if __name__ == "__main__":
     else:
         #--- Personal debug area ---
 
-        model_folder += "feat_mem_unet"#"2d_gd_mem_run1" IS THE BEST HERE OKAY??
-        sample_preds_folder = sample_preds_folder+"/feat_mem_unet_100_120_e83/"
-        model = joblib.load(os.path.join(model_folder, "model5_epoch83.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
+        model_folder += "fn_rwt_model"#"2d_gd_mem_run1" IS THE BEST HERE OKAY??
+        sample_preds_folder = sample_preds_folder+"/fn_rwt_model_100_120/"
+        model = joblib.load(os.path.join(model_folder, "model5_epoch0.pk1")) #3d gendice epoch 95, focal epoch 108, 2d mask 115, df_0.2 R1 73, dyna R1 82
         # for flat dyna we have 125, 2wt we have 142, 2d_gd_mem_run2 best was 36, 2d_membrane_aug_low is 83, 2d_membrane_noaug is 140
         #resnet w memebrane 67 or 84, 
         #resnet 3d 131 or 130
@@ -773,15 +774,15 @@ if __name__ == "__main__":
         model = model.to("cuda")
         model.eval()
 
-        # dataset_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split/"
+        # dataset_dir = "/home/mishaalk/scratch/gapjunc/train_datasets/final_jnc_only_split/valid_imgs"
         # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/3d_test_new/imgs/"
         # dataset_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/full_front_split/imgs/"
         dataset_dir="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/imgs"
-        mem_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/imgs"
+        # mem_dir = "/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/imgs"
         # dataset_dir="/home/mishaalk/scratch/gapjunc/test_datasets/dauer1_test/imgs"
 
         # dataset = CaImagesDataset(dataset_dir, preprocessing=None, augmentation=None, image_dim=(512, 512), split=1)
-        dataset = TestDataset(dataset_dir, td=False, membrane=mem_dir)#, membrane="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/")
+        dataset = TestDataset(dataset_dir, td=False, membrane=False)#, membrane="/home/mishaalk/scratch/gapjunc/test_datasets/sec100_125_split/neurons/")
         imgs_files, gt_files = [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i], [i for i in sorted(os.listdir(dataset_dir)) if "DS" not in i]
         def collate_fn(batch):
             return (
@@ -809,7 +810,7 @@ if __name__ == "__main__":
                 #infer:
                 x_tensor = image.to("cuda")
                 memb = membrane.to("cuda")
-                pred_mask = model(x_tensor, memb) # [1, 2, 512, 512]
+                pred_mask = model(x_tensor) # [1, 2, 512, 512]
                 # print(pred_mask.shape)
                 # pred_mask_binary = pred_mask.squeeze(0).detach()
                 pred_mask_binary = pred_mask

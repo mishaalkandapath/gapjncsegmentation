@@ -38,11 +38,15 @@ class FocalLoss(nn.Module):
         self.alpha = alpha.to(device)
     
     def forward(self, inputs, targets, loss_mask=[], mito_mask=[], loss_fn = F.binary_cross_entropy_with_logits, fn_reweight=False):
+        if fn_reweight: 
+            fn_wt = (targets > 1) + 1 
+        
+        targets = targets != 0
+        targets = targets.to(torch.float32)
         bce_loss = loss_fn(inputs, targets, reduction="none") if loss_fn is F.binary_cross_entropy_with_logits else loss_fn(inputs, targets, reduction="none", weight=self.alpha)
         pt = torch.exp(-bce_loss)
 
-        if fn_reweight: fn_wt = (targets > 1) + 1 
-        targets = targets != 0
+        
         targets = targets.to(torch.int64)
         loss = (1 if loss_fn is not F.binary_cross_entropy_with_logits else  self.alpha[targets.view(targets.shape[0], -1)].reshape(targets.shape)) * (1-pt) ** self.gamma * bce_loss 
         if fn_reweight:
@@ -57,7 +61,6 @@ class FocalLoss(nn.Module):
             #better way? TODO: get rid of this if statement
             if len(loss.shape) > len(loss_mask.shape): loss = loss * loss_mask.unsqueeze(-1)
             else: loss = loss * loss_mask # remove everything that is a neuron body, except ofc if the mito_mask was on. 
-
         return loss.mean() 
 
 class DiceLoss(nn.Module):
