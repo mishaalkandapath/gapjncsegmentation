@@ -1,0 +1,17 @@
+The following modules were not unloaded:
+  (Use "module --force purge" to unload all):
+
+  1) CCconfig        6)  ucx/1.14.1         11) flexiblas/3.3.1
+  2) gentoo/2023     7)  libfabric/1.18.0   12) blis/0.9.0
+  3) gcccore/.12.3   8)  pmix/4.2.4         13) StdEnv/2023
+  4) gcc/12.3        9)  ucc/1.2.0
+  5) hwloc/2.9.1     10) openmpi/4.1.5
+W&B offline. Running your script from this directory will only write metadata locally. Use wandb disabled to completely turn off W&B.
+ARGS:  ['unet.py', '--dataset', 'new', '--batch_size', '16', '--focal', '--mem_feat', '--aug', '--model_name', 'newgendice01234567891011121314/model5_epoch149.pk1']
+Data loaders created.
+Traceback (most recent call last):
+  File "/lustre06/project/6002514/mishaalk/gapjncsegmentation/unet.py", line 342, in <module>
+    else: model = joblib.load(os.path.join("/home/mishaalk/scratch/gapjunc/models/", args.model_name)) # load model
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/joblib/numpy_pickle.py", line 650, in load
+    with open(filename, 'rb') as f:
+FileNotFoundError: [Errno 2] No such file or directory: '/home/mishaalk/scratch/gapjunc/models/newgendice01234567891011121314/model5_epoch149.pk1'
