@@ -1,17 +1,8 @@
 import torch
 import torch.nn as nn
-def conv3x3(in_planes, out_planes, stride = 1, groups = 1, dilation = 1, three=False):
+def conv3x3(in_planes, out_planes, stride = 1, groups = 1, dilation = 1):
     """3x3 convolution with padding"""
     return nn.Conv2d(
-        in_planes,
-        out_planes,
-        kernel_size=3,
-        stride=stride,
-        padding=dilation,
-        groups=groups,
-        bias=False,
-        dilation=dilation,
-    ) if not three else nn.Conv3d(
         in_planes,
         out_planes,
         kernel_size=3,
@@ -23,9 +14,9 @@ def conv3x3(in_planes, out_planes, stride = 1, groups = 1, dilation = 1, three=F
     )
 
 
-def conv1x1(in_planes, out_planes, stride = 1, three=False):
+def conv1x1(in_planes, out_planes, stride = 1):
     """1x1 convolution"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False) if not three else nn.Conv3d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
 
 class BasicBlock(nn.Module):
@@ -40,8 +31,7 @@ class BasicBlock(nn.Module):
         groups = 1,
         base_width = 64,
         dilation = 1,
-        norm_layer= None,
-        three=False
+        norm_layer= None
     ):
         super().__init__()
         if norm_layer is None:
@@ -51,11 +41,10 @@ class BasicBlock(nn.Module):
         if dilation > 1:
             raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
-        self.three = three
-        self.conv1 = conv3x3(inplanes, planes, stride, three=self.three)
+        self.conv1 = conv3x3(inplanes, planes, stride)
         self.bn1 = norm_layer(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(planes, planes, three=self.three)
+        self.conv2 = conv3x3(planes, planes)
         self.bn2 = norm_layer(planes)
         self.downsample = downsample
         self.stride = stride
@@ -97,18 +86,16 @@ class Bottleneck(nn.Module):
         groups = 1,
         base_width = 64,
         dilation = 1,
-        norm_layer = None,
-        three = False
+        norm_layer = None
     ):
         super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         width = int(planes * (base_width / 64.0)) * groups
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
-        self.three = three
         self.conv1 = conv1x1(inplanes, width)
         self.bn1 = norm_layer(width)
-        self.conv2 = conv3x3(width, width, stride, groups, dilation, three=self.three)
+        self.conv2 = conv3x3(width, width, stride, groups, dilation)
         self.bn2 = norm_layer(width)
         self.bn3 = norm_layer(planes * self.expansion)
         self.relu = nn.ReLU(inplace=True)
@@ -148,7 +135,6 @@ class ResNet(nn.Module):
         width_per_group = 64,
         replace_stride_with_dilation = None,
         norm_layer= None,
-        three=False,
         membrane=False
     ):
         super().__init__()
@@ -157,8 +143,7 @@ class ResNet(nn.Module):
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
-
-        self.three = three
+        
         self.inplanes = 64
         self.dilation = 1
         if replace_stride_with_dilation is None:
@@ -172,24 +157,27 @@ class ResNet(nn.Module):
             )
         self.groups = groups
         self.base_width = width_per_group
-        self.conv1 = nn.Conv2d(layers[0], self.inplanes, kernel_size=7, stride=2, padding=3, bias=False) if not three else nn.Conv3d(layers[0], self.inplanes, kernel_size=7, stride=2, padding=3, bias=False) 
+        self.conv1 = nn.Conv2d(layers[0], self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1) if not three else nn.MaxPool3d(kernel_size=3, stride=2, padding=1) 
-        self.layer1 = self._make_layer(block, 64, layers[0], three=three)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
-        self.layer5 = self._make_layer(block, 1024, layers[4], stride=2, dilate=replace_stride_with_dilation[2])
+        self.layer3 = self._make_layer(block, 128, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
+        self.layer4 = self._make_layer(block, 256, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
+        self.layer5 = self._make_layer(block, 256, layers[4], stride=2, dilate=replace_stride_with_dilation[2])
+        self.layer6 = self._make_layer(block, 512, layers[4], stride=2, dilate=replace_stride_with_dilation[2])
+        self.layer7 = self._make_layer(block, 512, layers[4], stride=2, dilate=replace_stride_with_dilation[2])
+        self.layer8 = self._make_layer(block, 1024, layers[4], stride=2, dilate=replace_stride_with_dilation[2])
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.membrane = membrane
         if self.membrane:
-            self.mem_conv1 = nn.Conv2d(layers[0], self.inplanes, kernel_size=7, stride=2, padding=3, bias=False) if not three else nn.Conv3d(layers[0], self.inplanes, kernel_size=7, stride=2, padding=3, bias=False) 
+            self.mem_conv1 = nn.Conv2d(layers[0], self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
             self.mem_bn1 = norm_layer(self.inplanes)
             self.mem_relu = nn.ReLU(inplace=True)
-            self.mem_maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1) if not three else nn.MaxPool3d(kernel_size=3, stride=2, padding=1) 
+            self.mem_maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-            self.mem_layer1 = self._make_layer(block, 64, layers[0], three=three)
+            self.mem_layer1 = self._make_layer(block, 64, layers[0])
             self.mem_layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
 
         for m in self.modules():
@@ -215,10 +203,9 @@ class ResNet(nn.Module):
         planes,
         blocks,
         stride = 1,
-        dilate= False,
-        three=False
+        dilate= False
     ):
-        norm_layer = nn.BatchNorm2d if not three else nn.BatchNorm3d
+        norm_layer = nn.BatchNorm2d 
         downsample = None
         previous_dilation = self.dilation
         if dilate:
@@ -226,14 +213,14 @@ class ResNet(nn.Module):
             stride = 1
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                conv1x1(self.inplanes, planes * block.expansion, stride, three=three),
+                conv1x1(self.inplanes, planes * block.expansion, stride),
                 norm_layer(planes * block.expansion),
             )
 
         layers = []
         layers.append(
             block(
-                self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation, norm_layer, three=three
+                self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation, norm_layer
             )
         )
         self.inplanes = planes * block.expansion
@@ -252,9 +239,6 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x):
-        # See note [TorchScript super()]
-        if hasattr(self, "membrane") and self.membrane:
-            x, x_mem = x
 
         x = self.conv1(x)
         x = self.bn1(x)
@@ -262,29 +246,16 @@ class ResNet(nn.Module):
         x = self.maxpool(x)
 
         skip_out_1 = self.layer1(x)
-        if hasattr(self, "three") and self.three: 
-            skip_out_1 = skip_out_1.squeeze(2)
-        skip_out_2_o = self.layer2(skip_out_1)
-        
-        #add_membrane:
-        if hasattr(self, "membrane") and self.membrane:
-            x_mem = self.mem_conv1(x_mem)
-            x_mem = self.mem_bn1(x_mem)
-            x_mem = self.mem_relu(x_mem)
-            x_mem = self.mem_maxpool(x_mem)
-
-            skip_mem1 = self.mem_layer1(x_mem)
-            x_mem = self.mem_layer2(skip_mem1)
-
-            skip_out_2 = x_mem + skip_out_2_o
-            skip_out_1 = skip_out_1 + skip_mem1 # NEW ADDITION 
-        else: skip_out_2 = skip_out_2_o
+        skip_out_2 = self.layer2(skip_out_1)
 
         skip_out_3 = self.layer3(skip_out_2)
         skip_out_4 = self.layer4(skip_out_3)
         x = self.layer5(skip_out_4)
-        
-        return x, skip_out_1, skip_out_2, skip_out_3, skip_out_4
+        x = self.layer8(self.layer7(self.layer6(x)))
+
+        # print(x.shape, skip_out_1.shape, skip_out_2.shape, skip_out_3.shape, skip_out_4.shape)
+        x = x.squeeze(-1).squeeze(-1)
+        return x
 
     def forward(self, x):
         return self._forward_impl(x)
