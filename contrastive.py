@@ -222,6 +222,8 @@ class LightningContrastive(L.LightningModule):
 
         if self.trainer.current_epoch > 10: 
             sch.step()
+            
+        self.log("loss", loss, batch_size=embs.size(0), sync_dist=True, prog_bar=True)
 
     def configure_optimizers(self):
         # base = optim.SGD(self.model.parameters(), lr=0.075*math.sqrt(self.batch_size), weight_decay=1e-6)
@@ -255,14 +257,14 @@ def setup_contrastive_learning(dataset_dir, epochs=1000, temperature=0.5, n_clas
     if lightning:
         model = LightningContrastive(model, temperature, len(train_dataset)//batch_size + 1, dataset=train_dataset, n_classes=n_classes, n_samples=n_samples)
 
-        checkpoint_callback = ModelCheckpoint(dirpath=SAVE_DIR+"models/",
+        checkpoint_callback = ModelCheckpoint(dirpath=SAVE_DIR,
         filename='constrative_{epoch}',
         save_top_k=-1,
         every_n_epochs=20,
         save_on_train_epoch_end=True
         )
         # logger = WandbLogger(log_model="all", project="celegans", entity="mishaalkandapath")
-        trainer = L.Trainer(callbacks=[checkpoint_callback], max_epochs=epochs, log_every_n_steps=100, num_sanity_val_steps=0, default_root_dir=SAVE_DIR+"models/", use_distributed_sampler=False)
+        trainer = L.Trainer(callbacks=[checkpoint_callback], max_epochs=epochs, log_every_n_steps=100, num_sanity_val_steps=0, default_root_dir=SAVE_DIR, use_distributed_sampler=False)
         trainer.fit(model)
 
     else:
