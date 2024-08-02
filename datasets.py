@@ -8,6 +8,30 @@ import lightning as L
 
 import re, cv2, os, torch, numpy as np, random
 from tqdm import tqdm
+from utils import lprint
+
+def good_split(dataset, num_gpus):
+    ls = [[] for _ in range(num_gpus)]
+    ns = [[] for _ in range(num_gpus)]
+
+    merry_go_round = np.array([i for i in range(num_gpus)])
+
+    while dataset:
+        if len(dataset) < num_gpus:
+            merry_go_round = merry_go_round[:len(dataset)]
+            num_gpus = len(dataset)
+            
+        get_maxes = dataset[-num_gpus:]
+        for i in range(num_gpus):
+            ls[merry_go_round[i]].append(get_maxes[i][1])
+            ns[merry_go_round[i]].append(get_maxes[i][0])
+        merry_go_round = np.roll(merry_go_round, 1)
+        dataset = dataset[:-num_gpus]
+    
+    print("Label lengths: ", [len(l) for l in ls], "Num file lengths: ", [sum(n) for n in ns])
+
+    return ls
+        
 
 class UnsupervisedDataset(Dataset):
     def __init__(self, 
@@ -15,6 +39,14 @@ class UnsupervisedDataset(Dataset):
         self.images = [(os.path.join(dataset_dir, f, im), f) for f in os.listdir(dataset_dir) for im in os.listdir(os.path.join(dataset_dir, f)) if "DS" not in im]
         self.images, self.labels = zip(*self.images)
         self.num_classes = len(set(self.labels))
+
+        self.labels_to_files = {}
+        temp_labels = list(set(self.labels))
+        for i in range(len(temp_labels)):
+            num = len(os.listdir(os.path.join(dataset_dir, temp_labels[i])))
+            assert temp_labels[i] not in self.labels_to_files, f"{num}, {self.labels_to_files[temp_labels[i]]}"
+            self.labels_to_files[temp_labels[i]] = num
+        self.labels_to_files = sorted([(v, int(re.findall(r"neuron_\d+", k)[0][len("neuron_"):])) for k, v in self.labels_to_files.items()])
 
     def __getitem__(self, i):
         return torch.from_numpy(cv2.imread(self.images[i], -1)).to(torch.float32), int(re.findall("neuron_\d+", self.labels[i])[0][len("neuron_"):])
@@ -31,14 +63,15 @@ class BalancedBatchSampler(BatchSampler):
     """
     def __init__(self, allowed_indices, dataset, n_classes, n_samples):
         self.labels_list = dataset.labels
-        self.labels_list = [int(re.findall("neuron_\d+", label)[0][len("neuron_"):]) for label in self.labels_list if int(re.findall("neuron_\d+", label)[0][len("neuron_"):]) in allowed_indices]
+        self.labels_list = [int(re.findall("neuron_\d+", label)[0][len("neuron_"):]) for label in self.labels_list]
         
         self.labels = torch.LongTensor(self.labels_list)
-        self.labels_set = list(set(self.labels.numpy().tolist()))
+        self.labels_set = list(set([label for label in self.labels.numpy().tolist() if label in allowed_indices]))
         self.label_to_indices = {label: np.where(self.labels.numpy() == label)[0]
                                  for label in self.labels_set}
         for l in self.labels_set:
             np.random.shuffle(self.label_to_indices[l])
+
         self.used_label_indices_count = {label: 0 for label in self.labels_set}
         self.count = 0
         self.n_classes = n_classes
@@ -74,10 +107,12 @@ class DistributedBatchSampler(DistributedSampler):
         self.n_samples = n_samples//self.num_replicas
         self.n_classes = n_classes//self.num_replicas
         self.actual_dataset = actual_dataset
+
+        self.index_splits = None
     
     def __iter__(self):
-        # indices = list(super().__iter__
-        indices = self.dataset[self.rank::self.num_replicas]
+        if self.index_splits is None: self.index_splits = good_split(self.actual_dataset.labels_to_files, self.num_replicas)
+        indices = self.index_splits[self.rank]
         batch_sampler = BalancedBatchSampler(allowed_indices=indices, dataset=self.actual_dataset, n_classes=self.n_classes, n_samples=self.n_samples)    
         return iter(batch_sampler)
     
@@ -94,7 +129,7 @@ def contrastive_collate(batch):
     un_labels, counts = torch.unique(labels, return_counts=True)
     max_count = torch.max(counts)
 
-    print(max_count)
+    # lprint(max_count, len(un_labels), imgs.shape, labels.shape)
 
     imgs = imgs.unsqueeze(1) # channel = 1
 
@@ -123,8 +158,32 @@ def contrastive_collate(batch):
     imgs = torch.cat([torch.stack(new_imgs, axis=0), imgs], axis=0)
     labels = torch.cat([torch.tensor(new_labels), labels], axis=0)
 
+    n_classes_expected = int(os.environ.get("N_CLASSES_CUSTOM", 4))
+    n_samples_expected = int(os.environ.get("N_SAMPLES_CUSTOM", 100))
+    batch_expected = n_classes_expected * n_samples_expected
+    
+    while imgs.shape[0] < batch_expected:
+        new_imgs, new_labels = [], []
+        shuffled_labels = un_labels[torch.randperm(un_labels.shape[0])]
+        # augment and add one by one
+        for j in range(shuffled_labels.shape[0]):
+            #choose a random image from that class:
+            cls_imgs = imgs[labels == shuffled_labels[j], :]
+            random_choice = cls_imgs[random.randint(0, cls_imgs.shape[0]-1)]
+            new_imgs.append(aug(random_choice))
+            new_labels.append(shuffled_labels[j])
+        #stack 
+        imgs = torch.cat([imgs, torch.stack(new_imgs, axis=0)], axis=0)
+        labels = torch.cat([labels, torch.tensor(new_labels)], axis=0)
+    
+    if imgs.shape[0] > batch_expected:
+        imgs = imgs[:batch_expected, :]
+        labels = labels[:batch_expected]
+
     #shuffle em 
     idx = torch.randperm(imgs.size(0))
     imgs, labels = imgs[idx, :], labels[idx]
+
+    assert imgs.shape[0] == batch_expected, f"Expected {batch_expected} but got {imgs.shape[0]}"
 
     return imgs, labels

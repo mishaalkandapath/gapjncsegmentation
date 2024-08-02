@@ -19,6 +19,10 @@ import torch.optim as optim
 import torch
 import argparse
 
+from utils import lprint
+
+DEBUG = False
+
 # almost copy paste from https://github.com/noahgolmant/pytorch-lars/blob/master/lars.py
 class LARS(Optimizer):
     r"""Implements LARS (Layer-wise Adaptive Rate Scaling).
@@ -140,17 +144,17 @@ def contrastive_train(model, dataloader, T_max, epochs=1000, temperature=0.5,bat
             #compute similarity:
             sim_matrix = (embs @ embs.T)
             norms = torch.sqrt(torch.sum(embs**2)).unsqueeze(-1)
-            norm_matrix = norms @ norms.t
+            norm_matrix = norms @ norms.T
             sim_matrix = sim_matrix/norm_matrix
             sim_matrix = torch.exp(sim_matrix/temperature)
 
             #zero the diagonal
-            sim_matrix *= torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0
+            sim_matrix = sim_matrix * (torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0)
 
             #compute loss per label:
             labels_sim = labels.unsqueeze(0).squeeze(-1).repeat(labels.shape[1], 1)
             labels_sim = labels_sim.T == labels_sim
-            labels_sim *= torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0
+            labels_sim = labels_sim * torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0
 
             denoms = torch.sum(sim_matrix, axis=0)
             nums = sim_matrix * labels_sim
@@ -185,27 +189,28 @@ class LightningContrastive(L.LightningModule):
 
         #get embeddings:
         imgs, labels = batch
-        print(imgs.shape)
         embs = self.model(imgs)
 
         all_outputs = self.all_gather(embs, sync_grads=True)
-        embs = all_outputs
+        all_labels = self.all_gather(labels)
+        embs = all_outputs.view(-1, 256)
+        labels = all_labels.view(-1)
 
         #compute similarity:
-        print(embs.shape)
+
         sim_matrix = (embs @ embs.T)
-        norms = torch.sqrt(torch.sum(embs**2)).unsqueeze(-1)
-        norm_matrix = norms @ norms.t
+        norms = torch.sqrt(torch.sum(embs**2, dim=-1)).unsqueeze(-1)
+        norm_matrix = norms @ norms.T
         sim_matrix = sim_matrix/norm_matrix
         sim_matrix = torch.exp(sim_matrix/self.temperature)
 
         #zero the diagonal
-        sim_matrix *= torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0
+        sim_matrix = sim_matrix * (torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0).to(sim_matrix.device)
 
         #compute loss per label:
-        labels_sim = labels.unsqueeze(0).squeeze(-1).repeat(labels.shape[1], 1)
+        labels_sim = labels.unsqueeze(0).repeat(labels.shape[0], 1)
         labels_sim = labels_sim.T == labels_sim
-        labels_sim *= torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0
+        labels_sim *= (torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0).to(sim_matrix.device)
 
         denoms = torch.sum(sim_matrix, axis=0)
         nums = sim_matrix * labels_sim
@@ -271,16 +276,20 @@ if __name__ == "__main__":
     # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     torch.set_float32_matmul_precision('medium')
+    torch.autograd.set_detect_anomaly(True)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_dir", default="/home/mishaalk/scratch/gapjunc/train_datasets/unsupervised")
     parser.add_argument("--epochs", default=1000)
     parser.add_argument("--temperature", default=0.5)
-    parser.add_argument("--batch_size", default=500)
     parser.add_argument("--n_classes", default=100, type=int)
     parser.add_argument("--n_samples", default=5, type=int)
     parser.add_argument("--lightning", action="store_true")
+    parser.add_argument("--debug", action="store_true")
 
     args = parser.parse_args()
+
+    os.environ["N_CLASSES_CUSTOM"] = str(args.n_classes)
+    os.environ["N_SAMPLES_CUSTOM"] = str(args.n_samples)
 
     setup_contrastive_learning(args.dataset_dir, args.epochs, args.temperature, args.n_classes, args.n_samples, args.lightning)
