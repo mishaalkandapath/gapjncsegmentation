@@ -1,27 +1,36 @@
 import torch, os, cv2, wandb, signal, sys, csv, math, re
 from tqdm import tqdm 
-from torch.utils.data import DataLoader
+import argparse
+from utils import lprint
+
 
 from datasets import UnsupervisedDataset, BalancedBatchSampler, contrastive_collate, DistributedBatchSampler
 from models import ResNet, BasicBlock
+
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 import numpy as np
+from torch.optim.optimizer import Optimizer, required
+import torch.optim as optim
+import torch
 
 import lightning as L
 from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
 
-SAVE_DIR= "~/scratch/gapjnc/models/"
 
-from torch.optim.optimizer import Optimizer, required
-import torch.optim as optim
-import torch
-import argparse
+#GradCache Setup
+from grad_cache.pytorch_lightning.pl_gradcache import PLGradCache
+from lightning.pytorch.strategies import DDPStrategy
+from contextlib import nullcontext
 
-from utils import lprint
+
 
 DEBUG = False
+GRAD_CACHE = False
+
+SAVE_DIR= "~/scratch/gapjnc/models/"
 
 # almost copy paste from https://github.com/noahgolmant/pytorch-lars/blob/master/lars.py
 class LARS(Optimizer):
@@ -178,28 +187,20 @@ class LightningContrastive(L.LightningModule):
         self.n_samples = n_samples
 
         self.automatic_optimization = False
+
+    def init_gc(self, ddp_module):
+        devices = torch.cuda.device_count()
+        print(f"*** initializing gradcache with ddp_module={type(ddp_module)}, minibatch_size={(self.n_classes//devices)*self.n_samples//devices}")
+        self.gc = PLGradCache(
+            models=[ddp_module],
+            chunk_sizes=(self.n_classes//devices)*(self.n_samples+1), 
+            loss_fn=self.calculate_loss,
+            backward_fn=self.manual_backward # needed when automatic_optimization is off
+        )
     
-    def training_step(self, batch, batch_idx):
-            
-
-        opt = self.optimizers()
-        opt.zero_grad()
-
-        sch = self.lr_schedulers()
-
-        #get embeddings:
-        imgs, labels = batch
-        embs = self.model(imgs)
-
-        all_outputs = self.all_gather(embs, sync_grads=True)
-        all_labels = self.all_gather(labels)
-        embs = all_outputs.view(-1, 256)
-        labels = all_labels.view(-1)
-
-        #compute similarity:
-
+    def calculate_loss(self, embs, labels):
         sim_matrix = (embs @ embs.T)
-        norms = torch.sqrt(torch.sum(embs**2, dim=-1)).unsqueeze(-1)
+        norms = torch.sqrt(torch.sum(embs**2, dim=-1)).unsqueeze(-1) + 1e-6
         norm_matrix = norms @ norms.T
         sim_matrix = sim_matrix/norm_matrix
         sim_matrix = torch.exp(sim_matrix/self.temperature)
@@ -214,8 +215,30 @@ class LightningContrastive(L.LightningModule):
 
         denoms = torch.sum(sim_matrix, axis=0)
         nums = sim_matrix * labels_sim
-        loss = -torch.log(nums / denoms).sum(axis=0)
+        nums = nums/denoms
+        nums = nums[nums != 0]
+        loss = -torch.log(nums).sum(axis=0)
         loss = loss.mean()
+
+        return loss
+    
+    def on_train_start(self):
+        global GRAD_CACHE
+        if GRAD_CACHE:
+            self.init_gc(self.trainer.strategy.model)
+        
+    def training_step(self, batch, batch_idx):
+
+        opt = self.optimizers()
+        opt.zero_grad()
+
+        sch = self.lr_schedulers()
+
+        #get embeddings:
+        imgs, labels = batch
+        embs = self.model(imgs)
+
+        loss = self.calculate_loss(embs, labels)
 
         loss.backward()
         opt.step()
@@ -264,13 +287,13 @@ def setup_contrastive_learning(dataset_dir, epochs=1000, temperature=0.5, n_clas
         save_on_train_epoch_end=True
         )
         # logger = WandbLogger(log_model="all", project="celegans", entity="mishaalkandapath")
-        trainer = L.Trainer(callbacks=[checkpoint_callback], max_epochs=epochs, log_every_n_steps=100, num_sanity_val_steps=0, default_root_dir=SAVE_DIR, use_distributed_sampler=False)
+        trainer = L.Trainer(callbacks=[checkpoint_callback], max_epochs=epochs, log_every_n_steps=20, num_sanity_val_steps=0, default_root_dir=SAVE_DIR, use_distributed_sampler=False)
         trainer.fit(model)
 
     else:
         limited_labels = list(set([int(re.findall("neuron_\d+", label)[0][len("neuron_"):]) for label in train_dataset.labels]))
         dist_balanced_batch_sampler = BalancedBatchSampler(limited_labels, train_dataset, n_classes, n_samples)
-        train_dataloader = DataLoader(train_dataset, batch_sampler=dist_balanced_batch_sampler, collate_fn=contrastive_collate, num_workers=12)
+        train_dataloader = DataLoader(train_dataset, batch_sampler=dist_balanced_batch_sampler, collate_fn=contrastive_collate, num_workers=os.cpu_count())
         contrastive_train(model, train_dataloader, len(train_dataset)//batch_size + 1, epochs, temperature, batch_size)
 
 
@@ -288,10 +311,14 @@ if __name__ == "__main__":
     parser.add_argument("--n_samples", default=5, type=int)
     parser.add_argument("--lightning", action="store_true")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--grad_cache", action="store_true")
 
     args = parser.parse_args()
 
     os.environ["N_CLASSES_CUSTOM"] = str(args.n_classes)
     os.environ["N_SAMPLES_CUSTOM"] = str(args.n_samples)
+
+    DEBUG = args.debug
+    GRAD_CACHE = args.grad_cache
 
     setup_contrastive_learning(args.dataset_dir, args.epochs, args.temperature, args.n_classes, args.n_samples, args.lightning)
