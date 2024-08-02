@@ -10,6 +10,8 @@ import re, cv2, os, torch, numpy as np, random
 from tqdm import tqdm
 from utils import lprint
 
+import time
+
 def good_split(dataset, num_gpus):
     ls = [[] for _ in range(num_gpus)]
     ns = [[] for _ in range(num_gpus)]
@@ -92,6 +94,7 @@ class BalancedBatchSampler(BatchSampler):
                 if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]):
                     np.random.shuffle(self.label_to_indices[class_])
                     self.used_label_indices_count[class_] = 0
+            assert len(indices) <= (self.n_classes * self.n_samples), "bruh"
             yield indices
             self.count += self.n_classes * self.n_samples
 
@@ -101,11 +104,12 @@ class BalancedBatchSampler(BatchSampler):
 class DistributedBatchSampler(DistributedSampler):
     def __init__(self, dataset, num_replicas=None,
                  rank= None, shuffle= True,
-                 seed= 0, drop_last= False, n_samples=4, n_classes=100, actual_dataset=None):
+                 seed= 0, drop_last= False, n_samples=100, n_classes=4, actual_dataset=None):
         super().__init__(dataset=dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed,
                          drop_last=drop_last)
-        self.n_samples = n_samples//self.num_replicas
+        self.n_samples = n_samples
         self.n_classes = n_classes//self.num_replicas
+
         self.actual_dataset = actual_dataset
 
         self.index_splits = None
@@ -155,35 +159,18 @@ def contrastive_collate(batch):
                 new_imgs.append(aug(random_choice))
                 new_labels.append(un_labels[j])
 
-    imgs = torch.cat([torch.stack(new_imgs, axis=0), imgs], axis=0)
-    labels = torch.cat([torch.tensor(new_labels), labels], axis=0)
+    imgs = torch.cat([imgs, torch.stack(new_imgs, axis=0)], axis=0)
+    labels = torch.cat([labels, torch.tensor(new_labels)], axis=0)
 
-    n_classes_expected = int(os.environ.get("N_CLASSES_CUSTOM", 4))
+    n_classes_expected = int(os.environ.get("N_CLASSES_CUSTOM", 4))//torch.cuda.device_count()
     n_samples_expected = int(os.environ.get("N_SAMPLES_CUSTOM", 100))
-    batch_expected = n_classes_expected * n_samples_expected
-    
-    while imgs.shape[0] < batch_expected:
-        new_imgs, new_labels = [], []
-        shuffled_labels = un_labels[torch.randperm(un_labels.shape[0])]
-        # augment and add one by one
-        for j in range(shuffled_labels.shape[0]):
-            #choose a random image from that class:
-            cls_imgs = imgs[labels == shuffled_labels[j], :]
-            random_choice = cls_imgs[random.randint(0, cls_imgs.shape[0]-1)]
-            new_imgs.append(aug(random_choice))
-            new_labels.append(shuffled_labels[j])
-        #stack 
-        imgs = torch.cat([imgs, torch.stack(new_imgs, axis=0)], axis=0)
-        labels = torch.cat([labels, torch.tensor(new_labels)], axis=0)
-    
-    if imgs.shape[0] > batch_expected:
-        imgs = imgs[:batch_expected, :]
-        labels = labels[:batch_expected]
+    batch_expected = n_classes_expected * (n_samples_expected+1)
 
-    #shuffle em 
+    assert imgs.shape[0] == batch_expected, f"Expected {batch_expected} but got {imgs.shape[0]} we have \n{torch.unique(labels, return_counts=True)[1]}"
+
+    # #shuffle em 
     idx = torch.randperm(imgs.size(0))
     imgs, labels = imgs[idx, :], labels[idx]
 
     assert imgs.shape[0] == batch_expected, f"Expected {batch_expected} but got {imgs.shape[0]}"
-
     return imgs, labels
