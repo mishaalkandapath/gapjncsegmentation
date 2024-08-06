@@ -53,7 +53,7 @@ if __name__ == "__main__":
     parser.add_argument("--Ymin", default=0, help="Starting Y index for the image")
     parser.add_argument("--Ymax", default=17, help="Ending Y index for the image") #nincl
     parser.add_argument("--Xmax", default=19, help="Ending X index for the image") #nincl
-    parser.add_argument("--offset", default=256, help="generally half of the image size")
+    parser.add_argument("--offset", default=256, type=int, help="generally half of the image size")
     parser.add_argument("--plot_legend", action="store_true", help="Print the legend for the assembled EM predictions")
 
     # -- Results Flags --
@@ -89,9 +89,9 @@ if __name__ == "__main__":
         if (args.train_val_split and args.filter_neurons and args.add_dir_templates is None):
             raise ValueError(f"Please specify the template for the additional subdirs present in {args.train_dataset_dir}, atleast for the neuron masks")
         if args.unsupervised_dataset:
-            assert args.cell_id_template is not None, "Please specify the cell id template"
+            # assert args.cell_id_template is not None, "Please specify the cell id template"
             assert args.nr_mask_dir is not None, "Please specify the directory where the relevancy masks are stored"
-            assert args.cell_id_dir is not None, "Please specify the directory where the cell id masks are stored"
+            # assert args.cell_id_dir is not None, "Please specify the directory where the cell id masks are stored"
             assert args.nr_mask_template is not None, "Please specify the naming template for the relevancy masks"
         
         #report printing:
@@ -182,9 +182,11 @@ if __name__ == "__main__":
     if cont.lower() != 'y':
         sys.exit(0)
 
-    if args.preprocessing and args.unsupervised_dataset:
+    if args.preprocessing and args.unsupervised_dataset and args.cell_id_dir:
         create_unsupervised_dataset(args.imgs_dir, args.cell_id_dir, args.nr_mask_dir, args.img_template, args.cell_id_template, args.nr_mask_template, args.output_dir, args.img_size)
-    
+    if args.preprocessing and args.unsupervised_dataset:
+        create_nerve_ring_split(args.imgs_dir, args.nr_mask_dir, args.output_dir, args.img_template, args.nr_mask_template, args.img_size, args.offset) 
+
     if args.preprocessing and args.make_twoD:
         f = None if args.test else lambda x: x.replace(args.img_template, args.seg_template)
         gs = None if args.add_dir is None else {i: lambda x: x.replace(args.img_template, args.add_dir_templates[j]) for j, i in enumerate(args.add_dir)}

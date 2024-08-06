@@ -41,8 +41,11 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, extend_dir=None, overl
                     if gt_dir: gt = cv2.cvtColor(cv2.imread(os.path.join(gt_dir, seg_templ + suffix + ".png")), cv2.COLOR_BGR2GRAY) 
                     if True:
                         pred = np.load(os.path.join(pred_dir, img_templ + suffix + ".png.npy"))
-                        #softmax on channel 1 of size 3
+                        # 
                         pred = 1/(1+np.exp(-pred)) >= 0.5
+
+                        #softmax on channel 1 of size 3
+                        # pred = np.argmax(pred, axis=0) == 1
                     else:
                         pred = cv2.cvtColor(cv2.imread(os.path.join(pred_dir, img_templ + suffix + "off.png")), cv2.COLOR_BGR2GRAY)
                         pred = pred == 255
@@ -70,6 +73,7 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, extend_dir=None, overl
                         if True:
                             pred1 = np.load(os.path.join(pred_dir, img_templ + suffix + "off.png.npy"))
                             pred1 = 1/(1+np.exp(-pred1)) >= 0.5
+
                             # pred1 = np.argmax(pred, axis=0)
                             # pred1[pred1 != 1] = 0
                         else:
@@ -282,9 +286,6 @@ def mask_recall(gt, pred, mask=None):
 
     return np.sum(np.logical_and(gt == 255, pred == 255)) / np.sum(gt == 255)
     
-
-
-    
 """
 @params: gt_image: ground truth image
 @params: preds_image: predicted image
@@ -416,6 +417,15 @@ def entity_recall(gt_contour, pred):
             num_right +=1
     return num_right/(len(contours)-1)
 
+def recall_generous(gt, pred):
+    pred_expanded = np.zeros_like(pred)
+    conv_kernel = np.ones((5, 5), np.uint8)
+    pred_expanded = cv2.dilate(pred, conv_kernel, iterations=1)
+
+    tp = np.sum((gt == 255) & (pred_expanded == 255))
+    fn = np.sum((gt == 255) & (pred_expanded == 0))
+    return tp/(tp+fn)
+
 
 if __name__ == "__main__":
     base = "/Volumes/Normal/gapjnc/resuklts/assembled_2d_ent_recall_test/"
@@ -423,12 +433,23 @@ if __name__ == "__main__":
 
     files = glob.glob(base+"SEM_dauer_2_image_export_*pred.png")
     rec = []
+    # for file in tqdm(files):
+    #     gt = cv2.imread(file.replace("pred", "gt"))
+    #     _, gt_cont = center_img(gt)
+    #     pred = cv2.cvtColor(cv2.imread(file), cv2.COLOR_BGR2GRAY)
+    #     pred[pred != 0] = 255
+    #     recall = entity_recall(gt_cont, pred)
+    #     print(recall)
+    #     rec.append(recall)
+    # print(np.nanmean(rec))
+
+    #recall generous:
     for file in tqdm(files):
-        gt = cv2.imread(file.replace("pred", "gt"))
-        _, gt_cont = center_img(gt)
+        gt = cv2.cvtColor(cv2.imread(file.replace("pred", "gt")), cv2.COLOR_BGR2GRAY)
         pred = cv2.cvtColor(cv2.imread(file), cv2.COLOR_BGR2GRAY)
         pred[pred != 0] = 255
-        recall = entity_recall(gt_cont, pred)
+
+        recall = recall_generous(gt, pred)
         print(recall)
         rec.append(recall)
     print(np.nanmean(rec))

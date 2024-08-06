@@ -427,6 +427,31 @@ def create_unsupervised_dataset(images_dir, cell_id_dir, nr_mask_dir, img_templa
             write_count += 1
     print(f"Written {write_count} images to {out_dir}")
 
+def create_nerve_ring_split(img_dir, nr_dir, output_dir, img_template, nr_template, img_size=512, offset=0):
+    # get the images
+    imgs = os.listdir(img_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for img_name in tqdm(imgs):
+        if "DS" in img_name: continue
+        img = cv2.imread(os.path.join(img_dir, img_name), -1)
+        nr = cv2.imread(os.path.join(nr_dir, img_name.replace(img_template, nr_template)), -1)
+        nr[nr != 5497] = 0
+        
+        #split image into img_size
+        img_imgs, img_names = split_img(img, tile_size=img_size, names=True)
+
+        for i in range(len(img_imgs)):
+            if img_imgs[i].shape[0] != img_size or img_imgs[i].shape[1] != img_size or np.count_nonzero(img_imgs[i] != 0) < 0.5*img_size**2: continue
+            cv2.imwrite(os.path.join(output_dir, f"imgs/{img_names[i]}.png"), img_imgs[i])
+        if offset:
+            img_imgs, img_names = split_img(img, offset=offset, tile_size=img_size, names=True)
+            for i in range(len(img_imgs)):
+                if img_imgs[i].shape[0] != img_size or img_imgs[i].shape[1] != img_size or np.count_nonzero(img_imgs[i] != 0) < 0.5*img_size**2: continue
+                cv2.imwrite(os.path.join(output_dir, f"imgs/{img_names[i]}off.png"), img_imgs[i])
+    
+
+
 def create_fn_dataset(img_dir, gt_dir, preds_dir , img_template, gt_template, preds_template, output_dir, npy=False):
     imgs = os.listdir(img_dir)
     os.makedirs(output_dir, exist_ok=True)
@@ -561,7 +586,41 @@ if __name__ == "__main__":
             shutil.copytree(f"/Volumes/Normal/gapjnc/0_50_extend_train/train_gts/{f}", f"/Volumes/Normal/gapjnc/0_50_extend_train/train_gts_balanced/{f}")
 
     if True:
-        create_fn_dataset("/Volumes/Normal/gapjnc/final_jnc_only_split/valid_imgs", "/Volumes/Normal/gapjnc/final_jnc_only_split/valid_gts", "/Volumes/Normal/gapjnc/final_jnc_only_split/valid_preds", "SEM_dauer_2_image_export_", "sem2dauer_gj_2d_training.vsseg_export_", "SEM_dauer_2_image_export_", "/Volumes/Normal/gapjnc/final_jnc_only_split_rwt_valid/", npy=True)
+        images_dir = "/Volumes/Normal/gapjnc/sem_dauer_2_full_front"
+        cell_id_dir = "/Volumes/Normal/gapjnc/sem_dauer_2_cell_ids"
+        nr_mask_dir = "/Volumes/Normal/gapjnc/nr_in_out"
+
+        img_template = "SEM_dauer_2_export_"
+        nr_mask_template = "nr_in_out_"
+        id_template="20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_"
+        images = os.listdir(images_dir)
+
+        unique_set = set()
+        
+        for img in tqdm(images):
+            try:
+                s = re.findall("s\d\d\d", img)[0][1:]
+            except:
+                print(img)
+                continue
+            image = cv2.imread(os.path.join(images_dir, img), -1)
+            neurons = cv2.imread(os.path.join(cell_id_dir, img.replace(img_template, id_template)), -1)
+            nr_mask = cv2.imread(os.path.join(nr_mask_dir, img.replace(img_template, nr_mask_template)), -1)
+
+            nr_mask[nr_mask != 5497] = 0
+            nr_mask[nr_mask == 5497] = 1
+
+            neurons *= nr_mask
+
+            cell_ids = np.unique(neurons)
+
+            unique_set = unique_set.union(set(cell_ids.tolist()))
+
+        print(len(unique_set))
+
+
+
+        # create_fn_dataset("/Volumes/Normal/gapjnc/final_jnc_only_split/valid_imgs", "/Volumes/Normal/gapjnc/final_jnc_only_split/valid_gts", "/Volumes/Normal/gapjnc/final_jnc_only_split/valid_preds", "SEM_dauer_2_image_export_", "sem2dauer_gj_2d_training.vsseg_export_", "SEM_dauer_2_image_export_", "/Volumes/Normal/gapjnc/final_jnc_only_split_rwt_valid/", npy=True)
 
 
 
