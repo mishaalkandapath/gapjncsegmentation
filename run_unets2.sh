@@ -6,7 +6,7 @@
 #SBATCH --error=%x-%j.out
 #SBATCH --gpus-per-node=a100:1
 #SBATCH --mem=128G
-#SBATCH --time=10:0:0
+#SBATCH --time=12:0:0
 #SBATCH --signal=SIGUSR1@90
 #SBATCH --account=def-mzhen
 module purge
@@ -24,5 +24,11 @@ wandb offline
 
 # python unet.py --dataset new3d --td --gendice --batch_size 10
 #python unet.py --dataset tiny --dice --batch_size 100 --mask_neurons -- 4 hrs
-python unet.py --dataset tiny --batch_size 100 --mask_neurons --mask_mito --epochs 500 #EPOCHS REMEMVER TO CHANGE - about 10 hrs
+# python unet.py --dataset tiny --batch_size 100 --mask_neurons --mask_mito --epochs 500 #EPOCHS REMEMVER TO CHANGE - about 10 hrs
 #
+# python unet.py --dataset new --batch_size 16 --tversky
+# python unet.py --dataset new3d --batch_size 16 --gendice --resnet --td
+# python unet.py --dataset new --batch_size 16 --dicefocal --focalweight 0.1
+# python unet.py --focal --extend --dataset new --epochs 120
+
+python unet.py --dataset new --batch_size 16 --focal --aug 

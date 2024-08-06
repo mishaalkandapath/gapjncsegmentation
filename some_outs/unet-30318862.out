@@ -1,0 +1,60 @@
+The following modules were not unloaded:
+  (Use "module --force purge" to unload all):
+
+  1) CCconfig        6)  ucx/1.14.1         11) flexiblas/3.3.1
+  2) gentoo/2023     7)  libfabric/1.18.0   12) blis/0.9.0
+  3) gcccore/.12.3   8)  pmix/4.2.4         13) StdEnv/2023
+  4) gcc/12.3        9)  ucc/1.2.0
+  5) hwloc/2.9.1     10) openmpi/4.1.5
+W&B offline. Running your script from this directory will only write metadata locally. Use wandb disabled to completely turn off W&B.
+wandb: Tracking run with wandb version 0.17.0
+wandb: W&B syncing is set to `offline` in this directory.  
+wandb: Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+ARGS:  ['unet.py', '--dataset', 'new', '--batch_size', '10', '--gendice', '--mem_feat', '--aug']
+Data loaders created.
+Current dataset new
+Starting training...
+SAVING MODELS TO /home/mishaalk/scratch/gapjunc/models/newgendice01
+running for 150 epochs
+Using device: cuda
+  0%|          | 0/245 [00:00<?, ?it/s]Progress: 0.00%:   0%|          | 0/245 [00:04<?, ?it/s]Traceback (most recent call last):
+  File "/lustre06/project/6002514/mishaalk/gapjncsegmentation/unet.py", line 424, in <module>
+    train_loop(model, train_loader, criterion, optimizer, valid_loader, epochs=150 if not args.epochs else args.epochs, mem_feat=args.mem_feat)
+  File "/lustre06/project/6002514/mishaalk/gapjncsegmentation/unet.py", line 119, in train_loop
+    pred = model(inputs) if not mem_feat else model(inputs, neuron_mask)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/lustre06/project/6002514/mishaalk/gapjncsegmentation/utilities.py", line 495, in forward
+    x, skip1_out = self.down_conv1(x) # x: (16, 64, 256, 256), skip1_out: (16, 64, 512, 512) (batch_size, channels, height, width)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/lustre06/project/6002514/mishaalk/gapjncsegmentation/utilities.py", line 377, in forward
+    skip_out = self.double_conv(x)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/lustre06/project/6002514/mishaalk/gapjncsegmentation/utilities.py", line 357, in forward
+    x = self.double_conv(x_in)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/container.py", line 217, in forward
+    input = module(input)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/conv.py", line 460, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+  File "/home/mishaalk/py10/lib/python3.10/site-packages/torch/nn/modules/conv.py", line 456, in _conv_forward
+    return F.conv2d(input, weight, bias, self.stride,
+RuntimeError: Input type (torch.cuda.FloatTensor) and weight type (torch.FloatTensor) should be the same
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /home/mishaalk/scratch/gapjunc/wandb/offline-run-20240611_204139-y1e74pc9
+wandb: Find logs at: /home/mishaalk/scratch/gapjunc/wandb/offline-run-20240611_204139-y1e74pc9/logs
