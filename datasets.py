@@ -37,21 +37,37 @@ def good_split(dataset, num_gpus):
 
 class UnsupervisedDataset(Dataset):
     def __init__(self, 
-                dataset_dir):
-        self.images = [(os.path.join(dataset_dir, f, im), f) for f in os.listdir(dataset_dir) for im in os.listdir(os.path.join(dataset_dir, f)) if "DS" not in im]
-        self.images, self.labels = zip(*self.images)
-        self.num_classes = len(set(self.labels))
+                dataset_dir,
+                metric=True):
+        
+        if metric:
+            self.images = [(os.path.join(dataset_dir, f, im), f) for f in os.listdir(dataset_dir) for im in os.listdir(os.path.join(dataset_dir, f)) if "DS" not in im]
+            self.images, self.labels = zip(*self.images)
+            self.num_classes = len(set(self.labels))
 
-        self.labels_to_files = {}
-        temp_labels = list(set(self.labels))
-        for i in range(len(temp_labels)):
-            num = len(os.listdir(os.path.join(dataset_dir, temp_labels[i])))
-            assert temp_labels[i] not in self.labels_to_files, f"{num}, {self.labels_to_files[temp_labels[i]]}"
-            self.labels_to_files[temp_labels[i]] = num
-        self.labels_to_files = sorted([(v, int(re.findall(r"neuron_\d+", k)[0][len("neuron_"):])) for k, v in self.labels_to_files.items()])
+            self.labels_to_files = {}
+            temp_labels = list(set(self.labels))
+            for i in range(len(temp_labels)):
+                num = len(os.listdir(os.path.join(dataset_dir, temp_labels[i])))
+                assert temp_labels[i] not in self.labels_to_files, f"{num}, {self.labels_to_files[temp_labels[i]]}"
+                self.labels_to_files[temp_labels[i]] = num
+            self.labels_to_files = sorted([(v, int(re.findall(r"neuron_\d+", k)[0][len("neuron_"):])) for k, v in self.labels_to_files.items()])
+        else:
+            self.images = [os.path.join(dataset_dir, im) for im in os.listdir(dataset_dir) if "DS" not in im]
+            #setup augmentations
+            self.aug = v2.Compose([
+                v2.RandomCrop(size=(512, 512)),
+                v2.ColorJitter(contrast=0.3, saturation=0.3),
+                v2.RandomHorizontalFlip(p=0.5),
+                v2.RandomVerticalFlip(p=0.5),
+                v2.RandomApply([v2.RandomRotation(degrees=(0, 180))], p=0.4),
+                v2.RandomApply([v2.GaussianBlur(5)], p=0.5)
+            ])
+        self.metric = metric
 
     def __getitem__(self, i):
-        return torch.from_numpy(cv2.imread(self.images[i], -1)).to(torch.float32), int(re.findall("neuron_\d+", self.labels[i])[0][len("neuron_"):])
+        if self.metric: return torch.from_numpy(cv2.imread(self.images[i], -1)).to(torch.float32), int(re.findall("neuron_\d+", self.labels[i])[0][len("neuron_"):])
+        return torch.from_numpy(cv2.imread(self.images[i], -1)).to(torch.float32), self.aug(torch.from_numpy(cv2.imread(self.images[i], -1)).to(torch.float32))
 
     def __len__(self):
         return len(self.images)
@@ -124,7 +140,7 @@ class DistributedBatchSampler(DistributedSampler):
     #     return self. # WTH ?
 
 
-def contrastive_collate(batch):
+def contrastive_metric_collate(batch):
     imgs, labels = zip(*batch)
 
     imgs = torch.stack(imgs, axis=0)
@@ -174,3 +190,17 @@ def contrastive_collate(batch):
 
     assert imgs.shape[0] == batch_expected, f"Expected {batch_expected} but got {imgs.shape[0]}"
     return imgs, labels
+ 
+def contrastive_collate(batch):
+    imgs, aug_imgs = zip(*batch)
+
+    imgs = torch.stack(imgs, axis=0)
+    aug_imgs = torch.stack(aug_imgs, axis=0)
+
+    labels = torch.arange(1, imgs.size(0)+1)
+    #repeat it
+    labels = torch.cat([labels, labels], axis=0)
+
+    all_imgs = torch.cat([imgs, aug_imgs], axis=0)
+    all_imgs = all_imgs[torch.randperm(all_imgs.size(0))]
+    return all_imgs, labels

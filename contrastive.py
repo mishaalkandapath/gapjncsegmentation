@@ -4,7 +4,7 @@ import argparse
 from utils import lprint
 
 
-from datasets import UnsupervisedDataset, BalancedBatchSampler, contrastive_collate, DistributedBatchSampler
+from datasets import UnsupervisedDataset, BalancedBatchSampler, contrastive_collate, contrastive_metric_collate, DistributedBatchSampler
 from models import ResNet, BasicBlock
 
 import torch.nn as nn
@@ -30,7 +30,7 @@ from contextlib import nullcontext
 DEBUG = False
 GRAD_CACHE = False
 
-SAVE_DIR= "~/scratch/gapjnc/models/"
+SAVE_DIR= "~/scratch/gapjnc/lowtempmodels/"
 
 # almost copy paste from https://github.com/noahgolmant/pytorch-lars/blob/master/lars.py
 class LARS(Optimizer):
@@ -175,12 +175,100 @@ def contrastive_train(model, dataloader, T_max, epochs=1000, temperature=0.5,bat
             if i >= 10: decay_lr_schedule.step()
 
 class LightningContrastive(L.LightningModule):
+    def __init__(self, model, temperature, T_max, dataset=None, batch_size=500):
+        super().__init__()
+        self.model = model
+        self.temperature = temperature
+        self.T_max = T_max
+        self.batch_size=batch_size
+
+        self.train_dataset = dataset
+
+        self.automatic_optimization = False
+
+    def init_gc(self, ddp_module):
+        devices = torch.cuda.device_count()
+        print(f"*** initializing gradcache with ddp_module={type(ddp_module)}, minibatch_size={(self.n_classes//devices)*self.n_samples}")
+        self.gc = PLGradCache(
+            models=[ddp_module],
+            chunk_sizes=(self.n_classes//devices)*(self.n_samples+1), 
+            loss_fn=self.calculate_loss,
+            backward_fn=self.manual_backward # needed when automatic_optimization is off
+        )
+    
+    def calculate_loss(self, embs, labels):
+        sim_matrix = (embs @ embs.T)
+        norms = torch.sqrt(torch.sum(embs**2, dim=-1)).unsqueeze(-1) + 1e-6
+        norm_matrix = norms @ norms.T
+        sim_matrix = sim_matrix/norm_matrix
+        sim_matrix = torch.exp(sim_matrix/self.temperature)
+
+        #zero the diagonal
+        sim_matrix = sim_matrix * (torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0).to(sim_matrix.device)
+
+        #compute loss per label:
+        labels_sim = labels.unsqueeze(0).repeat(labels.shape[0], 1)
+        labels_sim = labels_sim.T == labels_sim
+        labels_sim *= (torch.eye(sim_matrix.shape[0], sim_matrix.shape[1]) == 0).to(sim_matrix.device)
+
+        denoms = torch.sum(sim_matrix, axis=0)
+        nums = sim_matrix * labels_sim
+        nums = nums/denoms
+        nums = nums[nums != 0]
+        loss = -torch.log(nums).sum(axis=0)
+        loss = loss.mean()
+
+        return loss
+    
+    def on_train_start(self):
+        global GRAD_CACHE
+        if GRAD_CACHE:
+            self.init_gc(self.trainer.strategy.model)
+        
+    def training_step(self, batch, batch_idx):
+
+        opt = self.optimizers()
+        opt.zero_grad()
+
+        sch = self.lr_schedulers()
+
+        #get embeddings:
+        imgs, labels = batch
+        embs = self.model(imgs)
+
+        loss = self.calculate_loss(embs, labels)
+
+        loss.backward()
+        opt.step()
+
+        if self.trainer.current_epoch > 10: 
+            sch.step()
+            
+        self.log("loss", loss, batch_size=embs.size(0), sync_dist=True, prog_bar=True)
+
+    def configure_optimizers(self):
+        # base = optim.SGD(self.model.parameters(), lr=0.075*math.sqrt(self.batch_size), weight_decay=1e-6)
+        # optimizer = LARS(optimizer=base, eps=1e-8, trust_coef=0.001)
+
+        optimizer = LARS(self.model.parameters(), lr=0.075*math.sqrt(self.batch_size), weight_decay=1e-6, epsilon=1e-8)
+
+        decay_lr_schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.T_max)
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": decay_lr_schedule
+            }
+        }
+
+
+class LightningContrastiveMetric(L.LightningModule):
     def __init__(self, model, temperature, T_max, dataset=None, n_classes=5, n_samples=100):
         super().__init__()
         self.model = model
         self.temperature = temperature
         self.T_max = T_max
-        self.batch_size=500
+        self.batch_size=n_classes * n_samples
 
         self.train_dataset = dataset
         self.n_classes = n_classes
@@ -190,7 +278,7 @@ class LightningContrastive(L.LightningModule):
 
     def init_gc(self, ddp_module):
         devices = torch.cuda.device_count()
-        print(f"*** initializing gradcache with ddp_module={type(ddp_module)}, minibatch_size={(self.n_classes//devices)*self.n_samples//devices}")
+        print(f"*** initializing gradcache with ddp_module={type(ddp_module)}, minibatch_size={(self.n_classes//devices)*self.n_samples}")
         self.gc = PLGradCache(
             models=[ddp_module],
             chunk_sizes=(self.n_classes//devices)*(self.n_samples+1), 
@@ -267,19 +355,17 @@ class LightningContrastive(L.LightningModule):
         # balanced_batch_sampler = BalancedBatchSampler(train_dataset, n_classes, n_samples))
         limited_labels = list(set([int(re.findall("neuron_\d+", label)[0][len("neuron_"):]) for label in self.train_dataset.labels]))
         dist_balanced_batch_sampler = DistributedBatchSampler(limited_labels, shuffle=True, n_samples=self.n_samples, n_classes=self.n_classes, actual_dataset=self.train_dataset)
-        train_dataloader = DataLoader(self.train_dataset, batch_sampler=dist_balanced_batch_sampler, collate_fn=contrastive_collate, num_workers=12)
+        train_dataloader = DataLoader(self.train_dataset, batch_sampler=dist_balanced_batch_sampler, collate_fn=contrastive_metric_collate, num_workers=12)
         return train_dataloader
     
-def setup_contrastive_learning(dataset_dir, epochs=1000, temperature=0.5, n_classes=100, n_samples=5, lightning=True):
-
-    batch_size = n_classes * n_samples
+def setup_contrastive_learning(dataset_dir, epochs=1000, temperature=0.2, n_classes=100, n_samples=5, batch_size=0, lightning=True, metric=True):
 
     model = ContrastiveModel(ResNet(BasicBlock, [1, 4, 6, 3, 3], norm_layer = nn.BatchNorm2d))
-    train_dataset = UnsupervisedDataset(dataset_dir)
+    train_dataset = UnsupervisedDataset(dataset_dir, metric=metric)
 
     if lightning:
-        model = LightningContrastive(model, temperature, len(train_dataset)//batch_size + 1, dataset=train_dataset, n_classes=n_classes, n_samples=n_samples)
-
+        if metric: model = LightningContrastiveMetric(model, temperature, len(train_dataset)//batch_size + 1, dataset=train_dataset, n_classes=n_classes, n_samples=n_samples)
+        else: model = LightningContrastive(model, temperature, len(train_dataset)//batch_size + 1, dataset=train_dataset, batch_size=batch_size)
         checkpoint_callback = ModelCheckpoint(dirpath=SAVE_DIR,
         filename='constrative_{epoch}',
         save_top_k=-1,
@@ -287,13 +373,14 @@ def setup_contrastive_learning(dataset_dir, epochs=1000, temperature=0.5, n_clas
         save_on_train_epoch_end=True
         )
         # logger = WandbLogger(log_model="all", project="celegans", entity="mishaalkandapath")
-        trainer = L.Trainer(callbacks=[checkpoint_callback], max_epochs=epochs, log_every_n_steps=20, num_sanity_val_steps=0, default_root_dir=SAVE_DIR, use_distributed_sampler=False)
-        trainer.fit(model)
+        train_dataloader = DataLoader(train_dataset, collate_fn=contrastive_collate, num_workers=os.cpu_count())
+        trainer = L.Trainer(callbacks=[checkpoint_callback], max_epochs=epochs, log_every_n_steps=100, num_sanity_val_steps=0, default_root_dir=SAVE_DIR, use_distributed_sampler=not metric)
+        trainer.fit(model) if metric else trainer.fit(model, train_dataloader)
 
     else:
         limited_labels = list(set([int(re.findall("neuron_\d+", label)[0][len("neuron_"):]) for label in train_dataset.labels]))
         dist_balanced_batch_sampler = BalancedBatchSampler(limited_labels, train_dataset, n_classes, n_samples)
-        train_dataloader = DataLoader(train_dataset, batch_sampler=dist_balanced_batch_sampler, collate_fn=contrastive_collate, num_workers=os.cpu_count())
+        train_dataloader = DataLoader(train_dataset, batch_sampler=dist_balanced_batch_sampler, collate_fn=contrastive_metric_collate, num_workers=os.cpu_count())
         contrastive_train(model, train_dataloader, len(train_dataset)//batch_size + 1, epochs, temperature, batch_size)
 
 
@@ -309,16 +396,20 @@ if __name__ == "__main__":
     parser.add_argument("--temperature", default=0.5)
     parser.add_argument("--n_classes", default=100, type=int)
     parser.add_argument("--n_samples", default=5, type=int)
+    parser.add_argument("--batch_size", default=0, type=int)
     parser.add_argument("--lightning", action="store_true")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--grad_cache", action="store_true")
+    parser.add_argument("--metric", action="store_true")
 
     args = parser.parse_args()
 
     os.environ["N_CLASSES_CUSTOM"] = str(args.n_classes)
     os.environ["N_SAMPLES_CUSTOM"] = str(args.n_samples)
 
+    assert (args.n_classes and args.n_samples) or args.batch_size
+
     DEBUG = args.debug
     GRAD_CACHE = args.grad_cache
 
-    setup_contrastive_learning(args.dataset_dir, args.epochs, args.temperature, args.n_classes, args.n_samples, args.lightning)
+    setup_contrastive_learning(args.dataset_dir, args.epochs, args.temperature, args.n_classes, args.n_samples, args.batch_size if not args.metric else args.n_classes*args.n_samples, args.lightning, args.metric)
