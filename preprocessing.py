@@ -164,6 +164,7 @@ def create_dataset_2d_from_full(imgs_dir, output_dir, seg_dir=None, img_size=512
                             assert cv2.imwrite(os.path.join(output_dir, f"{os.path.split(add_dir[k])[-1]}/{imgs[i].replace('.png', '_'+img_names[j] + ('' if not offset else 'off'))}.png"), add_data[k][j])
 
     for i in tqdm(range(len(imgs))):
+        if "DS" in imgs[i]: continue
         img = cv2.imread(os.path.join(imgs_dir, imgs[i]), -1)
         if not test: 
             gt = cv2.imread(os.path.join(seg_dir, image_to_seg_name_map(imgs[i])), -1)

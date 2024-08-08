@@ -46,6 +46,7 @@ if __name__ == "__main__":
     parser.add_argument("-missing_dir", default=None, type=str, help="Directory where missing image data is stored. Generally used when GJs or neuron-wise filtering of dataset was done")
     parser.add_argument("--preds_dir", default=None, type=str, help="Full path to the predictions directory")
     parser.add_argument("--extend_dir", default=None, type=str, help="Full path to the directory where the extended predictions are stored")
+    parser.add_argument("--filter_gjs", action="store_true", help="Filter out GJs from the predictions using cell ids")
 
     parser.add_argument("--Smin", type=int, default=101, help="starting S index for the image")
     parser.add_argument("--Smax", type=int, default=109, help="Ending S index for the image")
@@ -206,13 +207,13 @@ if __name__ == "__main__":
     
     if args.postprocessing:
         f = None if args.test else lambda x: x.replace(args.img_template, args.seg_template)
-        assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, extend_dir=args.extend_dir,overlap=args.create_overlap, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset, plot_legend=args.plot_legend)
+        assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, extend_dir=args.extend_dir,overlap=args.create_overlap, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset, plot_legend=args.plot_legend, fn_filter=args.filter_gjs, fn_cell_dir=args.cell_id_dir)
     
     if args.results and not args.no_assemble:
         recalls, precisions, precisions_gen, accs, accs_gen = [], [], [], [], []
 
 
-        stats = assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, extend_dir=args.extend_dir, overlap=True, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset, fn=assembled_stats, fn_mask_dir=args.nr_mask_dir)
+        stats = assemble_overlap(args.imgs_dir, args.seg_dir, args.preds_dir, args.output_dir, extend_dir=args.extend_dir, overlap=True, missing_dir=args.missing_dir, img_templ=args.img_template, seg_templ=args.seg_template, s_range=range(args.Smin, args.Smax), x_range=range(args.Xmin, args.Xmax), y_range=range(args.Ymin, args.Ymax), offset=args.offset, fn=assembled_stats, fn_mask_dir=args.nr_mask_dir, fn_filter=args.filter_gjs, fn_cell_dir=args.cell_id_dir)
         
         for s in stats:
             recalls.append(s[0])

@@ -1,7 +1,9 @@
 import cv2, numpy as np, re, os, sys, shutil, glob, traceback
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import random
+import random, copy
+
+import networkx as nx
 
 #assembling function for full image assembly
 """
@@ -20,7 +22,9 @@ Function for assembling the prediction tiles into a single EM image.
 @param offset: offset for the overlap (default 256)
 @returns: None (saves the images in the save_dir)
 """
-def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, extend_dir=None, overlap=True, missing_dir=None, img_templ="SEM_dauer_2_em_",seg_templ="sem_dauer_2_gj_gt_" , s_range=range(101, 109), x_range=range(0, 19), y_range=range(0, 17), offset=256, fn=None, fn_mask_dir=None, plot_legend=True):
+def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, extend_dir=None, overlap=True, missing_dir=None, img_templ="SEM_dauer_2_em_",seg_templ="sem_dauer_2_gj_gt_" , s_range=range(101, 109), x_range=range(0, 19), y_range=range(0, 17), offset=256, fn=None, fn_mask_dir=None, fn_cell_dir=None, fn_filter=False, plot_legend=True):
+    assert (fn_filter and fn_cell_dir) or not fn_filter
+    
     offset = int(offset)
     if fn: fn_stats = []
     for s in s_range:
@@ -140,6 +144,13 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, extend_dir=None, overl
                 print(new_pred.shape, new_pred1.shape)
                 sys.exit()
 
+        if fn_filter:
+            mask_membrane = glob.glob(fn_mask_dir+f"*s{'0'*(3-len(str(s)))}{s}*")[0]
+            mask_membrane = cv2.imread(mask_membrane, -1)
+            mask_membrane = mask_membrane != 0 
+            mask_membrane = mask_membrane.astype(np.uint8)
+            new_pred, _ = filter_islands_and_inside(new_pred, mask_membrane)
+
         new_img1 = np.repeat(new_img[:, :, np.newaxis], 3, axis=-1)
         if gt_dir: new_gt1 = np.repeat(new_gt[:, :, np.newaxis], 3, axis=-1)
         new_pred1 = np.repeat(new_pred[:, :, np.newaxis], 3, axis=-1).astype(np.uint8)            
@@ -150,10 +161,10 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, extend_dir=None, overl
             red = (0, 0, 255)
             green = (0, 255, 0)
             blue = (255, 0, 0)
-            for m in range(3):
-                new_pred1[(new_pred == 1) & (new_gt == 1)] = green
-                new_pred1[(new_pred == 1) & (new_gt == 0)] = red
-                new_pred1[(new_pred == 0) & (new_gt == 1)] = blue
+            # for m in range(3):
+            new_pred1[(new_pred == 1) & (new_gt == 1)] = green
+            new_pred1[(new_pred == 1) & (new_gt == 0)] = red
+            new_pred1[(new_pred == 0) & (new_gt == 1)] = blue
             
             #color confidence levels
             conf5 = (255, 0, 255)
@@ -163,12 +174,12 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, extend_dir=None, overl
             conf1 = (255, 165, 0)
 
             #make labels
-            for m in range(3):
-                new_gt1[new_gt_conf == 3] = conf1
-                new_gt1[new_gt_conf == 5] = conf2
-                new_gt1[new_gt_conf == 7] = conf3
-                new_gt1[new_gt_conf == 9] = conf4
-                new_gt1[new_gt_conf == 11] = conf5
+            # for m in range(3):
+            new_gt1[new_gt_conf == 3] = conf1
+            new_gt1[new_gt_conf == 5] = conf2
+            new_gt1[new_gt_conf == 7] = conf3
+            new_gt1[new_gt_conf == 9] = conf4
+            new_gt1[new_gt_conf == 11] = conf5
 
             #make legends
             def write_legend(text, color, img, org):
@@ -211,16 +222,24 @@ def assemble_overlap(img_dir, gt_dir, pred_dir, save_dir, extend_dir=None, overl
             if gt_dir: assert cv2.imwrite(os.path.join(save_dir, "SEM_dauer_2_image_export_" + suffix + "_gt.png"), new_gt1)
         else: 
             mask = glob.glob(fn_mask_dir+f"*s{'0'*(3-len(str(s)))}{s}*")[0]
-            mask = cv2.cvtColor(cv2.imread(mask), cv2.COLOR_BGR2GRAY)  
-            mask = mask == 21
-            fn_stats.append(fn(new_gt_conf, new_pred, nr_mask=mask))
+            mask = cv2.imread(mask, -1)
+            mask = mask == 5497
+            mask = mask.astype(np.uint8)
+
+            if fn_cell_dir:
+                cell_id_mask = glob.glob(fn_cell_dir+f"*s{'0'*(3-len(str(s)))}{s}*")[0]
+                cell_id_mask = cv2.imread(cell_id_mask, -1)
+                cell_id_mask = cell_id_mask != 0
+                cell_id_mask = cell_id_mask.astype(np.uint8)
+            else: cell_id_mask = None
+            fn_stats.append(fn(new_gt_conf, new_pred, nr_mask=mask, cell_id_membrane=cell_id_mask, filtering=fn_filter))
 
     if fn: return fn_stats
 
 #statistics
 def mask_acc(gt, pred, mask=None):
-    gt = gt.flatten()[mask]
-    pred = pred.flatten()[mask]
+    gt = (gt*mask).flatten()
+    pred = (pred*mask).flatten()
     gt[gt != 0] = 255  
 
     return np.sum(gt == pred) / (gt.shape[0])
@@ -228,8 +247,8 @@ def mask_acc(gt, pred, mask=None):
 
 def mask_precision(gt, pred, mask=None):
 
-    gt = gt.flatten()[mask]
-    pred = pred.flatten()[mask]
+    gt = (gt*mask).flatten()
+    pred = (pred*mask).flatten()
     gt[gt != 0] = 255  
 
     return np.sum(np.logical_and(gt == 255, pred == 255)) / np.sum(pred == 255)
@@ -245,9 +264,9 @@ def mask_precision_generous(gt, pred, mask=None):
     new_gt = move_generous(new_gt, 0, 10) | move_generous(new_gt, 1, 10) | move_generous(new_gt, 1, -10) | move_generous(new_gt, 0, -10)
     new_gt = new_gt[10:-10, 10:-10]
 
-    gt = gt.flatten()[mask]
-    pred = pred.flatten()[mask]
-    new_gt = new_gt.flatten()[mask]
+    gt = (gt*mask).flatten()
+    pred = (pred*mask).flatten()
+    new_gt = (new_gt*mask).flatten()
     new_gt[new_gt != 0] = 255
     gt[gt != 0] = 255     
 
@@ -280,8 +299,8 @@ def iou_accuracy(gt, pred, mask=None):
 
 def mask_recall(gt, pred, mask=None):
     print(gt.shape, pred.shape, mask.shape)
-    gt = gt.flatten()[mask]
-    pred = pred.flatten()[mask]
+    gt = (gt*mask).flatten()
+    pred = (pred*mask).flatten()
     gt[gt != 0] = 255   
 
     return np.sum(np.logical_and(gt == 255, pred == 255)) / np.sum(gt == 255)
@@ -298,13 +317,13 @@ def assembled_stats(gt_image, preds_image, nr_mask=None, seg_bads=(2, 15)):
         mask = gt_image != seg_bads[0]
         for i in seg_bads[1:]:
             mask = mask & (mask != i)
-        mask = mask.flatten()
+        # mask = mask.flatten()
 
-    good_mask = np.logical_and(gt_image != 2, gt_image != 15).flatten() # TODO: figure this out for general case
+    good_mask = np.logical_and(gt_image != 2, gt_image != 15) # TODO: for general case use above
     assert np.count_nonzero(good_mask) == np.count_nonzero(mask)
 
     if nr_mask is not None:
-        nr_mask = np.logical_and(good_mask, nr_mask.flatten())
+        nr_mask = np.logical_and(good_mask, nr_mask)
     else: nr_mask = np.ones_like(good_mask)
 
     if 1 in np.unique(preds_image):
@@ -341,8 +360,8 @@ def mask_acc_split(seg_dir, results_dir, nr_mask_dir=None, td=False, breakdown=F
 
             #area mask 
             if nr_mask_dir:
-                mask = cv2.cvtColor(cv2.imread(os.path.join(nr_mask_dir, preds_to_nr_map(file))), cv2.COLOR_BGR2GRAY)
-                mask = mask == 21
+                mask = cv2.imread(os.path.join(nr_mask_dir, preds_to_nr_map(file)), -1)
+                mask = mask == 5497
             else: mask = np.ones_like(gt)
             if breakdown:
                 test_gt = gt.copy()
@@ -380,7 +399,10 @@ def mask_acc_split(seg_dir, results_dir, nr_mask_dir=None, td=False, breakdown=F
 
 def center_img(img):
     # Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    try:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    except:
+        gray = copy.deepcopy(img) * 255
     out = np.zeros_like(gray, dtype=np.uint32)
 
 
@@ -421,13 +443,57 @@ def recall_generous(gt, pred):
     pred_expanded = np.zeros_like(pred)
     conv_kernel = np.ones((5, 5), np.uint8)
     pred_expanded = cv2.dilate(pred, conv_kernel, iterations=1)
+    plt.imshow(pred_expanded)
+    plt.show()
 
     tp = np.sum((gt == 255) & (pred_expanded == 255))
     fn = np.sum((gt == 255) & (pred_expanded == 0))
     return tp/(tp+fn)
 
 
-if __name__ == "__main__":
+def filter_islands_and_inside(pred, mask_membrane):
+    #dilate the predictions a bit
+    pred = pred * (mask_membrane == 0)
+    pred = pred.astype(np.uint8)
+    kernel = np.ones((5, 5), np.uint8)
+    expanded_pred = cv2.dilate(pred, kernel, iterations=2)
+    to_ret = copy.deepcopy(expanded_pred)
+
+    # detec the entities:
+    centers, painted_preds = center_img(expanded_pred)
+    # remove_labels = np.unique(painted_preds[(expanded_pred + mask_membrane) == 2])
+    # for label in remove_labels:
+    #     expanded_pred[painted_preds == label] = 0
+
+    for _, center in enumerate(centers):
+        x, y = center
+        gj_id = painted_preds[y, x]
+
+        temp_pred = np.zeros_like(pred)
+        temp_pred[painted_preds == gj_id] = 1
+        #dilate 
+        kernel = np.ones((5, 5), np.uint8)
+        temp_pred = cv2.dilate(temp_pred, kernel, iterations=1)
+
+        #take interseection w cellids
+        connection_ids = np.unique(mask_membrane[temp_pred == 1])
+        connection_ids = sorted(connection_ids)[1:]
+        if len(connection_ids) > 10: continue
+        if len(connection_ids) != 2: 
+            #wipe it off:
+            # print(connection_ids)
+            # y = input("viz?")
+            # if y == "y":
+            #     plt.imshow(expanded_pred*0.5 + temp_pred * 0.5, cmap="gray")
+            #     plt.show()
+            # if len(connection_ids) == 0:
+            #     plt.imshow(expanded_pred*0.5 + temp_pred * 0.5, cmap="gray")
+            #     plt.show()
+            expanded_pred[temp_pred == 1] = 0
+    
+    return expanded_pred, to_ret
+
+def test_entity_recall():
     base = "/Volumes/Normal/gapjnc/resuklts/assembled_2d_ent_recall_test/"
     # img = cv2.imread(base+"SEM_dauer_2_image_export_s101_Y16_X18_gt.png")
 
@@ -453,6 +519,94 @@ if __name__ == "__main__":
         print(recall)
         rec.append(recall)
     print(np.nanmean(rec))
+    #TODO: integrate this with the pipeline and remove this function
+
+def create_connection_matrix(pred_dir, cell_id_dir, nr_mask_dir, pred_id_template, cell_id_template, nr_mask_template, section_wise=False):
+    pred_files = sorted(glob.glob(pred_dir + pred_id_template))
+
+    linkages = {}
+    if section_wise: graphs = []
+
+    for pred_file in tqdm(pred_files):
+        if section_wise:
+            linkages = {}
+        s = int(re.findall(r's\d+', pred_file)[0][1:])
+        pred = cv2.cvtColor(cv2.imread(pred_file, -1), cv2.COLOR_BGR2GRAY) != 0
+        nr_mask = cv2.imread(os.path.join(nr_mask_dir, pred_file.replace(pred_id_template, nr_mask_template).split("/")[-1]), -1) == 5497
+        cell_id_mask = cv2.imread(os.path.join(cell_id_dir, pred_file.replace(pred_id_template, cell_id_template).split("/")[-1]), -1)
+
+        pred *= nr_mask
+        #get the entities:
+        centers, painted_preds = center_img(pred)
+        for _, center in enumerate(centers):
+            x, y = center
+            gj_id = painted_preds[y, x]
+
+            temp_pred = np.zeros_like(pred)
+            temp_pred[painted_preds == gj_id] = 1
+            #dilate 
+            kernel = np.ones((5, 5), np.uint8)
+            temp_pred = cv2.dilate(temp_pred, kernel, iterations=1)
+
+            #take interseection w cellids
+            connection_ids = np.unique(cell_id_mask[temp_pred == 1])
+            connection_ids = sorted(connection_ids)[1:]
+            if len(connection_ids) != 2: 
+                continue
+            #make list
+            connection_ids = tuple(connection_ids)
+
+            if sorted(connection_ids) not in linkages:
+                linkages[sorted(connection_ids)] = [s]
+            else:
+                linkages[sorted(connection_ids)].append(s)
+        if section_wise:
+            graphs.append(nx.write_graphml(nx.to_undirected(nx.from_edgelist(list(linkages.keys())))))
+
+    if not section_wise:
+        #give out one big connection graph
+        G = nx.from_edgelist(list(linkages.keys()))
+        G = nx.to_undirected(G)
+        nx.draw(G, pos=nx.spring_layout(G), with_labels=True)
+        plt.draw()
+    else:
+        return graphs
+
+if __name__ == "__main__":
+
+    #TEST FILTERING CODE:
+    gt = cv2.cvtColor(cv2.imread("/Volumes/Normal/gapjnc/resuklts/assembled_2d_ent_recall_test/SEM_dauer_2_image_export_s111_Y16_X18_gt.png", -1), cv2.COLOR_BGR2GRAY)
+    img = cv2.imread("/Volumes/Normal/gapjnc/resuklts/assembled_2d_ent_recall_test/SEM_dauer_2_image_export_s111_Y16_X18_img.png")
+    pred = cv2.cvtColor(cv2.imread("/Volumes/Normal/gapjnc/resuklts/assembled_2d_ent_recall_test/SEM_dauer_2_image_export_s111_Y16_X18_pred.png"), cv2.COLOR_BGR2GRAY) != 0
+    nr_mask = cv2.imread("/Volumes/Normal/gapjnc/nr_in_out/nr_in_out_s111.png", -1) == 5497
+    pred *= nr_mask
+    mask_membrane = cv2.imread("/Volumes/Normal/gapjnc/sem_dauer_2_cell_ids/20240325_SEM_dauer_2_nr_vnc_neurons_head_muscles.vsseg_export_s111.png", -1)
+
+    newpred, to_pret = filter_islands_and_inside(pred, mask_membrane)
+
+    #compute the recall and precision on newpred and to_pret compared to gt
+    kernel = np.ones((5, 5), np.uint8)
+
+    print("Recall original: ", mask_recall(gt, pred*255, mask=nr_mask))
+    print("Precision original: ", mask_precision_generous(gt, pred*255, mask=nr_mask))
+
+    print("Recall pre-filtering: ", mask_recall(gt, to_pret*255, mask=nr_mask))
+    print("Precision pre-filtering: ", mask_precision_generous(gt, cv2.erode(to_pret*255, kernel, iterations=1), mask=nr_mask))
+
+    print("Recall post-filtering: ", mask_recall(gt, newpred*255, mask=nr_mask))
+    print("Precision post-filtering: ", mask_precision_generous(gt,cv2.erode(newpred*255, kernel, iterations=1), mask=nr_mask))
+
+
+    # newpred = np.stack([newpred, np.zeros_like(newpred), np.zeros_like(newpred)], axis=-1) *255
+    #overlay img on pred
+    # im = cv2.addWeighted(img, 0.5, newpred, 0.6, 0)
+    # cv2.imwrite("overlap_fikltered.png", im)
+
+    # pred = to_pret.astype(np.uint8) * 255
+    # pred = np.stack([pred, np.zeros_like(pred), np.zeros_like(pred)], axis=-1) 
+    # im1 = cv2.addWeighted(img, 0.5, pred, 0.6, 0)
+    # cv2.imwrite("overlap_prefilter.png", im1)
+    
 
     #test overlay:
     # img1 = "/Volumes/Normal/gapjnc/resuklts/assembled_finetuned_aug_2d_sem_dauer_1/SEM_dauer_2_image_export_s113_Y16_X18_pred.png"
