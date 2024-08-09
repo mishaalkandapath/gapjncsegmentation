@@ -13,8 +13,14 @@ from utils import lprint
 import time
 
 def good_split(dataset, num_gpus):
-    ls = [[] for _ in range(num_gpus)]
-    ns = [[] for _ in range(num_gpus)]
+    """
+    Main Idea: Classes need to be split equally between devices (easiest way to guarantee cross-device batch size equality). But, the split must be that that overall, every device split must also have roughly the same 
+    number of images.
+    The merry-go-round list gives every device equal-priority in picking the best class in a list of classes sorted in order of number of instances. 
+    """
+    
+    ls = [[] for _ in range(num_gpus)] #labels
+    ns = [[] for _ in range(num_gpus)] #instances for that label
 
     merry_go_round = np.array([i for i in range(num_gpus)])
 
@@ -40,7 +46,7 @@ class UnsupervisedDataset(Dataset):
                 dataset_dir,
                 metric=True):
         
-        if metric:
+        if metric: # a supervised pre-traning procedure, taking morphology into consideration: images with the same neuron at the center are to be more similar to each other than neurons with a different neuron at the center
             self.images = [(os.path.join(dataset_dir, f, im), f) for f in os.listdir(dataset_dir) for im in os.listdir(os.path.join(dataset_dir, f)) if "DS" not in im]
             self.images, self.labels = zip(*self.images)
             self.num_classes = len(set(self.labels))
@@ -52,7 +58,7 @@ class UnsupervisedDataset(Dataset):
                 assert temp_labels[i] not in self.labels_to_files, f"{num}, {self.labels_to_files[temp_labels[i]]}"
                 self.labels_to_files[temp_labels[i]] = num
             self.labels_to_files = sorted([(v, int(re.findall(r"neuron_\d+", k)[0][len("neuron_"):])) for k, v in self.labels_to_files.items()])
-        else:
+        else: # simple unsupervised contrastive learning procedure - augmentations define similarity and dissimilarity
             self.images = [os.path.join(dataset_dir, im) for im in os.listdir(dataset_dir) if "DS" not in im]
             #setup augmentations
             self.aug = v2.Compose([
@@ -76,8 +82,7 @@ class UnsupervisedDataset(Dataset):
 # a balanced sampler - courtesy of https://discuss.pytorch.org/t/load-the-same-number-of-data-per-class/65198/3
 class BalancedBatchSampler(BatchSampler):
     """
-    Each 
-    
+    Sample n_samples from n_classes of the assigned classes to this sampler of this device
     """
     def __init__(self, allowed_indices, dataset, n_classes, n_samples):
         self.labels_list = dataset.labels
@@ -107,7 +112,7 @@ class BalancedBatchSampler(BatchSampler):
                                self.used_label_indices_count[class_]:self.used_label_indices_count[
                                                                          class_] + self.n_samples])
                 self.used_label_indices_count[class_] += self.n_samples
-                if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]):
+                if self.used_label_indices_count[class_] + self.n_samples > len(self.label_to_indices[class_]): #not enuf left in class for next sample? reset
                     np.random.shuffle(self.label_to_indices[class_])
                     self.used_label_indices_count[class_] = 0
             assert len(indices) <= (self.n_classes * self.n_samples), "bruh"
@@ -118,6 +123,9 @@ class BalancedBatchSampler(BatchSampler):
         return len(self.dataset) // self.batch_size
     
 class DistributedBatchSampler(DistributedSampler):
+    """
+    Distribute classes and instances equally among devices. Give those label sets to the corresponding batch sampler
+    """
     def __init__(self, dataset, num_replicas=None,
                  rank= None, shuffle= True,
                  seed= 0, drop_last= False, n_samples=100, n_classes=4, actual_dataset=None):
@@ -137,7 +145,8 @@ class DistributedBatchSampler(DistributedSampler):
         return iter(batch_sampler)
     
     # def __len__(self):
-    #     return self. # WTH ?
+    #     return self. # WTH ? not sure what makes sense here 
+    #TODO: come back 
 
 
 def contrastive_metric_collate(batch):
@@ -162,7 +171,7 @@ def contrastive_metric_collate(batch):
     ])
 
     #append augmentations to dataset:
-    new_imgs, new_labels = [], []
+    new_imgs, new_labels = [], [] # every class also gets atleast one augmented example
     for j in range(un_labels.shape[0]):
         cls_imgs = imgs[labels == un_labels[j], :]
         random_choice = cls_imgs[random.randint(0, cls_imgs.shape[0]-1)]
@@ -191,7 +200,7 @@ def contrastive_metric_collate(batch):
     assert imgs.shape[0] == batch_expected, f"Expected {batch_expected} but got {imgs.shape[0]}"
     return imgs, labels
  
-def contrastive_collate(batch):
+def contrastive_collate(batch): # I need the class labels
     imgs, aug_imgs = zip(*batch)
 
     imgs = torch.stack(imgs, axis=0)
