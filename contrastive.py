@@ -378,6 +378,7 @@ def setup_contrastive_learning(dataset_dir, epochs=1000, temperature=0.2, n_clas
         trainer.fit(model) if metric else trainer.fit(model, train_dataloader)
 
     else:
+        # this will prolly error out: i havent tested it without lightning. some subtle bugs prolly exist
         limited_labels = list(set([int(re.findall("neuron_\d+", label)[0][len("neuron_"):]) for label in train_dataset.labels]))
         dist_balanced_batch_sampler = BalancedBatchSampler(limited_labels, train_dataset, n_classes, n_samples)
         train_dataloader = DataLoader(train_dataset, batch_sampler=dist_balanced_batch_sampler, collate_fn=contrastive_metric_collate, num_workers=os.cpu_count())
@@ -397,10 +398,10 @@ if __name__ == "__main__":
     parser.add_argument("--n_classes", default=100, type=int)
     parser.add_argument("--n_samples", default=5, type=int)
     parser.add_argument("--batch_size", default=0, type=int)
-    parser.add_argument("--lightning", action="store_true")
+    parser.add_argument("--lightning", action="store_true", help="Use pytorch lightning?")
     parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--grad_cache", action="store_true")
-    parser.add_argument("--metric", action="store_true")
+    parser.add_argument("--grad_cache", action="store_true", help="Use grad cache to save on gradient memory? Use if GPU limitations")
+    parser.add_argument("--metric", action="store_true", help="supervised contrastive learning according to neuron morphology")
 
     args = parser.parse_args()
 
